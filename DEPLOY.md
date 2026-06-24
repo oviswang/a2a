@@ -1,59 +1,56 @@
-# Deploy (single service on Railway)
+# Deploy (Vercel + Railway — original architecture)
 
-This repo is wired so **one** Railway service serves the whole game — the API
-server also hosts the built web client, so there's a single public URL and no
-separate Vercel frontend.
+Two services:
 
-## Steps (all in the browser, ~5 min)
+- **Backend + Postgres** → Railway (Express + Socket.io + Prisma, `server/Dockerfile`)
+- **Frontend** → Vercel (static Vite/Three.js bundle, `vercel.json`)
 
-1. **Create the project**
-   - Go to <https://railway.app> → **New Project** → **Deploy from GitHub repo**
-   - Pick `oviswang/a2a` (branch `main`).
-   - Railway reads `railway.toml` and builds `server/Dockerfile` automatically.
+Do Railway first so you have the backend URL to give the frontend.
 
-2. **Add a database**
-   - In the project: **New** → **Database** → **PostgreSQL**.
+## 1. Backend on Railway
 
-3. **Point the app at the database**
-   - Open the **app service** → **Variables** → add:
-     - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`  (reference the Postgres service)
-   - `PORT` is provided by Railway automatically; the server reads it.
-   - `CLIENT_URL` is **not** needed (client is same-origin).
-
-4. **Get a public URL**
-   - App service → **Settings** → **Networking** → **Generate Domain**.
+1. <https://railway.app> → **New Project** → **Deploy from GitHub repo** → pick
+   `oviswang/a2a` (branch `main`). Railway reads `railway.toml` and builds
+   `server/Dockerfile`.
+2. **New → Database → PostgreSQL** in the same project.
+3. App service → **Variables**:
+   - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`
+   - `CLIENT_URL` = your Vercel URL (for CORS; you can fill this after step 2
+     below — any `*.vercel.app` origin is already allowed, so it's only needed
+     for a custom domain).
+   - `PORT` is injected by Railway automatically.
+4. App service → **Settings → Networking → Generate Domain**. Note this URL —
+   it's the **backend URL** (e.g. `https://<app>.up.railway.app`).
 
 On boot the container runs `prisma migrate deploy` (creates tables) and seeds
-20 starter worlds, then starts the server. Open the generated domain and play.
+20 starter worlds, then starts the API.
 
-## How it works
+## 2. Frontend on Vercel
 
-- `server/Dockerfile` is a multi-stage build: it compiles the client
-  (`npm run build -w client`) and copies `client/dist` into the runtime image.
-- The Express server serves `client/dist` as static files with an SPA fallback
-  (`server/src/index.ts`), while `/api/*` and Socket.io stay on the same origin.
-- The client resolves its API/Socket.io base URL to the current origin in
-  production (`client/src/runtime/resolveServerUrl.ts`), so no build-time URL
-  config is required.
+1. <https://vercel.com> → **Add New… → Project** → import `oviswang/a2a`.
+   Vercel reads `vercel.json` (`buildCommand: npm run build -w client`,
+   `outputDirectory: client/dist`). Keep the defaults.
+2. **Settings → Environment Variables** (Production) — point the client at the
+   backend. Pick **one**:
+   - `SERVER_URL` = your Railway backend URL  ← recommended (read at runtime via
+     `/api/server-url`, change it without rebuilding), **or**
+   - commit the URL into `client/.env.production` as
+     `VITE_SERVER_URL=https://<app>.up.railway.app` (baked in at build time).
+3. Deploy. Open the Vercel URL and play.
+
+> Without a backend URL configured the client falls back to `localhost:3001`
+> and multiplayer won't connect in production — so step 2 is required.
+
+## How the client finds the backend
+
+`client/src/runtime/resolveServerUrl.ts`, first match wins:
+1. `VITE_SERVER_URL` (build-time, from `client/.env.production`)
+2. `GET /api/server-url` (Vercel serverless `api/server-url.js`, reads
+   `SERVER_URL` / `VITE_SERVER_URL` — runtime, no rebuild)
+3. `FALLBACK_PRODUCTION_SERVER_URL` in `src/config/productionServerUrl.ts`
+4. Local dev → `http://localhost:3001`
 
 ## Redeploys
 
-Push to `main` → Railway rebuilds and redeploys automatically.
-
-## Optional: add a Vercel frontend (custom domain)
-
-The Railway URL above is already a complete, playable deployment. Add Vercel
-only if you want the client on a separate (e.g. nicer) domain:
-
-1. <https://vercel.com> → **Add New… → Project** → import `oviswang/a2a`.
-   - Vercel reads `vercel.json` (`buildCommand: npm run build -w client`,
-     `outputDirectory: client/dist`). Leave the defaults.
-2. **Project → Settings → Environment Variables** (Production), add:
-   - `SERVER_URL` = your Railway URL (e.g. `https://<app>.up.railway.app`)
-   - This is **required** — without it the Vercel frontend can't find the game
-     server and multiplayer won't connect. It's read at runtime via
-     `/api/server-url`, so no rebuild is needed when the URL changes.
-3. Deploy. The Vercel domain now serves the client and talks to the Railway API.
-
-CORS already allows any `*.vercel.app` origin; for a custom (non-vercel) domain,
-set `CLIENT_URL` on the Railway service to that domain.
+Push to `main` → both Railway and Vercel rebuild automatically (Vercel also via
+`.github/workflows/vercel-deploy.yml` if you add the `VERCEL_*` secrets).

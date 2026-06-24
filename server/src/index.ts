@@ -1,9 +1,6 @@
 import express from "express";
 import cors from "cors";
 import { createServer } from "http";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
 import { Server } from "socket.io";
 import { PrismaClient } from "@prisma/client";
 import type {
@@ -384,21 +381,6 @@ app.get("/dashboard", (_req, res) => {
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
-
-// Single-service deploy: serve the built client from this same origin.
-// In dev the client runs on Vite (:5173) and this dir won't exist, so guard
-// on its presence and skip static serving entirely.
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const clientDist = path.resolve(__dirname, "../../client/dist");
-if (fs.existsSync(path.join(clientDist, "index.html"))) {
-  app.use(express.static(clientDist));
-  // SPA fallback: any GET that isn't an API/socket/health/dashboard route
-  // returns index.html so client-side routing works on refresh/deep links.
-  app.get(/^\/(?!api\/|socket\.io\/|health$|dashboard$).*/, (_req, res) => {
-    res.sendFile(path.join(clientDist, "index.html"));
-  });
-  console.log(`Serving client from ${clientDist}`);
-}
 
 io.on("connection", (socket) => {
   console.log(`Player connected: ${socket.id}`);
