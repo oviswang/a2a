@@ -50,6 +50,12 @@ export async function resolveServerUrl(): Promise<string> {
       cache = stripSlash(fb);
       return cache;
     }
+    // Single-service deploy: the backend serves this bundle, so the API and
+    // Socket.io live on the same origin we were loaded from.
+    if (typeof window !== "undefined" && window.location?.origin) {
+      cache = stripSlash(window.location.origin);
+      return cache;
+    }
   }
 
   cache = LOCAL_DEFAULT;
