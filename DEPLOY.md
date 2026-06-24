@@ -40,6 +40,20 @@ On boot the container runs `prisma migrate deploy` (creates tables) and seeds
 
 Push to `main` → Railway rebuilds and redeploys automatically.
 
-> The original split deploy (client → Vercel, server → Railway) still works if
-> you prefer it — see `README.md`. The single-service path above is the simpler
-> one-URL option.
+## Optional: add a Vercel frontend (custom domain)
+
+The Railway URL above is already a complete, playable deployment. Add Vercel
+only if you want the client on a separate (e.g. nicer) domain:
+
+1. <https://vercel.com> → **Add New… → Project** → import `oviswang/a2a`.
+   - Vercel reads `vercel.json` (`buildCommand: npm run build -w client`,
+     `outputDirectory: client/dist`). Leave the defaults.
+2. **Project → Settings → Environment Variables** (Production), add:
+   - `SERVER_URL` = your Railway URL (e.g. `https://<app>.up.railway.app`)
+   - This is **required** — without it the Vercel frontend can't find the game
+     server and multiplayer won't connect. It's read at runtime via
+     `/api/server-url`, so no rebuild is needed when the URL changes.
+3. Deploy. The Vercel domain now serves the client and talks to the Railway API.
+
+CORS already allows any `*.vercel.app` origin; for a custom (non-vercel) domain,
+set `CLIENT_URL` on the Railway service to that domain.
