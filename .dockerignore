@@ -1,5 +1,5 @@
-# Single-service build: the image bundles the built client, so client/ source
-# IS part of the build context. Only drop caches/build output.
+# server/Dockerfile only needs root workspace files + shared + server.
+client/
 node_modules/
 dist/
 .git/

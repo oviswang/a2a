@@ -1,4 +1,6 @@
-# Single-service deploy: the image builds and serves the client, so client/
-# source must be uploaded (see server/Dockerfile).
+# API service image only uses root workspace + shared + server (see server/Dockerfile).
+# Client ships on Vercel — omitting it shrinks Railway snapshots/CLI uploads (~40MB+).
+client/
+
 .vercel/
 .cursor/
