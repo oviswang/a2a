@@ -8,6 +8,7 @@ import type {
   FlagSyncEvent,
 } from "@globefly/shared";
 import { FLAG_CAPTURE_DURATION_MS } from "@globefly/shared";
+import { t } from "../i18n";
 import {
   BoxGeometry,
   CylinderGeometry,
@@ -271,7 +272,9 @@ export class FlagSystem {
     const you = ev.holderId === this.localId();
     if (!this.suppressed) {
       this.hud.showFlagAnnounce(
-        you ? "You picked up the flag!" : `${ev.holderName} picked up the flag!`,
+        you
+          ? t("You picked up the flag!", "你拿到了旗帜！")
+          : t(`${ev.holderName} picked up the flag!`, `${ev.holderName} 拿到了旗帜！`),
         4000,
       );
     }
@@ -331,7 +334,9 @@ export class FlagSystem {
     const you = ev.droppedById === this.localId();
     if (!this.suppressed) {
       this.hud.showFlagAnnounce(
-        you ? "You dropped the flag!" : `${ev.droppedByName} dropped the flag!`,
+        you
+          ? t("You dropped the flag!", "你丢下了旗帜！")
+          : t(`${ev.droppedByName} dropped the flag!`, `${ev.droppedByName} 丢下了旗帜！`),
         4000,
       );
     }

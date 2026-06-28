@@ -3,6 +3,7 @@ import { createMonoplane } from "./BiplaneMesh";
 import { moveOnSphere, tangentFrame, buildPlaneMatrix, seededRandom, cartesianFromSpherical } from "./SphericalMath";
 import { Quaternion } from "three";
 import type { PaintballSystem } from "./PaintballSystem";
+import { t } from "../i18n";
 
 const NPC_COUNT = 3;
 const NPC_ALTITUDE = 0.52;
@@ -17,9 +18,9 @@ const NPC_WANDER_INTERVAL_MAX = 8;
 const WAVE_PROXIMITY = 0.55;       // world-space distance to trigger wave
 const WAVE_COOLDOWN = 20;          // seconds between waves per NPC
 const WAVE_MESSAGES = [
-  "A friendly pilot waves!",
-  "Another pilot tips their wings.",
-  "A passing flyer gives you a nod.",
+  t("A friendly pilot waves!", "一位友好的飞行员挥手致意！"),
+  t("Another pilot tips their wings.", "另一位飞行员摆动机翼向你问好。"),
+  t("A passing flyer gives you a nod.", "一位路过的飞行者向你点头。"),
 ];
 
 const NPC_COLORS = [0x4488ff, 0xff8844, 0x44cc88];
