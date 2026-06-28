@@ -190,7 +190,7 @@ export class PackageQuestHUD {
     style.textContent = `
       .pkg-bubble {
         position: absolute;
-        top: 90px;
+        top: 156px;
         left: 50%;
         transform: translate(-50%, -6px);
         display: flex;
@@ -248,7 +248,7 @@ export class PackageQuestHUD {
 
       .pkg-banner {
         position: absolute;
-        top: 32px;
+        top: 60px;
         left: 10px;
         right: calc(var(--hud-top-right-reserved, 120px) + 12px);
         display: flex;
@@ -300,7 +300,7 @@ export class PackageQuestHUD {
 
       .pkg-whisper {
         position: absolute;
-        top: 90px;
+        top: 156px;
         left: 50%;
         transform: translate(-50%, -6px);
         max-width: 400px;
@@ -325,7 +325,7 @@ export class PackageQuestHUD {
       @media (max-width: 768px) {
         .pkg-whisper {
           position: fixed;
-          top: max(88px, calc(24px + env(safe-area-inset-top) + 52px));
+          top: max(160px, calc(24px + env(safe-area-inset-top) + 128px));
           left: 10vw;
           right: auto;
           width: 80vw;
@@ -345,7 +345,7 @@ export class PackageQuestHUD {
       @media (max-width: 768px) {
         .pkg-bubble {
           position: fixed;
-          top: max(88px, calc(24px + env(safe-area-inset-top) + 52px));
+          top: max(160px, calc(24px + env(safe-area-inset-top) + 128px));
           left: 10vw;
           right: auto;
           width: 80vw;
@@ -361,7 +361,7 @@ export class PackageQuestHUD {
           backdrop-filter: none;
         }
         .pkg-banner {
-          top: max(24px, calc(14px + env(safe-area-inset-top)));
+          top: max(56px, calc(46px + env(safe-area-inset-top)));
           left: 8px;
           right: calc(var(--hud-top-right-reserved, 120px) + 8px);
           font-size: 0.8rem;
