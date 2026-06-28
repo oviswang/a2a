@@ -926,6 +926,7 @@ export class Game {
         this.companionUI?.appendAssistantMessage(
           IS_ZH ? `（需要在 Pouchy 里确认：${p.summary}）` : `(Approve in Pouchy: ${p.summary})`,
         ),
+      onVoiceTranscript: (text) => this.handleVoiceCommand(text),
       onStatus: (s) => {
         this.companionUI?.setStatus(s);
         if (s.state === "ready" && this.worldSlug) {
@@ -941,7 +942,10 @@ export class Game {
     this.companionUI = new CompanionUI(this.hud.root, {
       mobile: this.mobile,
       brandIconUrl: manager.brandIconUrl(),
-      onSendText: (text) => void this.companion?.sendText(text),
+      onSendText: (text) => {
+        // A recognized control phrase steers directly; otherwise it's chat.
+        if (!this.handleVoiceCommand(text)) void this.companion?.sendText(text);
+      },
       onToggleVoice: () => void this.toggleCompanionVoice(),
       onInviteFriends: () => {
         if (this.worldSlug) void this.companion?.inviteFriends(this.worldSlug, this.worldConfig?.name ?? "");
@@ -1069,6 +1073,51 @@ export class Game {
       default:
         return { ok: false, result: `Unknown action "${action}".` };
     }
+  }
+
+  /** Parse a spoken/typed phrase (EN or ZH) into a flight command and execute it
+   *  directly. This is the RELIABLE voice-control path: the live voice agent can't
+   *  be trusted to call the `control_vehicle` tool on every provider (e.g. the
+   *  shared ElevenLabs agent won't invoke per-app tools), so we act on the user's
+   *  own transcript. Returns true when a command was recognized. */
+  private handleVoiceCommand(raw: string): boolean {
+    if (!raw || !this.localPlayer || this.gamePhase !== "flying") return false;
+    const s = raw.toLowerCase();
+    const has = (...keys: string[]) => keys.some((k) => s.includes(k));
+    // Priority order matters: fire/stop first, then steering, then throttle.
+    // Avoid a bare "down" token so "slow down" doesn't read as "descend".
+    let action: string | null = null;
+    if (has("fire", "shoot", "发射", "开火", "射击")) action = "fire";
+    else if (has("stop", "level off", "straighten", "停", "回正", "稳住", "别动")) action = "stop";
+    else if (has("left", "向左", "往左", "左转", "左拐", "左边")) action = "left";
+    else if (has("right", "向右", "往右", "右转", "右拐", "右边")) action = "right";
+    else if (has("climb", "ascend", "pull up", "higher", "上升", "爬升", "拉高", "往上", "向上")) action = "climb";
+    else if (has("descend", "dive", "nose down", "lower", "下降", "俯冲", "降低", "往下", "向下")) action = "descend";
+    else if (has("forward", "faster", "accelerate", "speed up", "加速", "前进", "快一点", "快点", "往前", "向前"))
+      action = "forward";
+    else if (has("back", "slower", "slow down", "brake", "reverse", "减速", "后退", "刹车", "慢一点", "慢点", "往后", "向后"))
+      action = "back";
+    if (!action) return false;
+
+    const res = this.execVehicleControl({ action, duration: 1.6 });
+    const labels: Record<string, [string, string]> = {
+      left: ["↰ Left", "↰ 向左"],
+      right: ["↱ Right", "↱ 向右"],
+      forward: ["⏫ Faster", "⏫ 加速"],
+      back: ["⏬ Slower", "⏬ 减速"],
+      climb: ["⤴ Climb", "⤴ 上升"],
+      descend: ["⤵ Descend", "⤵ 下降"],
+      fire: ["✦ Fire", "✦ 开火"],
+      stop: ["• Level", "• 回正"],
+    };
+    if (res.ok) {
+      const lbl = labels[action];
+      if (lbl) this.hud.showAmbientToast(IS_ZH ? lbl[1] : lbl[0]);
+    } else if (typeof res.result === "string") {
+      // e.g. boat can't climb / only biplane fires — tell the player why.
+      this.hud.showAmbientToast(res.result);
+    }
+    return true;
   }
 
   /** Resolve a set_waypoint target to a globe surface normal + a bilingual label.
