@@ -36,7 +36,9 @@ const WANDER_HEADING_DELTA = 0.9;
 const TURN_RATE = 0.55;
 const WANDER_MIN = 3;
 const WANDER_MAX = 8;
-const NARRATE_PROXIMITY = 0.7; // world-space distance to trigger narration
+const NARRATE_PROXIMITY = 0.7; // world-space distance to ENTER an encounter
+const EXIT_PROXIMITY = 1.15; // must leave past this before an encounter can re-fire
+const REENCOUNTER_COOLDOWN = 25; // per-ghost seconds before it can greet again
 const ALT_PLANE = 0.52;
 const ALT_CARPET = 0.5;
 const ALT_BOAT = 0.0;
@@ -70,8 +72,10 @@ class GhostPlane {
   private headingTurnRate = 0;
   private currentBank = 0;
   private bobTime = Math.random() * Math.PI * 2;
-  /** Narrated to the companion already? (one intro per ghost per session) */
-  narrated = false;
+  /** Whether the player is currently within encounter range (entry/exit hysteresis). */
+  inRange = false;
+  /** Per-ghost cooldown before it can greet again after the player leaves. */
+  cooldown = 0;
   private readonly posScratch = new Vector3();
 
   constructor(visitor: GhostVisitor, globeRadius: number) {
@@ -159,10 +163,10 @@ class GhostPlane {
     this.group.matrixWorldNeedsUpdate = true;
   }
 
-  /** True when the player is within narration range. */
-  isNear(playerWorldPos: Vector3): boolean {
+  /** World-space distance from the player to this ghost. */
+  distanceTo(playerWorldPos: Vector3): number {
     this.worldPosition(this.posScratch);
-    return playerWorldPos.distanceTo(this.posScratch) < NARRATE_PROXIMITY;
+    return playerWorldPos.distanceTo(this.posScratch);
   }
 
   dispose() {
@@ -213,10 +217,17 @@ export class GhostPlanes {
     this.narrateCooldown = Math.max(0, this.narrateCooldown - dt);
     for (const g of this.ghosts) {
       g.update(dt);
-      if (!g.narrated && this.narrateCooldown <= 0 && g.isNear(playerWorldPos)) {
-        g.narrated = true;
-        this.narrateCooldown = NARRATE_GAP;
-        this.onEncounter?.(g.visitor);
+      g.cooldown = Math.max(0, g.cooldown - dt);
+      const dist = g.distanceTo(playerWorldPos);
+      if (!g.inRange && dist < NARRATE_PROXIMITY) {
+        g.inRange = true;
+        if (g.cooldown <= 0 && this.narrateCooldown <= 0) {
+          g.cooldown = REENCOUNTER_COOLDOWN;
+          this.narrateCooldown = NARRATE_GAP;
+          this.onEncounter?.(g.visitor);
+        }
+      } else if (g.inRange && dist > EXIT_PROXIMITY) {
+        g.inRange = false;
       }
       this.updateLabel(g, playerWorldPos, camera, domElement);
     }

@@ -535,6 +535,9 @@ export class Game {
   private sessionEpoch = 0;
   /** The most recently encountered ghost — target for "pair with them" (Phase C). */
   private lastGhostEncounter: GhostVisitor | null = null;
+  /** Actionable "befriend this ghost" chip shown on a ghost encounter. */
+  private ghostChipEl: HTMLElement | null = null;
+  private ghostChipTimer: number | null = null;
   private npcBoats: NpcBoats | null = null;
   private gremlinHearts: GremlinHearts | null = null;
   private lastGremlinHitSfxAt = 0;
@@ -1214,19 +1217,81 @@ export class Game {
    *  narrate who they were (and, later, offer to reconnect). */
   private onGhostEncounter(v: GhostVisitor) {
     this.lastGhostEncounter = v;
-    const vh = v.vehicle === "boat"
-      ? IS_ZH ? "船" : "boat"
-      : v.vehicle === "carpet"
-        ? IS_ZH ? "飞毯" : "carpet"
-        : IS_ZH ? "飞机" : "plane";
-    this.hud.showAmbientToast(
-      IS_ZH ? `👻 遇见 ${v.displayName} 的${vh}` : `👻 ${v.displayName}'s ${vh}`,
-    );
     this.companion?.emitMoment(
       "game.event.met_ghost",
       { name: v.displayName, companion: v.companionName ?? null, vehicle: v.vehicle, canPair: true },
       { salience: 0.55 },
     );
+    this.showGhostEncounterChip(v);
+  }
+
+  /** Show a one-tap "befriend this ghost" chip on encounter — works without the
+   *  companion having to call a tool. Auto-dismisses; re-fires on re-approach. */
+  private showGhostEncounterChip(v: GhostVisitor) {
+    Game.injectGhostChipStyles();
+    this.hideGhostEncounterChip();
+    const el = document.createElement("div");
+    el.className = "ghost-chip";
+    const text = document.createElement("span");
+    text.className = "ghost-chip-text";
+    text.textContent = v.companionName
+      ? `👻 ${v.displayName} · ✦ ${v.companionName}`
+      : `👻 ${v.displayName}`;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ghost-chip-btn";
+    btn.textContent = t("Befriend", "加为好友");
+    btn.addEventListener("click", () => {
+      this.hideGhostEncounterChip();
+      if (!ProgressionManager.loadCompanionToken()) {
+        this.hud.showAmbientToast(
+          t("Connect your AI companion to befriend other players.", "先连接你的 AI 伙伴才能添加好友。"),
+        );
+        return;
+      }
+      this.requestGhostPairing(v);
+    });
+    el.appendChild(text);
+    el.appendChild(btn);
+    this.hud.root.appendChild(el);
+    this.ghostChipEl = el;
+    requestAnimationFrame(() => el.classList.add("ghost-chip--in"));
+    this.ghostChipTimer = window.setTimeout(() => this.hideGhostEncounterChip(), 8000);
+  }
+
+  private hideGhostEncounterChip() {
+    if (this.ghostChipTimer != null) {
+      clearTimeout(this.ghostChipTimer);
+      this.ghostChipTimer = null;
+    }
+    this.ghostChipEl?.remove();
+    this.ghostChipEl = null;
+  }
+
+  private static injectGhostChipStyles() {
+    if (document.getElementById("ghost-chip-styles")) return;
+    const s = document.createElement("style");
+    s.id = "ghost-chip-styles";
+    s.textContent = `
+      .ghost-chip {
+        position: absolute; left: 50%; bottom: max(120px, 18%); transform: translate(-50%, 8px);
+        display: flex; align-items: center; gap: 10px; z-index: 14; pointer-events: auto;
+        padding: 8px 8px 8px 14px; border-radius: 999px;
+        background: rgba(40, 56, 92, 0.82); border: 1px solid rgba(180, 210, 255, 0.4);
+        backdrop-filter: blur(10px); box-shadow: 0 8px 28px rgba(0,0,0,0.4);
+        font-family: 'Domine', Georgia, serif; color: rgba(230, 240, 255, 0.95);
+        opacity: 0; transition: opacity 0.25s ease, transform 0.25s ease; max-width: 90vw;
+      }
+      .ghost-chip--in { opacity: 1; transform: translate(-50%, 0); }
+      .ghost-chip-text { font-size: 0.78rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .ghost-chip-btn {
+        flex: none; border: none; cursor: pointer; border-radius: 999px; padding: 7px 14px;
+        font: inherit; font-size: 0.74rem; font-weight: 700; color: #0b1020;
+        background: linear-gradient(135deg, #9fd0ff, #c6a8ff);
+      }
+      .ghost-chip-btn:active { filter: brightness(0.92); }
+    `;
+    document.head.appendChild(s);
   }
 
   /** Phase C: ask the server to invite a ghost's owner to come pair (live if they're
@@ -2997,6 +3062,7 @@ export class Game {
     this.npcBoats = null;
     this.ghostPlanes?.dispose();
     this.ghostPlanes = null;
+    this.hideGhostEncounterChip();
     if (this.kingEternalFlameRewardTimeout != null) {
       clearTimeout(this.kingEternalFlameRewardTimeout);
       this.kingEternalFlameRewardTimeout = null;
@@ -6907,6 +6973,7 @@ export class Game {
       if (this.collectVFX) this.collectVFX.group.visible = false;
       this.npcPlanes?.setVisible(false);
       this.ghostPlanes?.setVisible(false);
+      this.hideGhostEncounterChip();
 
       this.packageQuestHUD.hideBubble();
       this.packageQuestHUD.hideDeliveryTarget();
@@ -7901,6 +7968,7 @@ export class Game {
     this.npcBoats = null;
     this.ghostPlanes?.dispose();
     this.ghostPlanes = null;
+    this.hideGhostEncounterChip();
     if (this.gremlinHearts) {
       this.scene.remove(this.gremlinHearts.group);
       this.gremlinHearts.dispose();
