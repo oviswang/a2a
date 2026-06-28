@@ -20,6 +20,7 @@ import {
   loadEternalFlameModelOnce,
 } from "../game/EternalFlameModel";
 import { ProgressionManager } from "../game/ProgressionManager";
+import { t } from "../i18n";
 const STARBURST_URL = "/2D/starburst.png";
 const STYLE_ID = "eternal-flame-ui-styles";
 const HOLD_MS = 2800;
@@ -204,7 +205,10 @@ export class EternalFlameUI {
     this.dock = document.createElement("div");
     this.dock.className = "eternal-flame-dock";
     this.dock.setAttribute("aria-hidden", "true");
-    this.dock.title = "Eternal flame — bring it to a brazier to keep it burning forever.";
+    this.dock.title = t(
+      "Eternal flame — bring it to a brazier to keep it burning forever.",
+      "永恒之火——把它带到火盆，让它永远燃烧。",
+    );
     container.appendChild(this.dock);
   }
 
@@ -285,8 +289,10 @@ export class EternalFlameUI {
 
     const msg = document.createElement("p");
     msg.className = "eternal-flame-loot-message";
-    msg.textContent =
-      "You have found an Eternal Flame. It might be useful later.";
+    msg.textContent = t(
+      "You have found an Eternal Flame. It might be useful later.",
+      "你找到了永恒之火。它以后可能会有用。",
+    );
 
     const star = document.createElement("img");
     star.className = "eternal-flame-starburst";

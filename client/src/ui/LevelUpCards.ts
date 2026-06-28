@@ -1,4 +1,5 @@
 import type { UpgradeDefinition } from "../game/UpgradeManager";
+import { t } from "../i18n";
 
 const CSS = `
 @keyframes luCardDrop {
@@ -186,7 +187,7 @@ export class LevelUpCards {
 
     const title = document.createElement("div");
     title.className = "levelup-title";
-    title.textContent = "Choose an upgrade";
+    title.textContent = t("Choose an upgrade", "选择一项升级");
     overlay.appendChild(title);
 
     const grid = document.createElement("div");

@@ -1,4 +1,5 @@
 import type { Vehicle } from "@globefly/shared";
+import { t } from "../i18n";
 
 export type ControlHintRow = { keys: string[]; label: string };
 
@@ -11,25 +12,25 @@ export interface VehicleTutorialHints {
 function rowsForVehicle(vehicle: Vehicle): ControlHintRow[] {
   if (vehicle === "plane") {
     return [
-      { keys: ["W"], label: "Throttle" },
-      { keys: ["S"], label: "Slow" },
-      { keys: ["A", "D"], label: "Turn" },
-      { keys: ["↑"], label: "Climb" },
-      { keys: ["Space"], label: "Shoot" },
+      { keys: ["W"], label: t("Throttle", "油门") },
+      { keys: ["S"], label: t("Slow", "减速") },
+      { keys: ["A", "D"], label: t("Turn", "转向") },
+      { keys: ["↑"], label: t("Climb", "爬升") },
+      { keys: ["Space"], label: t("Shoot", "射击") },
     ];
   }
   if (vehicle === "carpet") {
     return [
-      { keys: ["W"], label: "Throttle" },
-      { keys: ["S"], label: "Slow" },
-      { keys: ["A", "D"], label: "Turn" },
-      { keys: ["Space"], label: "Portal" },
+      { keys: ["W"], label: t("Throttle", "油门") },
+      { keys: ["S"], label: t("Slow", "减速") },
+      { keys: ["A", "D"], label: t("Turn", "转向") },
+      { keys: ["Space"], label: t("Portal", "传送门") },
     ];
   }
   const base: ControlHintRow[] = [
-    { keys: ["W", "↑"], label: "Throttle" },
-    { keys: ["S", "↓"], label: "Slow" },
-    { keys: ["A", "D", "←", "→"], label: "Turn" },
+    { keys: ["W", "↑"], label: t("Throttle", "油门") },
+    { keys: ["S", "↓"], label: t("Slow", "减速") },
+    { keys: ["A", "D", "←", "→"], label: t("Turn", "转向") },
   ];
   return base;
 }
@@ -135,9 +136,9 @@ function injectStyles() {
 }
 
 const TITLES: Record<Vehicle, string> = {
-  plane: "Biplane",
-  boat: "Boat",
-  carpet: "Carpet",
+  plane: t("Biplane", "双翼机"),
+  boat: t("Boat", "小船"),
+  carpet: t("Carpet", "飞毯"),
 };
 
 function appendKeys(parent: HTMLElement, keys: string[]) {
@@ -163,7 +164,7 @@ function buildHints(
 
   const title = document.createElement("div");
   title.className = "control-hints-title";
-  title.textContent = options.title ?? "Controls";
+  title.textContent = options.title ?? t("Controls", "操作");
   wrap.appendChild(title);
 
   for (const row of rows) {
@@ -190,7 +191,11 @@ function buildHints(
 /** Desktop-only keyboard hints for the current vehicle. Returns the element. */
 export function mountControlHints(parent: HTMLElement, vehicle: Vehicle, desktop: boolean): HTMLElement | null {
   if (!desktop) return null;
-  return buildHints(parent, `Keyboard controls (${TITLES[vehicle]})`, rowsForVehicle(vehicle));
+  return buildHints(
+    parent,
+    t(`Keyboard controls (${TITLES[vehicle]})`, `键盘操作 (${TITLES[vehicle]})`),
+    rowsForVehicle(vehicle),
+  );
 }
 
 /** Desktop-only first-time tutorial prompt that reuses the controls hint layout. */
@@ -198,10 +203,10 @@ export function mountVehicleTutorialHints(
   parent: HTMLElement,
   desktop: boolean,
   rows: ControlHintRow[],
-  title = "First flight",
+  title = t("First flight", "首次飞行"),
 ): VehicleTutorialHints | null {
   if (!desktop || rows.length === 0) return null;
-  const root = buildHints(parent, `${title} tutorial`, [rows[0]!], {
+  const root = buildHints(parent, t(`${title} tutorial`, `${title} 教程`), [rows[0]!], {
     title,
     className: "control-hints--tutorial",
   });
@@ -225,10 +230,10 @@ export function mountVehicleTutorialHints(
 export function mountCampsiteControlHints(parent: HTMLElement, desktop: boolean): HTMLElement | null {
   if (!desktop) return null;
   const rows: ControlHintRow[] = [
-    { keys: ["W", "A", "S", "D"], label: "Move" },
-    { keys: ["↑", "↓", "←", "→"], label: "Move" },
-    { keys: ["Space"], label: "Jump" },
-    { keys: ["F"], label: "Fly away" },
+    { keys: ["W", "A", "S", "D"], label: t("Move", "移动") },
+    { keys: ["↑", "↓", "←", "→"], label: t("Move", "移动") },
+    { keys: ["Space"], label: t("Jump", "跳跃") },
+    { keys: ["F"], label: t("Fly away", "起飞离开") },
   ];
-  return buildHints(parent, "Keyboard controls (Campsite)", rows);
+  return buildHints(parent, t("Keyboard controls (Campsite)", "键盘操作 (营地)"), rows);
 }

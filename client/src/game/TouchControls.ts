@@ -1,5 +1,6 @@
 import type { ControlState } from "./FlightControls";
 import type { Vehicle } from "@globefly/shared";
+import { t } from "../i18n";
 
 const TURN_SPEED = 1.2;
 const JOYSTICK_RADIUS = 36;
@@ -152,15 +153,15 @@ export class TouchControls {
 
     if (v === "plane") {
       this.elevateBtn.style.display = "";
-      this.elevateBtn.setAttribute("aria-label", "Climb");
+      this.elevateBtn.setAttribute("aria-label", t("Climb", "爬升"));
       this.setActionButtonToPlane();
       this.actionBtn.style.display = "";
-      this.actionBtn.setAttribute("aria-label", "Shoot paintball");
+      this.actionBtn.setAttribute("aria-label", t("Shoot paintball", "发射颜料弹"));
     } else {
       this.elevateBtn.style.display = "none";
       this.setActionButtonToPortal();
       this.actionBtn.style.display = "";
-      this.actionBtn.setAttribute("aria-label", "Place magic portal");
+      this.actionBtn.setAttribute("aria-label", t("Place magic portal", "放置魔法传送门"));
     }
   }
 
