@@ -241,6 +241,11 @@ export class PackageQuestManager {
     return this.isCarrying ? (this.destination?.normal ?? null) : null;
   }
 
+  /** Name of the active delivery destination village, or null when not carrying. */
+  get destinationName(): string | null {
+    return this.isCarrying ? (this.destination?.name ?? null) : null;
+  }
+
   private state = QuestState.Spawning;
   private spawnTimer = 0;
   private spawnDelay = 0;
