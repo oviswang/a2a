@@ -276,6 +276,13 @@ export class CompanionUI {
         display: flex; flex-direction: column; align-items: center; gap: 8px;
         z-index: 2; pointer-events: auto;
       }
+      /* Mirror .hud-top-right's small-screen override so the stack stays under
+         the mute button when the bar shifts in (HUD.ts @media max-width:480px). */
+      @media (max-width: 480px) {
+        .cmp-side-stack {
+          right: max(24px, calc(14px + env(safe-area-inset-right)));
+        }
+      }
       .cmp-toggle-btn, .cmp-voice-btn { position: relative; }
       .cmp-toggle-glyph { display: block; }
       .cmp-voice-img {
