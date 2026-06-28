@@ -999,23 +999,27 @@ export class Lobby {
       }
       /* Primary CTA: connecting the AI companion is the hero action. */
       .lobby-companion-btn {
-        background: linear-gradient(135deg, rgba(120,170,255,0.32), rgba(170,130,255,0.32));
-        border: 1px solid rgba(170,190,255,0.45);
+        background: linear-gradient(135deg, rgba(96,150,250,0.6), rgba(150,110,245,0.6));
+        border: 1px solid rgba(190,205,255,0.6);
         color: #fff; border-radius: 999px; padding: 11px 22px;
         font: inherit; font-size: 0.92rem; font-weight: 600; cursor: pointer;
+        backdrop-filter: blur(8px);
+        text-shadow: 0 1px 3px rgba(0,0,0,0.4);
         transition: background 0.2s, border-color 0.2s, transform 0.1s;
-        box-shadow: 0 4px 18px rgba(80,110,220,0.28);
+        box-shadow: 0 4px 18px rgba(40,60,130,0.4);
       }
-      .lobby-companion-btn:hover { background: linear-gradient(135deg, rgba(120,170,255,0.45), rgba(170,130,255,0.45)); }
+      .lobby-companion-btn:hover { background: linear-gradient(135deg, rgba(96,150,250,0.78), rgba(150,110,245,0.78)); }
       .lobby-companion-btn:active { transform: scale(0.98); }
       .lobby-companion-btn.connected {
-        background: rgba(90,209,122,0.16); border-color: rgba(90,209,122,0.55);
-        color: #cfeeda; box-shadow: none; font-weight: 500; font-size: 0.82rem; padding: 8px 16px;
+        background: rgba(16,30,22,0.5); border-color: rgba(90,209,122,0.7);
+        color: #dffbe8; box-shadow: none; backdrop-filter: blur(8px);
+        text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+        font-weight: 600; font-size: 0.82rem; padding: 8px 16px;
       }
-      .lobby-companion-help { font-size: 0.72rem; color: rgba(255,255,255,0.45); text-decoration: underline; }
+      .lobby-companion-help { font-size: 0.72rem; color: rgba(255,255,255,0.72); text-decoration: underline; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
 
-      /* De-emphasize the name (no longer a login step). */
-      .lobby-greeting-hi, .lobby-name { font-size: 0.95rem; opacity: 0.8; }
+      /* De-emphasize the name via size only; keep it legible on bright skies. */
+      .lobby-greeting-hi, .lobby-name { font-size: 0.95rem; opacity: 1; text-shadow: 0 1px 4px rgba(0,0,0,0.55); }
       .lobby-name { font-weight: 600; }
 
       /* ── Companion connect modal ── */
