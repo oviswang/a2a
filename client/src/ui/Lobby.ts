@@ -7,7 +7,7 @@ import {
 } from "../game/vehicleColors";
 import { EpilogueStatuePreview } from "./EpilogueStatuePreview";
 import { VehicleUnlockPreview } from "./VehicleUnlockPreview";
-import { t } from "../i18n";
+import { t, IS_ZH } from "../i18n";
 
 const VEHICLE_ORDER: Vehicle[] = ["plane", "carpet", "boat"];
 
@@ -69,7 +69,28 @@ const NOUNS = [
   "Marble", "Truffle",
 ];
 
+/** Chinese (cozy) counterparts, used when the browser language is Chinese. */
+const ZH_ADJECTIVES = [
+  "勇敢", "迅捷", "快乐", "机灵", "温柔", "大胆", "欢乐", "高贵",
+  "活泼", "暖心", "灵巧", "可靠", "幸运", "强壮", "小小", "红润",
+  "果敢", "善良", "敏锐", "俊俏", "轻快", "元气", "结实", "宏大",
+  "真诚", "公正", "利落", "温暖", "沉静", "鲜活",
+];
+const ZH_NOUNS = [
+  "饼干", "麻雀", "鹅卵石", "枫叶", "罗盘", "灯笼", "口哨",
+  "三叶草", "荆棘", "羽毛", "橡果", "茶杯", "生姜", "石子",
+  "萝卜", "蟋蟀", "核桃", "蓟花", "豆蔻", "布丁", "手套",
+  "腌瓜", "司康", "松饼", "椋鸟", "鹪鹩", "杜松", "余烬",
+  "弹珠", "松露",
+];
+
 export function generateWhimsicalName(): string {
+  if (IS_ZH) {
+    const adj = ZH_ADJECTIVES[Math.floor(Math.random() * ZH_ADJECTIVES.length)];
+    const noun = ZH_NOUNS[Math.floor(Math.random() * ZH_NOUNS.length)];
+    // Chinese nicknames read better with no separating space.
+    return `${adj}${noun}`;
+  }
   const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
   const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
   return `${adj} ${noun}`;
