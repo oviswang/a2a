@@ -502,6 +502,8 @@ export class Game {
   /** True while the companion's TTS is talking — gates the recognizer to avoid
    *  feeding the companion's own voice back in as a command/chat. */
   private companionTtsSpeaking = false;
+  /** Whether the browser voice loop is on (TTS and/or recognition). */
+  private companionVoiceActive = false;
   /** Dedup guard so a single spoken utterance (re-emitted as interim results)
    *  doesn't trigger the same command many times. */
   private lastVoiceCmdAction: string | null = null;
@@ -1030,38 +1032,49 @@ export class Game {
 
   private toggleCompanionVoice() {
     if (!this.companion) return;
-    if (this.voiceCommander) this.stopCompanionVoiceLoop();
+    if (this.companionVoiceActive) this.stopCompanionVoiceLoop();
     else this.startCompanionVoiceLoop();
   }
 
-  /** Start the BROWSER-NATIVE voice loop: an always-listening speech recognizer for
-   *  the mic (it owns the mic, so commands are reliable + fast) plus device TTS for
-   *  the companion's spoken replies. We deliberately do NOT open the provider voice
-   *  call here — that call would seize the mic and mute it while the companion talks,
-   *  which made commands unreliable, and it can't see the live game state anyway. */
+  /** Start the BROWSER-NATIVE voice loop. The OUTPUT (companion speaks via device
+   *  TTS) and INPUT (speech-recognition for commands) are INDEPENDENT — a browser
+   *  may support one but not the other (e.g. iOS Safari / in-app webviews have
+   *  speechSynthesis but no webkitSpeechRecognition). The companion must still
+   *  speak even where recognition is unavailable. We deliberately don't open the
+   *  provider voice call (it would seize/mute the mic and can't see game state). */
   private startCompanionVoiceLoop() {
-    if (this.voiceCommander) {
+    if (this.companionVoiceActive) {
       this.companionUI?.setVoiceActive(true);
       return;
     }
-    if (!VoiceCommander.supported) {
+    const ttsOk = CompanionVoice.supported;
+    const asrOk = VoiceCommander.supported;
+    if (!ttsOk && !asrOk) {
       this.hud.showAmbientToast(
         t("Voice isn't supported in this browser.", "此浏览器不支持语音功能。"),
       );
       return;
     }
-    this.companionVoice = new CompanionVoice(IS_ZH ? "zh-CN" : "en-US", (speaking) => {
-      this.companionTtsSpeaking = speaking;
-    });
-    this.companionVoice.enable();
-    this.voiceCommander = new VoiceCommander(IS_ZH ? "zh-CN" : "en-US", (text, isFinal) =>
-      this.onVoicePhrase(text, isFinal),
-    );
-    this.voiceCommander.start();
+    if (ttsOk) {
+      this.companionVoice = new CompanionVoice(IS_ZH ? "zh-CN" : "en-US", (speaking) => {
+        this.companionTtsSpeaking = speaking;
+      });
+      this.companionVoice.enable();
+      // Immediate audible confirmation that the companion's voice is live.
+      this.companionVoice.speak(t("I'm here — ready to fly with you!", "我在，准备好陪你一起飞了！"));
+    }
+    if (asrOk) {
+      this.voiceCommander = new VoiceCommander(IS_ZH ? "zh-CN" : "en-US", (text, isFinal) =>
+        this.onVoicePhrase(text, isFinal),
+      );
+      this.voiceCommander.start();
+    }
+    this.companionVoiceActive = true;
     this.companionUI?.setVoiceActive(true);
   }
 
   private stopCompanionVoiceLoop() {
+    this.companionVoiceActive = false;
     this.voiceCommander?.stop();
     this.voiceCommander = null;
     this.companionVoice?.stop();
