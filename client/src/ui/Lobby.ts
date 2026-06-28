@@ -281,6 +281,7 @@ export class Lobby {
           <div class="lobby-companion-panel" role="dialog" aria-modal="true" aria-labelledby="lobby-companion-modal-title">
             <h2 class="lobby-companion-modal-title" id="lobby-companion-modal-title">${t("AI co-pilot · Pouchy companion", "AI 陪玩 · Pouchy 伴侣")}</h2>
             <p class="lobby-companion-status" id="lobby-companion-status"></p>
+            <a class="lobby-companion-open" href="https://www.pouchy.ai/app" target="_blank" rel="noopener noreferrer">${t("Open Pouchy to get your key ↗", "打开 Pouchy 获取令牌 ↗")}</a>
             <label class="lobby-companion-field-label">${t("Companion access key (pchy_…)", "伴侣接入令牌（pchy_…）")}</label>
             <input class="lobby-companion-input" id="lobby-companion-input" type="text" autocomplete="off" spellcheck="false"
               placeholder="${t("Paste your pchy_… key", "粘贴 pchy_… 令牌")}" />
@@ -1029,6 +1030,13 @@ export class Lobby {
       }
       .lobby-companion-modal-title { font-size: 1.2rem; font-weight: 700; margin: 0 0 8px; }
       .lobby-companion-status { font-size: 0.84rem; color: rgba(255,255,255,0.62); margin: 0 0 14px; line-height: 1.45; }
+      .lobby-companion-open {
+        display: block; text-align: center; text-decoration: none;
+        background: rgba(154,209,255,0.14); border: 1px solid rgba(154,209,255,0.4);
+        color: #cfe6ff; border-radius: 10px; padding: 11px; font-size: 0.86rem; font-weight: 600;
+        margin-bottom: 16px; transition: background 0.2s;
+      }
+      .lobby-companion-open:hover { background: rgba(154,209,255,0.24); }
       .lobby-companion-field-label { display: block; font-size: 0.78rem; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 6px; }
       .lobby-companion-input {
         width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.07);
