@@ -915,10 +915,14 @@ export class Game {
       onPairNearby: () => this.initiateCompanionPairing(),
     });
 
-    void manager.connect().then((ok) => {
+    void manager.connect().then(async (ok) => {
       if (!ok) return;
       if (this.worldConfig) manager.setRetained("game.world", { name: this.worldConfig.name, slug: this.worldSlug });
       manager.setRetained("game.player.vehicle", { vehicle });
+      if (ProgressionManager.loadCompanionAutoVoice()) {
+        const started = await manager.startVoiceCopilot();
+        this.companionUI?.setVoiceActive(started);
+      }
     });
   }
 
@@ -1085,6 +1089,8 @@ export class Game {
         if (token) ProgressionManager.saveCompanionToken(token);
         else ProgressionManager.clearCompanionToken();
       },
+      companionAutoVoice: ProgressionManager.loadCompanionAutoVoice(),
+      onCompanionAutoVoiceChange: (on) => ProgressionManager.saveCompanionAutoVoice(on),
       onPlay: (vehicle, options) => {
         if (!ProgressionManager.isVehicleUnlocked(vehicle)) return;
         this.runFreeplayMode = !!options?.freeplay;

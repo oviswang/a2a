@@ -284,6 +284,14 @@ export class ProgressionManager {
     try { localStorage.removeItem(COMPANION_TOKEN_KEY); } catch {}
   }
 
+  static loadCompanionAutoVoice(): boolean {
+    try { return localStorage.getItem("globefly_companion_autovoice") === "1"; } catch { return false; }
+  }
+
+  static saveCompanionAutoVoice(on: boolean) {
+    try { localStorage.setItem("globefly_companion_autovoice", on ? "1" : "0"); } catch {}
+  }
+
   /** Stable, anonymous per-browser id used as the A2A pairing `visitorId`
    *  (never the secret token). Created on first use. */
   static loadOrCreateVisitorId(): string {
