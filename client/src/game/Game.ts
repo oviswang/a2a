@@ -36,6 +36,7 @@ import {
   type Vehicle,
   type VehicleGameFeatures,
   type WorldConfig,
+  type RendezvousWorld,
 } from "@globefly/shared";
 import { DayNightCycle } from "./DayNightCycle";
 import { AudioManager } from "../audio/AudioManager";
@@ -505,6 +506,8 @@ export class Game {
   private lastVoiceCmdAt = 0;
   /** Throttle accumulator for the periodic companion "situation" world-state. */
   private companionSituationTimer = 0;
+  /** Throttle accumulator for the periodic A2A "rendezvous" world-state. */
+  private companionRendezvousTimer = 15;
   private carpetLandmarkSelfieQuest: CarpetLandmarkSelfieQuest | null = null;
   private carpetSelfiePhotoUI: HotspringPhotoUI | null = null;
   private eternalFlameUI: EternalFlameUI | null = null;
@@ -892,7 +895,7 @@ export class Game {
       appContext: {
         name: "A2A.FUN",
         description:
-          "A2A.FUN is a cosy multiplayer flight game. The player pilots a biplane, a magic carpet, or a boat around a tiny globe-world. The overarching goal is to save the world from a slowly falling moon. Core activities: deliver glowing packages between villages; win races / time-trials; (biplane) shoot sky gremlins with paintballs; (magic carpet) collect sky jellyfish and help defend the eternal flame; (boat) catch fish and explore the islands. Lighting the ancient braziers and defending the eternal flame through cosmic-void moth waves is what ultimately stops the moon. You are the player's AI co-pilot riding along: be warm and brief, use the live game state (sent as world-state updates) to tell them what's happening and suggest what to do next, and you can physically fly their vehicle when they ask — left, right, climb, descend, faster, slower, fire, stop.",
+          "A2A.FUN is a cosy multiplayer flight game. The player pilots a biplane, a magic carpet, or a boat around a tiny globe-world. The overarching goal is to save the world from a slowly falling moon. Core activities: deliver glowing packages between villages; win races / time-trials; (biplane) shoot sky gremlins with paintballs; (magic carpet) collect sky jellyfish and help defend the eternal flame; (boat) catch fish and explore the islands. Lighting the ancient braziers and defending the eternal flame through cosmic-void moth waves is what ultimately stops the moon. You are the player's AI co-pilot riding along: be warm and brief, use the live game state (sent as world-state updates) to tell them what's happening and suggest what to do next, and you can physically fly their vehicle when they ask — left, right, climb, descend, faster, slower, fire, stop. This is a multiplayer game: when other worlds have players who also have AI companions (see the rendezvous world-state, or call find_companions), you can suggest taking the player there to meet up and become A2A friends — call join_world to fly them over, then they can pair in person.",
       },
       tools: [
         {
@@ -928,6 +931,22 @@ export class Game {
               },
             },
             required: ["action"],
+          },
+        },
+        {
+          name: "find_companions",
+          description:
+            "Find other worlds that currently have players WITH their own AI companions, so you can suggest the player go meet and pair with them (A2A). Returns a list of worlds with a name, slug, and how many companions are there. Use this when the player asks where other players/agents are, or proactively when you want to suggest a rendezvous.",
+          parameters: { type: "object", properties: {} },
+        },
+        {
+          name: "join_world",
+          description:
+            "Take the player to another world by its slug (e.g. one returned by find_companions) so they can meet and pair with the companions there. This reloads the player into that world. Only use a slug you actually obtained from find_companions or the player.",
+          parameters: {
+            type: "object",
+            properties: { slug: { type: "string", description: "The 6–16 char world slug to join." } },
+            required: ["slug"],
           },
         },
       ],
@@ -1063,7 +1082,64 @@ export class Game {
     if (name === "control_vehicle") {
       return this.execVehicleControl(args);
     }
+    if (name === "find_companions") {
+      const worlds = await this.fetchRendezvous();
+      if (worlds.length === 0) {
+        return { ok: true, result: "No other worlds currently have players with companions. Suggest inviting a friend, or keep playing here." };
+      }
+      return {
+        ok: true,
+        result: {
+          worlds: worlds.map((w) => ({ name: w.name, slug: w.slug, companions: w.companions, players: w.players })),
+          hint: "To take the player to one of these, call join_world with its slug.",
+        },
+      };
+    }
+    if (name === "join_world") {
+      const slug = String(args.slug ?? "").trim();
+      if (!/^[A-Za-z0-9_-]{6,16}$/.test(slug)) {
+        return { ok: false, result: "Invalid world slug." };
+      }
+      if (slug === this.worldSlug) {
+        return { ok: false, result: "The player is already in that world." };
+      }
+      this.hud.showAmbientToast(IS_ZH ? "→ 正在前往会合点…" : "→ Heading to the rendezvous…");
+      // Give the toast/voice a beat before the reload.
+      setTimeout(() => this.joinWorldBySlug(slug), 600);
+      return { ok: true, result: `Taking the player to world ${slug} now.` };
+    }
     return { ok: false, result: "unknown tool" };
+  }
+
+  /** Push "where other agents are" to the companion as retained world-state so it
+   *  can proactively suggest a rendezvous. */
+  private async emitRendezvous(): Promise<void> {
+    if (!this.companion) return;
+    const worlds = await this.fetchRendezvous();
+    const summary =
+      worlds.length === 0
+        ? "No other worlds currently have players with companions."
+        : `Worlds with other companions right now: ${worlds
+            .map((w) => `${w.name} (${w.companions})`)
+            .join(", ")}. You can offer to take the player there to meet and pair (use find_companions / join_world).`;
+    this.companion.setRetained("game.rendezvous", {
+      worlds: worlds.map((w) => ({ name: w.name, slug: w.slug, companions: w.companions })),
+      total: worlds.length,
+      summary,
+    });
+  }
+
+  /** Fetch worlds that currently have players-with-companions (excluding ours). */
+  private async fetchRendezvous(): Promise<RendezvousWorld[]> {
+    try {
+      const url = `${this.getServerUrl()}/api/worlds/rendezvous?exclude=${encodeURIComponent(this.worldSlug ?? "")}`;
+      const res = await fetch(url);
+      if (!res.ok) return [];
+      const data = (await res.json()) as RendezvousWorld[];
+      return Array.isArray(data) ? data : [];
+    } catch {
+      return [];
+    }
   }
 
   /** Companion-driven flight: translate a high-level action into a short, timed
@@ -3491,7 +3567,13 @@ export class Game {
     this.socketClient.onFlagCleared(() => this.flagSystem?.onFlagCleared());
     this.socketClient.onFlagSync((ev) => this.flagSystem?.onFlagSync(ev));
 
-    this.socketClient.joinWorld(slug, this.playerName, this.playerVehicle, this.reservationId);
+    this.socketClient.joinWorld(
+      slug,
+      this.playerName,
+      this.playerVehicle,
+      this.reservationId,
+      !!ProgressionManager.loadCompanionToken(),
+    );
 
     this.stateSync = new StateSync(this.socketClient, this.localPlayer, {
       getCarpetPortals: () => this.carpetPortalSystem?.getMultiplayerSnapshot(),
@@ -4021,6 +4103,13 @@ export class Game {
       if (this.companionSituationTimer >= 3) {
         this.companionSituationTimer = 0;
         this.emitCompanionSituation();
+      }
+      // Less often, refresh "where are other agents" so the companion can suggest
+      // meeting up. Only meaningful when this player has a companion themselves.
+      this.companionRendezvousTimer += dt;
+      if (this.companionRendezvousTimer >= 20) {
+        this.companionRendezvousTimer = 0;
+        void this.emitRendezvous();
       }
     }
     if (

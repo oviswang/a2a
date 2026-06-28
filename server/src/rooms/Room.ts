@@ -136,6 +136,13 @@ export class Room {
     return this.players.size >= MAX_PLAYERS;
   }
 
+  /** How many present players have a Pouchy companion (for A2A rendezvous). */
+  get companionCount(): number {
+    let n = 0;
+    for (const { state } of this.players.values()) if (state.hasCompanion) n++;
+    return n;
+  }
+
   /** A co-present player by socket id (for same-room A2A pairing relay). */
   getPlayer(id: string): ConnectedPlayer | undefined {
     return this.players.get(id);
@@ -424,12 +431,14 @@ export class Room {
     socket: Socket<ClientToServerEvents, ServerToClientEvents>,
     name: string,
     vehicle: Vehicle = "plane",
+    hasCompanion = false,
   ): PlayerState | null {
     if (this.isFull) return null;
     const state: PlayerState = {
       id: socket.id,
       name,
       vehicle,
+      hasCompanion,
       qx: 0,
       qy: 0,
       qz: 0,

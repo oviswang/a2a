@@ -385,7 +385,7 @@ app.get("/health", (_req, res) => {
 io.on("connection", (socket) => {
   console.log(`Player connected: ${socket.id}`);
 
-  socket.on("world:join", async (slug, playerName, vehicle, reservationId) => {
+  socket.on("world:join", async (slug, playerName, vehicle, reservationId, hasCompanion) => {
     console.log(`Player ${socket.id} joining world: ${slug}`);
     const v = vehicle === "boat" ? "boat" : vehicle === "carpet" ? "carpet" : "plane";
     let globeRadius = 5;
@@ -401,7 +401,17 @@ io.on("connection", (socket) => {
     } catch (err) {
       console.warn("world:join globeRadius lookup failed:", err);
     }
-    roomManager.joinRoom(slug, socket, playerName, v, reservationId, globeRadius, worldSeed, terrainType);
+    roomManager.joinRoom(
+      slug,
+      socket,
+      playerName,
+      v,
+      reservationId,
+      globeRadius,
+      worldSeed,
+      terrainType,
+      hasCompanion === true,
+    );
   });
 
   socket.on("disconnect", () => {

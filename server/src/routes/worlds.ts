@@ -152,6 +152,47 @@ export function createWorldsRouter(
     }
   });
 
+  // A2A "rendezvous": worlds that currently have players-with-companions, so the
+  // companion can guide a player to meet (and pair with) other agents. Returns
+  // ONLY aggregate per-world counts + names — never who, never tokens.
+  // NOTE: must be registered BEFORE "/:slug" ("rendezvous" matches the slug regex).
+  router.get("/rendezvous", async (req, res) => {
+    try {
+      const exclude = typeof req.query.exclude === "string" ? req.query.exclude : "";
+      const activeSlugs = roomManager.getActiveRoomSlugs();
+      const withCompanions = activeSlugs
+        .filter((slug) => slug !== exclude && roomManager.getCompanionCount(slug) > 0)
+        .map((slug) => ({
+          slug,
+          companions: roomManager.getCompanionCount(slug),
+          players: roomManager.getRoomPlayerCount(slug),
+        }))
+        .sort((a, b) => b.companions - a.companions)
+        .slice(0, 6);
+
+      const names = new Map<string, string>();
+      if (withCompanions.length > 0) {
+        const rows = await prisma.world.findMany({
+          where: { slug: { in: withCompanions.map((w) => w.slug) } },
+          select: { slug: true, name: true },
+        });
+        for (const r of rows) names.set(r.slug, r.name);
+      }
+
+      res.json(
+        withCompanions.map((w) => ({
+          slug: w.slug,
+          name: names.get(w.slug) ?? w.slug,
+          companions: w.companions,
+          players: w.players,
+        })),
+      );
+    } catch (err) {
+      console.error("Failed to build rendezvous:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   router.get("/:slug", async (req, res) => {
     try {
       const world = await prisma.world.findUnique({

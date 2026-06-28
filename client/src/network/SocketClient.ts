@@ -47,8 +47,14 @@ export class SocketClient {
     return this.socket.connected;
   }
 
-  joinWorld(slug: string, playerName: string, vehicle: Vehicle = "plane", reservationId?: string) {
-    this.socket.emit("world:join", slug, playerName, vehicle, reservationId);
+  joinWorld(
+    slug: string,
+    playerName: string,
+    vehicle: Vehicle = "plane",
+    reservationId?: string,
+    hasCompanion = false,
+  ) {
+    this.socket.emit("world:join", slug, playerName, vehicle, reservationId, hasCompanion);
   }
 
   sendMove(state: Omit<PlayerState, "id">) {
