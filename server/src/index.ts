@@ -382,10 +382,56 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
+// A2A Phase C: live presence by stable visitorId (for cross-world ghost pairing).
+const onlineSocketByVisitor = new Map<string, string>(); // visitorId → socketId
+const visitorMetaBySocket = new Map<string, { visitorId: string; name: string; worldSlug: string }>();
+
+function sendGhostPairInvite(
+  toSocketId: string,
+  from: { visitorId: string; name: string; socketId: string; worldSlug: string },
+) {
+  io.sockets.sockets.get(toSocketId)?.emit("ghostpair:incoming", {
+    fromVisitorId: from.visitorId,
+    fromName: from.name,
+    fromSocketId: from.socketId,
+    worldSlug: from.worldSlug,
+  });
+}
+
+/** When a player comes online, surface any queued pairing intents addressed to them
+ *  — but only if the inviter is ALSO online now (pairing needs both live). Otherwise
+ *  the intent waits. Stale intents (>7d) are pruned. */
+async function deliverPendingIntents(toVisitorId: string, toSocketId: string) {
+  try {
+    const intents = await prisma.pairIntent.findMany({
+      where: { toVisitorId },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+    });
+    for (const intent of intents) {
+      const inviterSocketId = onlineSocketByVisitor.get(intent.fromVisitorId);
+      if (!inviterSocketId) continue; // inviter offline → leave it for next time
+      const inviterMeta = visitorMetaBySocket.get(inviterSocketId);
+      sendGhostPairInvite(toSocketId, {
+        visitorId: intent.fromVisitorId,
+        name: intent.fromName,
+        socketId: inviterSocketId,
+        worldSlug: inviterMeta?.worldSlug ?? intent.worldSlug,
+      });
+      await prisma.pairIntent.delete({ where: { id: intent.id } }).catch(() => {});
+    }
+    await prisma.pairIntent
+      .deleteMany({ where: { toVisitorId, createdAt: { lt: new Date(Date.now() - 7 * 864e5) } } })
+      .catch(() => {});
+  } catch (err) {
+    console.warn("deliverPendingIntents failed:", err);
+  }
+}
+
 io.on("connection", (socket) => {
   console.log(`Player connected: ${socket.id}`);
 
-  socket.on("world:join", async (slug, playerName, vehicle, reservationId, hasCompanion) => {
+  socket.on("world:join", async (slug, playerName, vehicle, reservationId, hasCompanion, visitorId) => {
     console.log(`Player ${socket.id} joining world: ${slug}`);
     const v = vehicle === "boat" ? "boat" : vehicle === "carpet" ? "carpet" : "plane";
     let globeRadius = 5;
@@ -412,10 +458,50 @@ io.on("connection", (socket) => {
       terrainType,
       hasCompanion === true,
     );
+
+    // A2A Phase C: register live presence by visitorId + deliver any pending intents.
+    if (typeof visitorId === "string" && visitorId) {
+      onlineSocketByVisitor.set(visitorId, socket.id);
+      visitorMetaBySocket.set(socket.id, { visitorId, name: playerName, worldSlug: slug });
+      void deliverPendingIntents(visitorId, socket.id);
+    }
+  });
+
+  // A2A Phase C: invite the owner of a ghost (toVisitorId) to come pair. If they're
+  // online, relay a live cross-world invite; if offline, queue an intent.
+  socket.on("ghostpair:invite", async (toVisitorId) => {
+    const meta = visitorMetaBySocket.get(socket.id);
+    if (!meta || typeof toVisitorId !== "string" || !toVisitorId || toVisitorId === meta.visitorId) return;
+    const targetSocketId = onlineSocketByVisitor.get(toVisitorId);
+    if (targetSocketId) {
+      sendGhostPairInvite(targetSocketId, {
+        visitorId: meta.visitorId,
+        name: meta.name,
+        socketId: socket.id,
+        worldSlug: meta.worldSlug,
+      });
+    } else {
+      try {
+        await prisma.pairIntent.upsert({
+          where: { fromVisitorId_toVisitorId: { fromVisitorId: meta.visitorId, toVisitorId } },
+          create: { fromVisitorId: meta.visitorId, fromName: meta.name, toVisitorId, worldSlug: meta.worldSlug },
+          update: { fromName: meta.name, worldSlug: meta.worldSlug, createdAt: new Date() },
+        });
+      } catch (err) {
+        console.warn("queue pair intent failed:", err);
+      }
+    }
   });
 
   socket.on("disconnect", () => {
     console.log(`Player disconnected: ${socket.id}`);
+    const meta = visitorMetaBySocket.get(socket.id);
+    if (meta) {
+      if (onlineSocketByVisitor.get(meta.visitorId) === socket.id) {
+        onlineSocketByVisitor.delete(meta.visitorId);
+      }
+      visitorMetaBySocket.delete(socket.id);
+    }
   });
 });
 

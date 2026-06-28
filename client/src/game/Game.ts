@@ -37,6 +37,7 @@ import {
   type VehicleGameFeatures,
   type WorldConfig,
   type RendezvousWorld,
+  type GhostPairInvite,
 } from "@globefly/shared";
 import { DayNightCycle } from "./DayNightCycle";
 import { AudioManager } from "../audio/AudioManager";
@@ -532,6 +533,8 @@ export class Game {
   private ghostPlanes: GhostPlanes | null = null;
   /** Bumped on each teardown so async spawns can detect a stale session. */
   private sessionEpoch = 0;
+  /** The most recently encountered ghost — target for "pair with them" (Phase C). */
+  private lastGhostEncounter: GhostVisitor | null = null;
   private npcBoats: NpcBoats | null = null;
   private gremlinHearts: GremlinHearts | null = null;
   private lastGremlinHitSfxAt = 0;
@@ -900,7 +903,7 @@ export class Game {
       appContext: {
         name: "A2A.FUN",
         description:
-          "A2A.FUN is a cosy multiplayer flight game. The player pilots a biplane, a magic carpet, or a boat around a tiny globe-world. The overarching goal is to save the world from a slowly falling moon. Core activities: deliver glowing packages between villages; win races / time-trials; (biplane) shoot sky gremlins with paintballs; (magic carpet) collect sky jellyfish and help defend the eternal flame; (boat) catch fish and explore the islands. Lighting the ancient braziers and defending the eternal flame through cosmic-void moth waves is what ultimately stops the moon. You are the player's AI co-pilot riding along: be warm and brief, use the live game state (sent as world-state updates) to tell them what's happening and suggest what to do next, and you can physically fly their vehicle when they ask — left, right, climb, descend, faster, slower, fire, stop. This is a multiplayer game: when other worlds have players who also have AI companions (see the rendezvous world-state, or call find_companions), you can suggest taking the player there to meet up and become A2A friends — call join_world to fly them over, then they can pair in person. The world is also haunted by translucent 'ghost' vehicles of players (and their companions) who flew here before; when the player passes one (a game.event.met_ghost moment), you can warmly note who they were.",
+          "A2A.FUN is a cosy multiplayer flight game. The player pilots a biplane, a magic carpet, or a boat around a tiny globe-world. The overarching goal is to save the world from a slowly falling moon. Core activities: deliver glowing packages between villages; win races / time-trials; (biplane) shoot sky gremlins with paintballs; (magic carpet) collect sky jellyfish and help defend the eternal flame; (boat) catch fish and explore the islands. Lighting the ancient braziers and defending the eternal flame through cosmic-void moth waves is what ultimately stops the moon. You are the player's AI co-pilot riding along: be warm and brief, use the live game state (sent as world-state updates) to tell them what's happening and suggest what to do next, and you can physically fly their vehicle when they ask — left, right, climb, descend, faster, slower, fire, stop. This is a multiplayer game: when other worlds have players who also have AI companions (see the rendezvous world-state, or call find_companions), you can suggest taking the player there to meet up and become A2A friends — call join_world to fly them over, then they can pair in person. The world is also haunted by translucent 'ghost' vehicles of players (and their companions) who flew here before; when the player passes one (a game.event.met_ghost moment), warmly note who they were and offer to befriend them — if the player wants to, call pair_with_ghost to send that player an A2A pairing invite.",
       },
       tools: [
         {
@@ -953,6 +956,12 @@ export class Game {
             properties: { slug: { type: "string", description: "The 6–16 char world slug to join." } },
             required: ["slug"],
           },
+        },
+        {
+          name: "pair_with_ghost",
+          description:
+            "When the player just flew past a 'ghost' of a past player (a game.event.met_ghost moment) and wants to befriend/pair with them, call this to send that player a pairing invite. If they're online they'll be invited to this world to pair in person; if offline, they'll receive it next time they play. Use when the player says something like 'pair with them' / 'add them as a friend' after meeting a ghost.",
+          parameters: { type: "object", properties: {} },
         },
       ],
       execTool: (name, args) => this.execCompanionTool(name, args),
@@ -1120,6 +1129,9 @@ export class Game {
       setTimeout(() => this.joinWorldBySlug(slug), 600);
       return { ok: true, result: `Taking the player to world ${slug} now.` };
     }
+    if (name === "pair_with_ghost") {
+      return this.requestGhostPairing();
+    }
     return { ok: false, result: "unknown tool" };
   }
 
@@ -1201,6 +1213,7 @@ export class Game {
   /** A ghost of a past visitor came near — tell the player + let the companion
    *  narrate who they were (and, later, offer to reconnect). */
   private onGhostEncounter(v: GhostVisitor) {
+    this.lastGhostEncounter = v;
     const vh = v.vehicle === "boat"
       ? IS_ZH ? "船" : "boat"
       : v.vehicle === "carpet"
@@ -1211,9 +1224,82 @@ export class Game {
     );
     this.companion?.emitMoment(
       "game.event.met_ghost",
-      { name: v.displayName, companion: v.companionName ?? null, vehicle: v.vehicle },
-      { salience: 0.5 },
+      { name: v.displayName, companion: v.companionName ?? null, vehicle: v.vehicle, canPair: true },
+      { salience: 0.55 },
     );
+  }
+
+  /** Phase C: ask the server to invite a ghost's owner to come pair (live if they're
+   *  online, queued if not). `which` defaults to the most recently encountered ghost. */
+  private requestGhostPairing(which?: GhostVisitor): { ok: boolean; result?: unknown } {
+    const target = which ?? this.lastGhostEncounter;
+    if (!target) {
+      return { ok: false, result: "No ghost has been encountered recently to pair with." };
+    }
+    if (!this.socketClient) return { ok: false, result: "Not connected." };
+    if (!ProgressionManager.loadCompanionToken()) {
+      return { ok: false, result: "The player needs to connect their Pouchy companion first." };
+    }
+    this.socketClient.emitGhostPairInvite(target.visitorId);
+    this.hud.showAmbientToast(
+      IS_ZH ? `✦ 已向 ${target.displayName} 发出配对邀请` : `✦ Pairing invite sent to ${target.displayName}`,
+    );
+    return {
+      ok: true,
+      result: `Sent a pairing invite to ${target.displayName}. If they're online they'll be invited to this world to pair; otherwise they'll get it next time they play.`,
+    };
+  }
+
+  /** Phase C: an invite arrived to come pair with someone (a ghost's owner, or who
+   *  invited us). Accepting takes us to their world and auto-requests pairing. */
+  private handleGhostPairIncoming(ev: GhostPairInvite) {
+    if (!ProgressionManager.loadCompanionToken()) return; // can't pair without a companion
+    const msg = IS_ZH
+      ? `${ev.fromName} 想和你的 AI 伙伴成为 A2A 好友。前往 TA 的世界一起配对吗？`
+      : `${ev.fromName} wants to make your AI companions A2A friends. Go to their world to pair?`;
+    if (!window.confirm(msg)) return;
+    try {
+      sessionStorage.setItem(
+        "globefly_pending_ghostpair",
+        JSON.stringify({ socketId: ev.fromSocketId, worldSlug: ev.worldSlug, name: ev.fromName }),
+      );
+    } catch {
+      /* ignore */
+    }
+    if (ev.worldSlug === this.worldSlug) {
+      this.consumePendingGhostPair(this.worldSlug);
+    } else {
+      this.joinWorldBySlug(ev.worldSlug);
+    }
+  }
+
+  /** Phase C: if we just arrived to fulfil a ghost-pair invite for THIS world, fire
+   *  the directed pairing request once remotes have had a moment to load. */
+  private consumePendingGhostPair(slug: string) {
+    type PendingGhostPair = { socketId?: string; worldSlug?: string; name?: string };
+    let pending: PendingGhostPair | null = null;
+    try {
+      const raw = sessionStorage.getItem("globefly_pending_ghostpair");
+      if (raw) pending = JSON.parse(raw) as PendingGhostPair;
+    } catch {
+      pending = null;
+    }
+    if (!pending?.socketId || pending.worldSlug !== slug) return;
+    try {
+      sessionStorage.removeItem("globefly_pending_ghostpair");
+    } catch {
+      /* ignore */
+    }
+    const target = pending.socketId;
+    const name = pending.name ?? "";
+    // Give the world:state / player:joined events time to arrive first.
+    setTimeout(() => {
+      if (!this.socketClient) return;
+      this.socketClient.emitPairRequest(target);
+      this.hud.showAmbientToast(
+        IS_ZH ? `✦ 正在与 ${name} 配对…` : `✦ Pairing with ${name}…`,
+      );
+    }, 2500);
   }
 
   /** Fetch worlds that currently have players-with-companions (excluding ours). */
@@ -3666,7 +3752,11 @@ export class Game {
       this.playerVehicle,
       this.reservationId,
       !!ProgressionManager.loadCompanionToken(),
+      ProgressionManager.loadOrCreateVisitorId(),
     );
+    this.socketClient.onGhostPairIncoming((ev) => this.handleGhostPairIncoming(ev));
+    // If we arrived here to fulfil a ghost-pair invite, auto-request pairing.
+    this.consumePendingGhostPair(slug);
 
     this.stateSync = new StateSync(this.socketClient, this.localPlayer, {
       getCarpetPortals: () => this.carpetPortalSystem?.getMultiplayerSnapshot(),
