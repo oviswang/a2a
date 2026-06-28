@@ -278,11 +278,14 @@ export class Lobby {
         </div>
         <div class="lobby-companion-modal" id="lobby-companion-modal" aria-hidden="true">
           <div class="lobby-companion-backdrop" id="lobby-companion-backdrop"></div>
-          <div class="lobby-companion-panel" role="dialog" aria-modal="true" aria-labelledby="lobby-companion-modal-title">
-            <h2 class="lobby-companion-modal-title" id="lobby-companion-modal-title">${t("AI co-pilot · Pouchy companion", "AI 陪玩 · Pouchy 伴侣")}</h2>
+          <div class="lobby-companion-panel" id="lobby-companion-panel" role="dialog" aria-modal="true" aria-labelledby="lobby-companion-modal-title">
+            <div class="lobby-companion-titlerow">
+              <h2 class="lobby-companion-modal-title" id="lobby-companion-modal-title">${t("AI co-pilot · Pouchy companion", "AI 陪玩 · Pouchy 伴侣")}</h2>
+              <span class="lobby-companion-badge" id="lobby-companion-badge"></span>
+            </div>
             <p class="lobby-companion-status" id="lobby-companion-status"></p>
             <a class="lobby-companion-open" href="https://www.pouchy.ai/app" target="_blank" rel="noopener noreferrer">${t("Open Pouchy to get your key ↗", "打开 Pouchy 获取令牌 ↗")}</a>
-            <label class="lobby-companion-field-label">${t("Companion access key (pchy_…)", "伴侣接入令牌（pchy_…）")}</label>
+            <label class="lobby-companion-field-label" id="lobby-companion-field-label">${t("Companion access key (pchy_…)", "伴侣接入令牌（pchy_…）")}</label>
             <input class="lobby-companion-input" id="lobby-companion-input" type="text" autocomplete="off" spellcheck="false"
               placeholder="${t("Paste your pchy_… key", "粘贴 pchy_… 令牌")}" />
             <details class="lobby-companion-help-box" open>
@@ -388,14 +391,31 @@ export class Lobby {
     const cmpStatus = this.el.querySelector("#lobby-companion-status") as HTMLElement;
     const cmpAutoVoice = this.el.querySelector("#lobby-companion-autovoice-cb") as HTMLInputElement;
     const cmpDisconnect = this.el.querySelector("#lobby-companion-disconnect") as HTMLButtonElement;
+    const cmpPanel = this.el.querySelector("#lobby-companion-panel") as HTMLElement;
+    const cmpBadge = this.el.querySelector("#lobby-companion-badge") as HTMLElement;
+    const cmpFieldLabel = this.el.querySelector("#lobby-companion-field-label") as HTMLElement;
+    const cmpHelp = this.el.querySelector(".lobby-companion-help-box") as HTMLDetailsElement;
+    const cmpSave = this.el.querySelector("#lobby-companion-save") as HTMLButtonElement;
+    const cmpOpen = this.el.querySelector(".lobby-companion-open") as HTMLElement;
     const refreshModalState = () => {
       const tok = this.options.companionToken ?? null;
-      cmpStatus.textContent = tok
-        ? t(`Connected (pchy_••${tok.slice(-4)}). Paste a new key to replace it.`, `已连接（pchy_••${tok.slice(-4)}）。粘贴新令牌可替换。`)
-        : t("Not connected. Paste a key and save to enable your AI co-pilot.", "未绑定。粘贴令牌并保存即可开启 AI 陪玩。");
+      const connected = !!tok;
+      // Make the connected state look distinct from a fresh setup.
+      cmpPanel.classList.toggle("connected", connected);
+      cmpBadge.textContent = connected ? t("● Connected", "● 已连接") : t("○ Not connected", "○ 未连接");
+      cmpStatus.textContent = connected
+        ? t(`Your AI companion is connected (pchy_••${tok!.slice(-4)}).`, `你的 AI 伙伴已连接（pchy_••${tok!.slice(-4)}）。`)
+        : t("Paste your key and save to bring your AI co-pilot into the game.", "粘贴令牌并保存，把你的 AI 陪玩带进游戏。");
+      cmpFieldLabel.textContent = connected
+        ? t("Replace key (optional)", "替换令牌（可选）")
+        : t("Companion access key (pchy_…)", "伴侣接入令牌（pchy_…）");
+      cmpSave.textContent = connected ? t("Update key", "更新令牌") : t("Save & connect", "保存并绑定");
+      // First-timers see the guide expanded + the Open-Pouchy CTA; connected users don't need them.
+      if (cmpHelp) cmpHelp.open = !connected;
+      cmpOpen.style.display = connected ? "none" : "block";
       cmpInput.value = "";
       cmpAutoVoice.checked = this.options.companionAutoVoice ?? false;
-      cmpDisconnect.style.display = tok ? "block" : "none";
+      cmpDisconnect.style.display = connected ? "block" : "none";
     };
     const openCmpModal = () => {
       refreshModalState();
@@ -1037,7 +1057,22 @@ export class Lobby {
         border-radius: 18px; padding: 22px; color: rgba(255,255,255,0.92);
         font-family: 'Domine', Georgia, serif; box-shadow: 0 18px 60px rgba(0,0,0,0.5);
       }
-      .lobby-companion-modal-title { font-size: 1.2rem; font-weight: 700; margin: 0 0 8px; }
+      .lobby-companion-titlerow { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+      .lobby-companion-modal-title { font-size: 1.2rem; font-weight: 700; margin: 0; }
+      .lobby-companion-badge {
+        flex-shrink: 0; font-size: 0.72rem; font-weight: 700; padding: 4px 10px; border-radius: 999px;
+        background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.55); border: 1px solid rgba(255,255,255,0.14);
+      }
+      .lobby-companion-panel.connected .lobby-companion-badge {
+        background: rgba(90,209,122,0.18); color: #8ff0b0; border-color: rgba(90,209,122,0.55);
+      }
+      /* Green accent rail on the connected panel so it reads as "managing", not "setting up". */
+      .lobby-companion-panel.connected { border-color: rgba(90,209,122,0.4); box-shadow: 0 18px 60px rgba(0,0,0,0.5), inset 3px 0 0 rgba(90,209,122,0.7); }
+      .lobby-companion-panel.connected .lobby-companion-status { color: #aee9c2; }
+      .lobby-companion-panel.connected .lobby-companion-disconnect {
+        display: block; width: 100%; margin-top: 12px; padding: 10px; border-radius: 10px;
+        border: 1px solid rgba(255,120,120,0.4); background: rgba(255,120,120,0.08); color: #ffb3b3; text-decoration: none;
+      }
       .lobby-companion-status { font-size: 0.84rem; color: rgba(255,255,255,0.62); margin: 0 0 14px; line-height: 1.45; }
       .lobby-companion-open {
         display: block; text-align: center; text-decoration: none;
