@@ -1055,10 +1055,10 @@ export class Game {
     }
 
     this.container.appendChild(this.loadingEl);
-    if (this.mobile) {
-      const built = this.loadingEl.querySelector(".loading-built-with") as HTMLElement | null;
-      if (built) built.style.display = "none";
-    }
+    // Hide the "Built with Cursor" splash on every platform (desktop + mobile),
+    // so desktop shows only a brief black loading screen like mobile does.
+    const built = this.loadingEl.querySelector(".loading-built-with") as HTMLElement | null;
+    if (built) built.style.display = "none";
   }
 
   private showLoadingError() {
@@ -1086,10 +1086,8 @@ export class Game {
       this.removeLoadingOverlay({ immediate: true });
       this.start();
     });
-    if (this.mobile) {
-      const built = this.loadingEl.querySelector(".loading-built-with") as HTMLElement | null;
-      if (built) built.style.display = "none";
-    }
+    const built = this.loadingEl.querySelector(".loading-built-with") as HTMLElement | null;
+    if (built) built.style.display = "none";
   }
 
   private removeLoadingOverlay(opts?: { immediate?: boolean }) {
