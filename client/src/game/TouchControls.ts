@@ -454,15 +454,15 @@ export class TouchControls {
         .tc-elevate-btn,
         .tc-descend-btn,
         .tc-action-btn {
-          width: 48px;
-          height: 48px;
-          min-width: 48px;
-          min-height: 48px;
-          font-size: 1rem;
+          width: 76px;
+          height: 76px;
+          min-width: 76px;
+          min-height: 76px;
+          font-size: 2rem;
         }
         .tc-action-btn .tc-portal-icon {
-          width: 1.25rem;
-          height: 1.25rem;
+          width: 2.1rem;
+          height: 2.1rem;
         }
       }
     `;
