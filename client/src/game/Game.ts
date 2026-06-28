@@ -906,6 +906,7 @@ export class Game {
     this.companion = manager;
     this.companionUI = new CompanionUI(this.hud.root, {
       mobile: this.mobile,
+      brandIconUrl: manager.brandIconUrl(),
       onSendText: (text) => void this.companion?.sendText(text),
       onToggleVoice: () => void this.toggleCompanionVoice(),
       onInviteFriends: () => {
@@ -917,6 +918,8 @@ export class Game {
 
     void manager.connect().then(async (ok) => {
       if (!ok) return;
+      // Swap the voice button to the companion's own portrait when one exists.
+      void manager.getAvatarImageUrl().then((url) => this.companionUI?.setCompanionAvatar(url));
       if (this.worldConfig) manager.setRetained("game.world", { name: this.worldConfig.name, slug: this.worldSlug });
       manager.setRetained("game.player.vehicle", { vehicle });
       if (ProgressionManager.loadCompanionAutoVoice()) {
