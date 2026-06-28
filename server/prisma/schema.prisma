@@ -38,6 +38,23 @@ model SaveFeedEntry {
   @@index([createdAt(sort: Desc)])
 }
 
+/** A past visitor of a world, persisted so the game can spawn "ghost" vehicles
+ *  representing players (and their AI companions) who flew here before. All
+ *  non-secret display data — never tokens. One row per (world, visitor). */
+model WorldVisitor {
+  id            String   @id @default(cuid())
+  worldSlug     String
+  visitorId     String
+  displayName   String
+  vehicle       String   @default("plane")
+  companionName String?
+  lastSeenAt    DateTime @updatedAt
+  createdAt     DateTime @default(now())
+
+  @@unique([worldSlug, visitorId])
+  @@index([worldSlug, lastSeenAt(sort: Desc)])
+}
+
 /** Milestone-only history for dashboards; never high-frequency telemetry. */
 model GameEvent {
   id             String   @id @default(cuid())

@@ -193,6 +193,62 @@ export function createWorldsRouter(
     }
   });
 
+  // Record a visit so this player can later appear as a "ghost" in the world.
+  // Stores only non-secret display data (visitorId + name + vehicle + companion
+  // name). Upsert keyed on (worldSlug, visitorId) so re-visits refresh lastSeen.
+  router.post("/:slug/visit", async (req, res) => {
+    try {
+      const slug = req.params.slug;
+      const body = (req.body ?? {}) as {
+        visitorId?: unknown;
+        displayName?: unknown;
+        vehicle?: unknown;
+        companionName?: unknown;
+      };
+      const visitorId = typeof body.visitorId === "string" ? body.visitorId.slice(0, 64) : "";
+      const displayName = typeof body.displayName === "string" ? body.displayName.slice(0, 40) : "";
+      const vehicleRaw = typeof body.vehicle === "string" ? body.vehicle : "plane";
+      const vehicle = vehicleRaw === "boat" ? "boat" : vehicleRaw === "carpet" ? "carpet" : "plane";
+      const companionName =
+        typeof body.companionName === "string" && body.companionName.trim()
+          ? body.companionName.slice(0, 40)
+          : null;
+      if (!visitorId || !displayName) {
+        res.status(400).json({ error: "visitorId and displayName are required" });
+        return;
+      }
+      await prisma.worldVisitor.upsert({
+        where: { worldSlug_visitorId: { worldSlug: slug, visitorId } },
+        create: { worldSlug: slug, visitorId, displayName, vehicle, companionName },
+        update: { displayName, vehicle, companionName },
+      });
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("Failed to record visit:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Recent past visitors of a world (for spawning ghost vehicles). Excludes the
+  // requester's own visitorId so you never haunt yourself.
+  router.get("/:slug/visitors", async (req, res) => {
+    try {
+      const slug = req.params.slug;
+      const exclude = typeof req.query.exclude === "string" ? req.query.exclude : "";
+      const limit = Math.min(Math.max(Number(req.query.limit) || 6, 1), 12);
+      const rows = await prisma.worldVisitor.findMany({
+        where: { worldSlug: slug, visitorId: { not: exclude || undefined } },
+        orderBy: { lastSeenAt: "desc" },
+        take: limit,
+        select: { visitorId: true, displayName: true, vehicle: true, companionName: true, lastSeenAt: true },
+      });
+      res.json(rows);
+    } catch (err) {
+      console.error("Failed to list visitors:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   router.get("/:slug", async (req, res) => {
     try {
       const world = await prisma.world.findUnique({

@@ -151,13 +151,22 @@ export class CompanionManager {
     return pouchyBrandIconUrl(POUCHY_BASE_URL, size);
   }
 
+  /** The connected companion's chosen display name (captured from getAvatar),
+   *  or null. Used to label this player's "ghost" for other players later. */
+  get companionDisplayName(): string | null {
+    return this.companionName;
+  }
+  private companionName: string | null = null;
+
   /** The connected companion's 2D portrait URL, when one exists (null for the
    *  built-in models, which are VRM-only today). Used to swap the voice button's
-   *  icon from the brand mark to the actual "virtual human". */
+   *  icon from the brand mark to the actual "virtual human". Also captures the
+   *  companion's display name as a side effect. */
   async getAvatarImageUrl(): Promise<string | null> {
     if (!this.isReady || !this.client) return null;
     try {
       const avatar = await this.client.getAvatar();
+      if (avatar.name) this.companionName = avatar.name;
       return avatar.imageUrl ?? null;
     } catch {
       return null;
