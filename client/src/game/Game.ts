@@ -27,6 +27,7 @@ import { t, IS_ZH } from "../i18n";
 import { localizeWorldName } from "../i18nNames";
 import { CompanionManager } from "../companion/CompanionManager";
 import { CompanionUI } from "../companion/CompanionUI";
+import { VoiceCommander } from "../companion/VoiceCommander";
 import { WaypointBeacon } from "./WaypointBeacon";
 import {
   BRAZIER_MOON_PAUSE_MS,
@@ -490,6 +491,15 @@ export class Game {
   } | null = null;
   /** One-shot fire request from the companion (consumed next frame). */
   private voiceFireQueued = false;
+  /** Dedicated always-listening speech recognizer for flight commands (separate
+   *  from the companion voice call, which mutes the mic while the companion talks). */
+  private voiceCommander: VoiceCommander | null = null;
+  /** Dedup guard so a single spoken utterance (re-emitted as interim results)
+   *  doesn't trigger the same command many times. */
+  private lastVoiceCmdAction: string | null = null;
+  private lastVoiceCmdAt = 0;
+  /** Throttle accumulator for the periodic companion "situation" world-state. */
+  private companionSituationTimer = 0;
   private carpetLandmarkSelfieQuest: CarpetLandmarkSelfieQuest | null = null;
   private carpetSelfiePhotoUI: HotspringPhotoUI | null = null;
   private eternalFlameUI: EternalFlameUI | null = null;
@@ -877,7 +887,7 @@ export class Game {
       appContext: {
         name: "A2A.FUN",
         description:
-          "A cosy multiplayer game where players fly biplanes, magic carpets and boats around tiny worlds, deliver packages, race, light braziers, and save the world from a falling moon.",
+          "A2A.FUN is a cosy multiplayer flight game. The player pilots a biplane, a magic carpet, or a boat around a tiny globe-world. The overarching goal is to save the world from a slowly falling moon. Core activities: deliver glowing packages between villages; win races / time-trials; (biplane) shoot sky gremlins with paintballs; (magic carpet) collect sky jellyfish and help defend the eternal flame; (boat) catch fish and explore the islands. Lighting the ancient braziers and defending the eternal flame through cosmic-void moth waves is what ultimately stops the moon. You are the player's AI co-pilot riding along: be warm and brief, use the live game state (sent as world-state updates) to tell them what's happening and suggest what to do next, and you can physically fly their vehicle when they ask — left, right, climb, descend, faster, slower, fire, stop.",
       },
       tools: [
         {
@@ -963,6 +973,7 @@ export class Game {
       if (ProgressionManager.loadCompanionAutoVoice()) {
         const started = await manager.startVoiceCopilot();
         this.companionUI?.setVoiceActive(started);
+        if (started) this.startVoiceCommander();
       }
     });
   }
@@ -971,11 +982,29 @@ export class Game {
     if (!this.companion) return;
     if (this.companion.inCall) {
       this.companion.stopVoice();
+      this.stopVoiceCommander();
       this.companionUI?.setVoiceActive(false);
     } else {
       const ok = await this.companion.startVoiceCopilot();
       this.companionUI?.setVoiceActive(ok);
+      if (ok) this.startVoiceCommander();
     }
+  }
+
+  /** Start the dedicated speech-command recognizer (best-effort; no-ops if the
+   *  browser lacks the Web Speech API). Commands are parsed by handleVoiceCommand
+   *  so they work continuously even while the companion is talking. */
+  private startVoiceCommander() {
+    if (this.voiceCommander || !VoiceCommander.supported) return;
+    this.voiceCommander = new VoiceCommander(IS_ZH ? "zh-CN" : "en-US", (text) =>
+      this.handleVoiceCommand(text),
+    );
+    this.voiceCommander.start();
+  }
+
+  private stopVoiceCommander() {
+    this.voiceCommander?.stop();
+    this.voiceCommander = null;
   }
 
   /** Execute a tool the companion asked for (Phase 2). Best-effort + defensive. */
@@ -1099,6 +1128,13 @@ export class Game {
       action = "back";
     if (!action) return false;
 
+    // The recognizer re-emits interim results for one utterance — collapse repeats
+    // of the same command within a short window so "向左" fires once, not five times.
+    const now = performance.now();
+    if (action === this.lastVoiceCmdAction && now - this.lastVoiceCmdAt < 1000) return true;
+    this.lastVoiceCmdAction = action;
+    this.lastVoiceCmdAt = now;
+
     const res = this.execVehicleControl({ action, duration: 1.6 });
     const labels: Record<string, [string, string]> = {
       left: ["↰ Left", "↰ 向左"],
@@ -1118,6 +1154,65 @@ export class Game {
       this.hud.showAmbientToast(res.result);
     }
     return true;
+  }
+
+  /** Push a compact "what's happening + what to do next" snapshot to the companion
+   *  as retained world-state, so it can guide the player. Deduped + throttled by the
+   *  manager; call freely from the tick. */
+  private emitCompanionSituation() {
+    if (!this.companion) return;
+    const snap: Record<string, unknown> = {
+      vehicle: this.playerVehicle,
+      level: this.progression.getLevel(),
+    };
+    if (this.playerVehicle === "plane") {
+      snap.gremlins = { current: this.skyGremlins?.getSessionGremlinKills() ?? 0, max: 7 };
+      snap.deliveries = {
+        current: this.packageQuest?.getCompletedDeliveryCount() ?? 0,
+        max: PACKAGE_DELIVERIES_PER_WORLD,
+      };
+    } else if (this.playerVehicle === "carpet") {
+      snap.jellyfish = { current: this.skyJellyfish?.getCollectedCount() ?? 0, max: JELLY_COUNT };
+    } else if (this.playerVehicle === "boat") {
+      snap.fish = { current: this.fishCaught, max: FISH_COUNT_BEFORE_MYSTERY_OCTOPUS };
+    }
+    if (this.packageQuest?.isCarrying) {
+      const pos = new Vector3().setFromMatrixPosition(this.localPlayer.group.matrixWorld);
+      const dm = this.packageQuest.getDeliverySurfaceDistanceMetres(pos);
+      // Bucket to ~100 m so the snapshot doesn't churn (and resend) every cycle.
+      snap.carrying = { to: this.packageQuest.destinationName, distance_m: dm != null ? Math.round(dm / 100) * 100 : null };
+    }
+    snap.moon = {
+      danger: Math.round((this.moonThreat?.progress ?? 0) * 100) / 100,
+      frozen: this.moonThreat?.isPermanentlyFrozen ?? false,
+    };
+    if (this.inCosmicVoid) {
+      snap.void = {
+        active: true,
+        wave: this.voidWave,
+        shield_hp: this.voidFlameShield?.getHitPoints() ?? null,
+        shield_max: this.voidFlameShield?.getMaxHitPoints() ?? null,
+      };
+    }
+    snap.suggestion = this.computeNextStepHint();
+    this.companion.setRetained("game.situation", snap);
+  }
+
+  /** A short, accurate "what to do next" line derived from the live state. The
+   *  companion uses it as a hint; it can always synthesize from the raw facts too. */
+  private computeNextStepHint(): string {
+    if (this.inCosmicVoid) return "Defend the eternal flame — survive the incoming moth waves.";
+    if (this.packageQuest?.isCarrying) {
+      const dest = this.packageQuest.destinationName;
+      return dest ? `Deliver the package to ${dest}.` : "Deliver the package to its destination village.";
+    }
+    if ((this.moonThreat?.progress ?? 0) > 0.6 && !(this.moonThreat?.isPermanentlyFrozen ?? false)) {
+      return "The moon is getting dangerously close — work toward lighting the braziers to stop it.";
+    }
+    if (this.playerVehicle === "plane") return "Pick up a glowing package to deliver, shoot sky gremlins, or find a race.";
+    if (this.playerVehicle === "carpet") return "Collect sky jellyfish and look for braziers / the eternal flame to defend.";
+    if (this.playerVehicle === "boat") return "Sail around, catch fish, and explore the islands.";
+    return "Explore the world and take on its activities.";
   }
 
   /** Resolve a set_waypoint target to a globe surface normal + a bilingual label.
@@ -2510,6 +2605,7 @@ export class Game {
     this.companion = null;
     this.companionUI?.dispose();
     this.companionUI = null;
+    this.stopVoiceCommander();
     this.voiceControl = null;
     this.voiceFireQueued = false;
     this.stateSync?.stop();
@@ -3844,6 +3940,16 @@ export class Game {
     this.localPlayer.visibility = 1;
     this.localPlayer.update(dt, turnRate, forward, brake, elevate, paintball, descend);
     this.localPlayer.group.updateMatrixWorld(true);
+
+    // Keep the AI companion aware of the current objective / danger / environment
+    // so it can guide the player. Built ~every 3s; the manager dedupes unchanged state.
+    if (this.companion) {
+      this.companionSituationTimer += dt;
+      if (this.companionSituationTimer >= 3) {
+        this.companionSituationTimer = 0;
+        this.emitCompanionSituation();
+      }
+    }
     if (
       this.raceManager &&
       this.gamePhase === "flying" &&
