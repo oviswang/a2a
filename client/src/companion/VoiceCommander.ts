@@ -45,7 +45,7 @@ export class VoiceCommander {
 
   constructor(
     private readonly lang: string,
-    private readonly onPhrase: (text: string) => void,
+    private readonly onPhrase: (text: string, isFinal: boolean) => void,
   ) {}
 
   /** Start continuous listening. Returns false if unsupported. Safe to call twice. */
@@ -72,8 +72,9 @@ export class VoiceCommander {
     rec.maxAlternatives = 1;
     rec.onresult = (e) => {
       for (let i = e.resultIndex; i < e.results.length; i++) {
-        const txt = e.results[i]?.[0]?.transcript;
-        if (txt) this.onPhrase(txt);
+        const r = e.results[i];
+        const txt = r?.[0]?.transcript;
+        if (txt) this.onPhrase(txt, r?.isFinal === true);
       }
     };
     rec.onerror = (e) => {
