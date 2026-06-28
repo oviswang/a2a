@@ -101,6 +101,7 @@ import { Volcano, VOLCANO_COUNT, VOLCANO_XP } from "./Volcano";
 import { Braziers, BRAZIER_COUNT, type SavedBrazierState } from "./Braziers";
 import { SkyGremlins, SKY_GREMLIN_KING_XP, SKY_GREMLIN_XP, GREMLIN_TAKEDOWNS_FOR_KING } from "./SkyGremlins";
 import { NpcPlanes } from "./NpcPlanes";
+import { GhostPlanes, type GhostVisitor } from "./GhostPlanes";
 import { NpcBoats } from "./NpcBoats";
 import { GremlinHearts } from "./GremlinHearts";
 import { LandmarkRegistry, LandmarkDetector } from "./Landmarks";
@@ -527,6 +528,10 @@ export class Game {
   private skyGremlins: SkyGremlins | null = null;
   private npcPlanes: NpcPlanes | null = null;
   private npcPaintballUnsub: (() => void) | null = null;
+  /** "Ghost" vehicles of players who flew this world before (A2A Phase B). */
+  private ghostPlanes: GhostPlanes | null = null;
+  /** Bumped on each teardown so async spawns can detect a stale session. */
+  private sessionEpoch = 0;
   private npcBoats: NpcBoats | null = null;
   private gremlinHearts: GremlinHearts | null = null;
   private lastGremlinHitSfxAt = 0;
@@ -895,7 +900,7 @@ export class Game {
       appContext: {
         name: "A2A.FUN",
         description:
-          "A2A.FUN is a cosy multiplayer flight game. The player pilots a biplane, a magic carpet, or a boat around a tiny globe-world. The overarching goal is to save the world from a slowly falling moon. Core activities: deliver glowing packages between villages; win races / time-trials; (biplane) shoot sky gremlins with paintballs; (magic carpet) collect sky jellyfish and help defend the eternal flame; (boat) catch fish and explore the islands. Lighting the ancient braziers and defending the eternal flame through cosmic-void moth waves is what ultimately stops the moon. You are the player's AI co-pilot riding along: be warm and brief, use the live game state (sent as world-state updates) to tell them what's happening and suggest what to do next, and you can physically fly their vehicle when they ask — left, right, climb, descend, faster, slower, fire, stop. This is a multiplayer game: when other worlds have players who also have AI companions (see the rendezvous world-state, or call find_companions), you can suggest taking the player there to meet up and become A2A friends — call join_world to fly them over, then they can pair in person.",
+          "A2A.FUN is a cosy multiplayer flight game. The player pilots a biplane, a magic carpet, or a boat around a tiny globe-world. The overarching goal is to save the world from a slowly falling moon. Core activities: deliver glowing packages between villages; win races / time-trials; (biplane) shoot sky gremlins with paintballs; (magic carpet) collect sky jellyfish and help defend the eternal flame; (boat) catch fish and explore the islands. Lighting the ancient braziers and defending the eternal flame through cosmic-void moth waves is what ultimately stops the moon. You are the player's AI co-pilot riding along: be warm and brief, use the live game state (sent as world-state updates) to tell them what's happening and suggest what to do next, and you can physically fly their vehicle when they ask — left, right, climb, descend, faster, slower, fire, stop. This is a multiplayer game: when other worlds have players who also have AI companions (see the rendezvous world-state, or call find_companions), you can suggest taking the player there to meet up and become A2A friends — call join_world to fly them over, then they can pair in person. The world is also haunted by translucent 'ghost' vehicles of players (and their companions) who flew here before; when the player passes one (a game.event.met_ghost moment), you can warmly note who they were.",
       },
       tools: [
         {
@@ -993,7 +998,14 @@ export class Game {
     void manager.connect().then(async (ok) => {
       if (!ok) return;
       // Swap the voice button to the companion's own portrait when one exists.
-      void manager.getAvatarImageUrl().then((url) => this.companionUI?.setCompanionAvatar(url));
+      void manager.getAvatarImageUrl().then((url) => {
+        this.companionUI?.setCompanionAvatar(url);
+        // Now that the companion's name is known, refresh our visit record so our
+        // own "ghost" carries the companion name for future visitors.
+        if (manager.companionDisplayName && this.worldSlug) {
+          void this.recordVisit(this.worldSlug, ProgressionManager.loadOrCreateVisitorId());
+        }
+      });
       if (this.worldConfig) manager.setRetained("game.world", { name: this.worldConfig.name, slug: this.worldSlug });
       manager.setRetained("game.player.vehicle", { vehicle });
       if (ProgressionManager.loadCompanionAutoVoice()) {
@@ -1127,6 +1139,81 @@ export class Game {
       total: worlds.length,
       summary,
     });
+  }
+
+  /** Record our own visit, then spawn "ghost" vehicles of past visitors (A2A
+   *  Phase B). Best-effort + async; no-ops if the world is gone by the time it
+   *  resolves. */
+  private async initGhostPlanes(globeRadius: number) {
+    const slug = this.worldSlug;
+    if (!slug) return;
+    const epoch = this.sessionEpoch;
+    const visitorId = ProgressionManager.loadOrCreateVisitorId();
+    void this.recordVisit(slug, visitorId);
+    const visitors = await this.fetchVisitors(slug, visitorId);
+    // Bail if the session was torn down / switched worlds while fetching.
+    if (this.sessionEpoch !== epoch || this.ghostPlanes || this.worldSlug !== slug || visitors.length === 0) {
+      return;
+    }
+    this.ghostPlanes = new GhostPlanes(this.scene, globeRadius, visitors, this.hud.root);
+    this.ghostPlanes.onEncounter = (v) => this.onGhostEncounter(v);
+  }
+
+  private async recordVisit(slug: string, visitorId: string) {
+    try {
+      await fetch(`${this.getServerUrl()}/api/worlds/${encodeURIComponent(slug)}/visit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          visitorId,
+          displayName: this.playerName,
+          vehicle: this.playerVehicle,
+          companionName: this.companion?.companionDisplayName ?? null,
+        }),
+      });
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  private async fetchVisitors(slug: string, exclude: string): Promise<GhostVisitor[]> {
+    try {
+      const url = `${this.getServerUrl()}/api/worlds/${encodeURIComponent(slug)}/visitors?exclude=${encodeURIComponent(exclude)}&limit=6`;
+      const res = await fetch(url);
+      if (!res.ok) return [];
+      const rows = (await res.json()) as Array<{
+        visitorId: string;
+        displayName: string;
+        vehicle: string;
+        companionName: string | null;
+      }>;
+      return (Array.isArray(rows) ? rows : []).map((r) => ({
+        visitorId: r.visitorId,
+        displayName: r.displayName,
+        vehicle: r.vehicle === "boat" ? "boat" : r.vehicle === "carpet" ? "carpet" : "plane",
+        companionName: r.companionName,
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  /** A ghost of a past visitor came near — tell the player + let the companion
+   *  narrate who they were (and, later, offer to reconnect). */
+  private onGhostEncounter(v: GhostVisitor) {
+    const vh = v.vehicle === "boat"
+      ? IS_ZH ? "船" : "boat"
+      : v.vehicle === "carpet"
+        ? IS_ZH ? "飞毯" : "carpet"
+        : IS_ZH ? "飞机" : "plane";
+    this.hud.showAmbientToast(
+      IS_ZH ? `👻 遇见 ${v.displayName} 的${vh}` : `👻 ${v.displayName}'s ${vh}`,
+    );
+    this.companion?.emitMoment(
+      "game.event.met_ghost",
+      { name: v.displayName, companion: v.companionName ?? null, vehicle: v.vehicle },
+      { salience: 0.5 },
+    );
   }
 
   /** Fetch worlds that currently have players-with-companions (excluding ours). */
@@ -2455,6 +2542,9 @@ export class Game {
       }
     }
 
+    // "Ghost" vehicles of players (and their companions) who flew here before.
+    void this.initGhostPlanes(globeRadius);
+
     // NPC small boats — boat vehicle only, local-only
     if (vehicle === "boat") {
       this.npcBoats = new NpcBoats(this.scene, globeRadius, seed, terrainType);
@@ -2747,6 +2837,7 @@ export class Game {
 
   /** Tear down everything created in startGame (globe / moon / renderer stay). */
   private teardownGameplaySession(reason = "session_ended") {
+    this.sessionEpoch++;
     this.reportSessionEnded(reason);
     // Consolidate the companion's run into memory, then release it.
     void this.companion?.endSession();
@@ -2818,6 +2909,8 @@ export class Game {
     this.npcPlanes = null;
     this.npcBoats?.dispose();
     this.npcBoats = null;
+    this.ghostPlanes?.dispose();
+    this.ghostPlanes = null;
     if (this.kingEternalFlameRewardTimeout != null) {
       clearTimeout(this.kingEternalFlameRewardTimeout);
       this.kingEternalFlameRewardTimeout = null;
@@ -4239,6 +4332,11 @@ export class Game {
       this.npcBoats.update(dt, _npcBoatPlayerPos, (msg) => {
         this.hud.showAmbientToast(msg);
       });
+    }
+
+    if (this.ghostPlanes && !this.inCosmicVoid) {
+      const _ghostPlayerPos = this.localPlayerWorldScratch.setFromMatrixPosition(this.localPlayer.group.matrixWorld);
+      this.ghostPlanes.update(dt, _ghostPlayerPos, this.cameraRig.camera, this.renderer.domElement);
     }
 
     if (this.localPlayer instanceof Plane && this.skyGremlins) {
@@ -6718,6 +6816,7 @@ export class Game {
       if (this.packageQuest) this.packageQuest.group.visible = false;
       if (this.collectVFX) this.collectVFX.group.visible = false;
       this.npcPlanes?.setVisible(false);
+      this.ghostPlanes?.setVisible(false);
 
       this.packageQuestHUD.hideBubble();
       this.packageQuestHUD.hideDeliveryTarget();
@@ -6851,6 +6950,7 @@ export class Game {
     if (this.packageQuest) this.packageQuest.group.visible = true;
     if (this.collectVFX) this.collectVFX.group.visible = true;
     this.npcPlanes?.setVisible(true);
+    this.ghostPlanes?.setVisible(true);
     this.setPortalHintVisible(true);
     this.hud.setWorldName(
       localizeWorldName(this.worldConfig?.name ?? t("Unknown World", "未知世界")),
@@ -7709,6 +7809,8 @@ export class Game {
     this.npcPlanes = null;
     this.npcBoats?.dispose();
     this.npcBoats = null;
+    this.ghostPlanes?.dispose();
+    this.ghostPlanes = null;
     if (this.gremlinHearts) {
       this.scene.remove(this.gremlinHearts.group);
       this.gremlinHearts.dispose();
