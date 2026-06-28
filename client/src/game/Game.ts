@@ -538,6 +538,8 @@ export class Game {
   /** Actionable "befriend this ghost" chip shown on a ghost encounter. */
   private ghostChipEl: HTMLElement | null = null;
   private ghostChipTimer: number | null = null;
+  /** Dismisses the current in-game pairing card (only one at a time). */
+  private pairingCardCleanup: (() => void) | null = null;
   private npcBoats: NpcBoats | null = null;
   private gremlinHearts: GremlinHearts | null = null;
   private lastGremlinHitSfxAt = 0;
@@ -1268,6 +1270,100 @@ export class Game {
     this.ghostChipEl = null;
   }
 
+  /** A cozy in-game pairing card (replaces native confirm). Resolves true=accept,
+   *  false=decline. Only one card shows at a time; auto-declines after 45s so it
+   *  never gets stuck on screen. */
+  private showPairingCard(opts: {
+    title: string;
+    message: string;
+    acceptLabel: string;
+    declineLabel: string;
+  }): Promise<boolean> {
+    this.pairingCardCleanup?.(); // never stack
+    Game.injectPairingCardStyles();
+    return new Promise<boolean>((resolve) => {
+      const backdrop = document.createElement("div");
+      backdrop.className = "pair-card-backdrop";
+      const card = document.createElement("div");
+      card.className = "pair-card";
+      const title = document.createElement("div");
+      title.className = "pair-card-title";
+      title.textContent = opts.title;
+      const msg = document.createElement("div");
+      msg.className = "pair-card-msg";
+      msg.textContent = opts.message;
+      const actions = document.createElement("div");
+      actions.className = "pair-card-actions";
+      const declineBtn = document.createElement("button");
+      declineBtn.type = "button";
+      declineBtn.className = "pair-card-btn pair-card-decline";
+      declineBtn.textContent = opts.declineLabel;
+      const acceptBtn = document.createElement("button");
+      acceptBtn.type = "button";
+      acceptBtn.className = "pair-card-btn pair-card-accept";
+      acceptBtn.textContent = opts.acceptLabel;
+      actions.appendChild(declineBtn);
+      actions.appendChild(acceptBtn);
+      card.appendChild(title);
+      card.appendChild(msg);
+      card.appendChild(actions);
+      backdrop.appendChild(card);
+      this.hud.root.appendChild(backdrop);
+      requestAnimationFrame(() => backdrop.classList.add("pair-card-backdrop--in"));
+
+      let done = false;
+      let timer: number | null = null;
+      const finish = (val: boolean) => {
+        if (done) return;
+        done = true;
+        if (timer != null) clearTimeout(timer);
+        this.pairingCardCleanup = null;
+        backdrop.classList.remove("pair-card-backdrop--in");
+        setTimeout(() => backdrop.remove(), 200);
+        resolve(val);
+      };
+      acceptBtn.addEventListener("click", () => finish(true));
+      declineBtn.addEventListener("click", () => finish(false));
+      backdrop.addEventListener("click", (e) => {
+        if (e.target === backdrop) finish(false);
+      });
+      timer = window.setTimeout(() => finish(false), 45000);
+      this.pairingCardCleanup = () => finish(false);
+    });
+  }
+
+  private static injectPairingCardStyles() {
+    if (document.getElementById("pair-card-styles")) return;
+    const s = document.createElement("style");
+    s.id = "pair-card-styles";
+    s.textContent = `
+      .pair-card-backdrop {
+        position: absolute; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
+        background: rgba(8, 12, 22, 0); transition: background 0.2s ease; pointer-events: auto; padding: 16px;
+      }
+      .pair-card-backdrop--in { background: rgba(8, 12, 22, 0.5); }
+      .pair-card {
+        width: min(380px, 92vw); border-radius: 18px; padding: 18px 18px 14px;
+        background: rgba(22, 30, 50, 0.96); border: 1px solid rgba(180, 210, 255, 0.28);
+        box-shadow: 0 18px 50px rgba(0,0,0,0.5); backdrop-filter: blur(14px);
+        font-family: 'Domine', Georgia, serif; color: rgba(235, 243, 255, 0.96);
+        transform: translateY(10px); transition: transform 0.22s ease;
+      }
+      .pair-card-backdrop--in .pair-card { transform: translateY(0); }
+      .pair-card-title { font-size: 1rem; font-weight: 700; margin-bottom: 8px; }
+      .pair-card-msg { font-size: 0.82rem; line-height: 1.5; color: rgba(220, 232, 255, 0.85); margin-bottom: 16px; }
+      .pair-card-actions { display: flex; gap: 10px; justify-content: flex-end; }
+      .pair-card-btn {
+        border: none; cursor: pointer; border-radius: 999px; padding: 9px 18px;
+        font: inherit; font-size: 0.8rem; font-weight: 700;
+      }
+      .pair-card-decline { background: rgba(255,255,255,0.10); color: rgba(235,243,255,0.85); }
+      .pair-card-accept { color: #0b1020; background: linear-gradient(135deg, #9fd0ff, #c6a8ff); }
+      .pair-card-btn:active { filter: brightness(0.92); }
+    `;
+    document.head.appendChild(s);
+  }
+
   private static injectGhostChipStyles() {
     if (document.getElementById("ghost-chip-styles")) return;
     const s = document.createElement("style");
@@ -1317,12 +1413,18 @@ export class Game {
 
   /** Phase C: an invite arrived to come pair with someone (a ghost's owner, or who
    *  invited us). Accepting takes us to their world and auto-requests pairing. */
-  private handleGhostPairIncoming(ev: GhostPairInvite) {
+  private async handleGhostPairIncoming(ev: GhostPairInvite) {
     if (!ProgressionManager.loadCompanionToken()) return; // can't pair without a companion
-    const msg = IS_ZH
-      ? `${ev.fromName} 想和你的 AI 伙伴成为 A2A 好友。前往 TA 的世界一起配对吗？`
-      : `${ev.fromName} wants to make your AI companions A2A friends. Go to their world to pair?`;
-    if (!window.confirm(msg)) {
+    const ok = await this.showPairingCard({
+      title: t("Pairing invite ✦", "配对邀请 ✦"),
+      message: t(
+        `${ev.fromName} wants to make your AI companions A2A friends. Fly over to their world to pair?`,
+        `${ev.fromName} 想和你的 AI 伙伴成为 A2A 好友。飞去 TA 的世界一起配对吗？`,
+      ),
+      acceptLabel: t("Go pair", "前往配对"),
+      declineLabel: t("Not now", "暂不"),
+    });
+    if (!ok) {
       this.socketClient?.emitGhostPairDecline(ev.fromVisitorId);
       return;
     }
@@ -1672,29 +1774,27 @@ export class Game {
 
   /** Another player wants to pair companions with us. Ask for explicit consent;
    *  on accept we hand back our OWN token (consent + proof) so they can pair. */
-  private handlePairIncoming(fromId: string, fromName: string) {
+  private async handlePairIncoming(fromId: string, fromName: string) {
     if (!this.socketClient) return;
     const myToken = ProgressionManager.loadCompanionToken();
     if (!myToken) {
       this.socketClient.emitPairRespond(fromId, false);
       return;
     }
-    const ok = window.confirm(
-      t(
-        `${fromName} wants to make your Pouchy companions friends (A2A). Accepting shares a one-time pairing handshake with them so the two companions can message each other. Only accept if you trust this player. Continue?`,
-        `${fromName} 想让你们的 Pouchy 伙伴结为好友（A2A）。接受会与对方进行一次性配对握手，让两个伙伴能互相发消息。仅在你信任该玩家时接受。是否继续？`,
+    const ok = await this.showPairingCard({
+      title: t("Companion pairing", "伙伴配对"),
+      message: t(
+        `${fromName} wants to make your Pouchy companions A2A friends, so the two can message each other. Only accept if you trust this player.`,
+        `${fromName} 想让你们的 Pouchy 伙伴结为 A2A 好友，让两个伙伴能互相发消息。仅在你信任该玩家时接受。`,
       ),
-    );
-    if (!ok) {
-      this.socketClient.emitPairRespond(fromId, false);
+      acceptLabel: t("Pair 🤝", "配对 🤝"),
+      declineLabel: t("Decline", "拒绝"),
+    });
+    if (!ok || !this.socketClient) {
+      this.socketClient?.emitPairRespond(fromId, false);
       return;
     }
-    this.socketClient.emitPairRespond(
-      fromId,
-      true,
-      myToken,
-      ProgressionManager.loadOrCreateVisitorId(),
-    );
+    this.socketClient.emitPairRespond(fromId, true, myToken, ProgressionManager.loadOrCreateVisitorId());
     this.hud.showAmbientToast(t("Pairing accepted.", "已接受配对。"));
   }
 
@@ -3068,6 +3168,7 @@ export class Game {
     this.ghostPlanes?.dispose();
     this.ghostPlanes = null;
     this.hideGhostEncounterChip();
+    this.pairingCardCleanup?.();
     if (this.kingEternalFlameRewardTimeout != null) {
       clearTimeout(this.kingEternalFlameRewardTimeout);
       this.kingEternalFlameRewardTimeout = null;
@@ -3825,7 +3926,14 @@ export class Game {
       !!ProgressionManager.loadCompanionToken(),
       ProgressionManager.loadOrCreateVisitorId(),
     );
-    this.socketClient.onGhostPairIncoming((ev) => this.handleGhostPairIncoming(ev));
+    this.socketClient.onGhostPairIncoming((ev) => void this.handleGhostPairIncoming(ev));
+    this.socketClient.onGhostPairNotice((ev) =>
+      this.hud.showAmbientToast(
+        IS_ZH
+          ? `✦ ${ev.name} 上线了，正在邀请 TA 来与你配对…`
+          : `✦ ${ev.name} just came online — inviting them to pair with you…`,
+      ),
+    );
     // If we arrived here to fulfil a ghost-pair invite, auto-request pairing.
     this.consumePendingGhostPair(slug);
 
