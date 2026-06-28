@@ -24,6 +24,7 @@ import {
 } from "three";
 import { cartesianFromSpherical, tangentFrame } from "./SphericalMath";
 import { t } from "../i18n";
+import { localizeWorldName } from "../i18nNames";
 import {
   BRAZIER_MOON_PAUSE_MS,
   getVehicleFeatures,
@@ -1608,7 +1609,9 @@ export class Game {
     };
 
     this.hud = new HUD(this.container, { mobile: this.mobile });
-    this.hud.setWorldName(this.worldConfig?.name ?? "Unknown World");
+    this.hud.setWorldName(
+      localizeWorldName(this.worldConfig?.name ?? t("Unknown World", "未知世界")),
+    );
     this.hud.setMuteToggle(() => this.audioManager.toggleMute());
     this.hud.setCampsiteAction(() => {
       if (this.gamePhase === "flying") this.doLanding();
@@ -2922,7 +2925,9 @@ export class Game {
       this.reservationId = data.reservationId;
       this.worldConfig = data;
 
-      this.hud.setWorldName(data.name ?? "Unknown World");
+      this.hud.setWorldName(
+        localizeWorldName(data.name ?? t("Unknown World", "未知世界")),
+      );
 
       this.initNetworking(this.worldSlug);
     } catch (err) {
@@ -5966,7 +5971,7 @@ export class Game {
       this.packageQuestHUD.hideDeliveryTarget();
       this.setPortalHintVisible(false);
 
-      this.hud.setWorldName("Cosmic Void");
+      this.hud.setWorldName(localizeWorldName("Cosmic Void"));
       this.hud.setPlayerCountVisible(false);
 
       this.applyDayNightPreset();
@@ -6095,7 +6100,9 @@ export class Game {
     if (this.collectVFX) this.collectVFX.group.visible = true;
     this.npcPlanes?.setVisible(true);
     this.setPortalHintVisible(true);
-    this.hud.setWorldName(this.worldConfig?.name ?? "Unknown World");
+    this.hud.setWorldName(
+      localizeWorldName(this.worldConfig?.name ?? t("Unknown World", "未知世界")),
+    );
     this.hud.setPlayerCountVisible(true);
   }
 

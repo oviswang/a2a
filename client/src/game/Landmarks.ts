@@ -1,4 +1,5 @@
 import { Quaternion, Vector3 } from "three";
+import { IS_ZH } from "../i18n";
 
 export type LandmarkType =
   | "village"
@@ -173,6 +174,99 @@ const WORD_LISTS: Record<LandmarkType, { prefixes: string[]; suffixes: string[] 
   race_banner:  { prefixes: RACE_BANNER_PREFIXES, suffixes: RACE_BANNER_SUFFIXES },
 };
 
+/**
+ * Chinese morphemes for every prefix/suffix fragment used above. Suffix
+ * fragments in the arrays carry a leading space (e.g. " Light"); the lookup
+ * trims that before resolving, so keys here are stored without spaces. When a
+ * fragment is missing the assembly falls back to the trimmed English fragment.
+ */
+const FRAGMENT_ZH: Record<string, string> = {
+  // ── Village / peak / forest / coast / island prefixes ──
+  Wind: "风", Sun: "阳", Moon: "月", Stone: "石", River: "河",
+  Cedar: "杉", Elm: "榆", Fox: "狐", Hawk: "鹰", Oak: "橡",
+  Pine: "松", Maple: "枫", Willow: "柳", Fern: "蕨", Moss: "苔",
+  Brook: "溪", Cliff: "崖", Dawn: "晨", Dusk: "暮", Star: "星",
+  Amber: "琥", Sage: "鼠尾", Iron: "铁", Coral: "珊瑚", Birch: "桦",
+  Briar: "棘", Thorn: "刺", Ash: "梣", Cinder: "烬", Frost: "霜",
+  Hazel: "榛", Laurel: "桂",
+  // ── Village / peak / forest / coast / island suffixes ──
+  haven: "港", shire: "郡", dale: "谷", ford: "津", crest: "峰",
+  hollow: "坳", ridge: "岭", brook: "溪", vale: "谷", field: "野",
+  meadow: "原", town: "镇", wick: "湾", bridge: "桥", moor: "荒",
+  gate: "门", well: "泉", wood: "林", marsh: "沼", glen: "峡",
+  stead: "庄", worth: "邑", bury: "堡", ham: "村",
+  // ── Lighthouse ──
+  Storm: "暴", Beacon: "烽", Gull: "鸥", Tide: "潮", Cape: "岬",
+  Drift: "漂", Anchor: "锚", Reef: "礁", Salt: "盐", Fog: "雾",
+  Ember: "焰", North: "北", South: "南", Lantern: "灯", Harbour: "港",
+  Crag: "岩",
+  Light: "灯塔", Point: "角", Watch: "瞭望", Rock: "岩", Bluff: "崖",
+  Head: "岬", Reach: "湾", Keep: "塔",
+  // ── Windmill ──
+  Breeze: "微风", Gale: "疾风", Harvest: "丰", Golden: "金", Mill: "磨",
+  Grain: "谷", Wheat: "麦", Rustic: "乡", Old: "古", Spring: "春",
+  Summer: "夏", Copper: "铜", Dusty: "尘", Hilltop: "丘顶",
+  Farm: "农庄", Rise: "坡", Knoll: "丘", Wheel: "轮", Grist: "磨坊",
+  // ── Observatory ──
+  Sky: "天", Luna: "月", Astral: "星", Zenith: "天顶", Polar: "极",
+  Crescent: "弦月", Eclipse: "蚀", Comet: "彗", Solar: "日", Nebula: "云",
+  Cosmos: "宇", Aurora: "极光", Meridian: "子午", Apex: "巅", Summit: "顶",
+  Observatory: "天文台", Dome: "穹", Peak: "峰", Lookout: "瞭望", Station: "台",
+  Spire: "尖塔",
+  // ── Stonehenge ──
+  Ancient: "古", Standing: "立", Broken: "残", Hollow: "空", Forgotten: "遗忘",
+  Worn: "磨", Silent: "寂", Mossy: "苔", Grey: "灰", Crooked: "歪",
+  Lonely: "孤", Wandering: "漂泊", Sunken: "沉", Crumbling: "崩", Lost: "失落",
+  Stones: "石", Circle: "环", Ring: "圈", Henge: "石阵", Monoliths: "巨石",
+  Pillars: "石柱", Ruins: "遗迹", Altar: "祭坛",
+  // ── Shrine ──
+  Quiet: "静", Bamboo: "竹", Red: "红", Morning: "晨", Evening: "夕",
+  Lotus: "莲", Silver: "银", Hidden: "隐", Peaceful: "宁", Misty: "雾",
+  Hill: "丘", Forest: "林",
+  Shrine: "神社", Sanctuary: "圣域", Grove: "林", Rest: "息", Torii: "鸟居",
+  Path: "径", Garden: "园",
+  // ── Hotspring ──
+  Steam: "汽", Warm: "暖", Cloud: "云", Valley: "谷",
+  Bath: "汤", Pool: "池", Onsen: "温泉", Waters: "水", Soak: "浴",
+  Basin: "盆", Springs: "泉",
+  // ── Mushroom ──
+  Fairy: "仙", Pastel: "彩", Spore: "孢", Toadstool: "蕈", Glimmer: "微光",
+  Magic: "魔", Whisper: "私语", Dream: "梦", Witch: "巫", Myco: "菌",
+  Luminous: "荧", Wanderer: "游者",
+  Patch: "圃", Thicket: "丛", Glade: "空地", Shade: "荫",
+  // ── Butterfly ──
+  Monarch: "帝王", Flutter: "翩", Painted: "彩绘", Swallowtail: "凤蝶", Azure: "蔚",
+  Silk: "丝", Petal: "瓣", Nectar: "蜜", Sunwing: "阳翼", Gossamer: "薄纱",
+  Haven: "港", Bloom: "花", Retreat: "隐居",
+  // ── Pyramid ──
+  Sand: "沙", Desert: "漠", Buried: "埋", Crimson: "绯", Ivory: "象牙",
+  Lone: "孤",
+  Pyramid: "金字塔", Monument: "碑", Tomb: "陵", Ziggurat: "塔庙", Mausoleum: "墓",
+  Needle: "针", Mound: "丘",
+  // ── Statue ──
+  Guardian: "守护", Bronze: "铜", Marble: "玉", Hero: "英雄", Watcher: "守望",
+  Eternal: "永恒", Weathered: "风蚀",
+  Memorial: "纪念", Statue: "雕像", Figure: "像", Effigy: "塑", Colossus: "巨像",
+  Sentinel: "哨", Tribute: "颂",
+  // ── Race banner ──
+  Aero: "翔", High: "高", Grand: "大", Crown: "冠",
+  Dash: "冲", Run: "跑", Sprint: "速", Derby: "赛", Rally: "拉力",
+  Circuit: "环道", Track: "道", Course: "径", Trial: "试炼", Chase: "追逐",
+  Flight: "飞", Glide: "滑翔", Soar: "翱", Dive: "俯冲", Drop: "落",
+  Plunge: "坠",
+  // ── Shared (hot spring two-word suffix) ──
+  "Hot Spring": "温泉",
+  // ── Capitalised suffix variants of lowercase prefix fragments ──
+  Meadow: "原", Gate: "门", Field: "野", Crest: "峰",
+};
+
+/** Resolve one chosen fragment to its Chinese morpheme, trimming the leading
+ *  space carried by suffix fragments. Falls back to the trimmed English. */
+function fragmentZh(fragment: string): string {
+  const key = fragment.trim();
+  return FRAGMENT_ZH[key] ?? key;
+}
+
 export function generateLandmarkNames(
   seed: number,
   count: number,
@@ -189,7 +283,9 @@ export function generateLandmarkNames(
     do {
       const pi = Math.floor(rand() * prefixes.length);
       const si = Math.floor(rand() * suffixes.length);
-      name = prefixes[pi] + suffixes[si];
+      name = IS_ZH
+        ? fragmentZh(prefixes[pi]) + fragmentZh(suffixes[si])
+        : prefixes[pi] + suffixes[si];
       retries++;
     } while (used.has(name) && retries < 50);
 

@@ -1,6 +1,7 @@
 import { getNpcPortraitUrl } from "../game/PackageDialogue";
 import { CircularProgressRing } from "./CircularProgressRing";
 import { t } from "../i18n";
+import { npcDisplayName } from "../i18nNames";
 
 /** Match phones / small tablets; CSS alone isn’t enough because showBubble sets inline `transform`. */
 function isNarrowDialogueViewport(): boolean {
@@ -124,7 +125,7 @@ export class PackageQuestHUD {
   showBubble(npcName: string, text: string) {
     this.hideWhisper();
     if (this.bubbleTimer) clearTimeout(this.bubbleTimer);
-    this.bubbleNpcEl.textContent = npcName;
+    this.bubbleNpcEl.textContent = npcDisplayName(npcName);
     this.bubbleTextEl.textContent = text;
     const portraitUrl = getNpcPortraitUrl(npcName);
     if (portraitUrl) {
