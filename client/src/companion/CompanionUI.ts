@@ -29,6 +29,7 @@ export class CompanionUI {
   private readonly root: HTMLElement;
   private readonly opts: CompanionUIOptions;
 
+  private sideStack!: HTMLElement;
   private toggleBtn!: HTMLButtonElement;
   private voiceBtn!: HTMLButtonElement;
   private panel!: HTMLElement;
@@ -53,8 +54,10 @@ export class CompanionUI {
   // ── Build ──────────────────────────────────────────────────────────────────
 
   private build() {
-    // Buttons in the top-right bar (sit beside mute/fullscreen).
-    const bar = this.root.querySelector(".hud-top-right");
+    // A vertical stack of companion buttons that sits below the top-right bar
+    // (mute/fullscreen) rather than crowding into it.
+    this.sideStack = document.createElement("div");
+    this.sideStack.className = "cmp-side-stack";
 
     this.toggleBtn = document.createElement("button");
     this.toggleBtn.type = "button";
@@ -72,13 +75,9 @@ export class CompanionUI {
     this.voiceBtn.style.display = "none";
     this.voiceBtn.addEventListener("click", () => this.opts.onToggleVoice());
 
-    if (bar) {
-      bar.insertBefore(this.voiceBtn, bar.firstChild);
-      bar.insertBefore(this.toggleBtn, bar.firstChild);
-    } else {
-      this.root.appendChild(this.toggleBtn);
-      this.root.appendChild(this.voiceBtn);
-    }
+    this.sideStack.appendChild(this.toggleBtn);
+    this.sideStack.appendChild(this.voiceBtn);
+    this.root.appendChild(this.sideStack);
 
     // Chat panel.
     this.panel = document.createElement("div");
@@ -236,6 +235,7 @@ export class CompanionUI {
 
   dispose() {
     this.disposed = true;
+    this.sideStack?.remove();
     this.toggleBtn?.remove();
     this.voiceBtn?.remove();
     this.panel?.remove();
@@ -249,6 +249,13 @@ export class CompanionUI {
     const s = document.createElement("style");
     s.id = "companion-styles";
     s.textContent = `
+      .cmp-side-stack {
+        position: absolute;
+        top: max(72px, calc(64px + env(safe-area-inset-top)));
+        right: max(24px, calc(14px + env(safe-area-inset-right)));
+        display: flex; flex-direction: column; gap: 8px;
+        z-index: 2; pointer-events: auto;
+      }
       .cmp-toggle-btn, .cmp-voice-btn { position: relative; }
       .cmp-toggle-glyph { font-size: 1rem; line-height: 1; }
       .cmp-status-dot {
@@ -263,16 +270,18 @@ export class CompanionUI {
         position: absolute; top: 80px; right: max(12px, env(safe-area-inset-right));
         width: 320px; max-width: calc(100vw - 24px); max-height: 60vh;
         display: flex; flex-direction: column; gap: 8px;
-        background: rgba(20, 26, 40, 0.72); backdrop-filter: blur(14px);
-        border: 1px solid rgba(255,255,255,0.10); border-radius: 16px;
+        background: rgba(16, 22, 36, 0.93); backdrop-filter: blur(16px);
+        border: 1px solid rgba(255,255,255,0.14); border-radius: 16px;
         padding: 12px; z-index: 12; pointer-events: auto;
-        font-family: 'Domine', Georgia, serif; color: rgba(255,255,255,0.92);
-        box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+        font-family: 'Domine', Georgia, serif; color: rgba(255,255,255,0.94);
+        box-shadow: 0 10px 40px rgba(0,0,0,0.5);
       }
       .cmp-panel--mobile {
-        top: auto; bottom: 0; right: 0; left: 0; width: 100%; max-width: 100%;
-        max-height: 56vh; border-radius: 18px 18px 0 0;
-        padding-bottom: max(12px, env(safe-area-inset-bottom));
+        top: auto; left: auto;
+        right: max(8px, env(safe-area-inset-right));
+        width: min(340px, 88vw); max-width: 88vw;
+        bottom: max(300px, calc(290px + env(safe-area-inset-bottom)));
+        max-height: 42vh; border-radius: 16px;
       }
       .cmp-panel-head { display: flex; align-items: center; justify-content: space-between; }
       .cmp-panel-title { font-size: 0.85rem; font-weight: 700; letter-spacing: 0.04em; }
