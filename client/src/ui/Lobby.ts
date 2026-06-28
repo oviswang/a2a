@@ -380,6 +380,10 @@ export class Lobby {
 
     // ── Companion connect modal ──
     const cmpModal = this.el.querySelector("#lobby-companion-modal") as HTMLElement;
+    // Hoist out of the transformed .lobby-header so its position:fixed resolves
+    // to the viewport (otherwise it's mis-placed + painted under .lobby-bar and
+    // can't be clicked/dismissed). #lobby root has no transform.
+    this.el.appendChild(cmpModal);
     const cmpInput = this.el.querySelector("#lobby-companion-input") as HTMLInputElement;
     const cmpStatus = this.el.querySelector("#lobby-companion-status") as HTMLElement;
     const cmpAutoVoice = this.el.querySelector("#lobby-companion-autovoice-cb") as HTMLInputElement;
@@ -979,6 +983,7 @@ export class Lobby {
         font-weight: 400;
         color: rgba(255, 255, 255, 1.0);
         display: flex;
+        flex-direction: column;
         justify-content: center;
         align-items: center;
       }
@@ -1015,7 +1020,7 @@ export class Lobby {
 
       /* ── Companion connect modal ── */
       .lobby-companion-modal {
-        position: fixed; inset: 0; z-index: 60; display: none;
+        position: fixed; inset: 0; z-index: 10060; display: none;
         align-items: center; justify-content: center; padding: 16px;
       }
       .lobby-companion-modal.open { display: flex; }
