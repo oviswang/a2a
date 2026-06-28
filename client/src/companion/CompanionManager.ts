@@ -63,6 +63,10 @@ export interface CompanionManagerOptions {
   onConfirmRequest?: (p: ConfirmRequestPayload) => void;
   /** Status changes for the UI (status dot / disabled state). */
   onStatus?: (s: CompanionStatus) => void;
+  /** A finalized USER utterance from a live voice call — used to drive direct,
+   *  deterministic game commands (the voice agent itself can't be trusted to
+   *  call per-app tools on every provider). */
+  onVoiceTranscript?: (text: string) => void;
 }
 
 export type CompanionStatus =
@@ -235,6 +239,9 @@ export class CompanionManager {
       this.call = await this.client.connectCall({
         locale: this.opts.locale,
         onSpeakingChange,
+        onTranscript: (e) => {
+          if (e.role === "user" && e.text) this.opts.onVoiceTranscript?.(e.text);
+        },
         onError: () => this.stopVoice(),
       });
       return true;
