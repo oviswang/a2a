@@ -17,6 +17,7 @@
  */
 import {
   createCompanion,
+  pouchyBrandIconUrl,
   type CompanionClient,
   type CompanionCall,
   type CompanionToolDecl,
@@ -139,6 +140,24 @@ export class CompanionManager {
 
   hasScope(scope: string): boolean {
     return this.scopes.has(scope);
+  }
+
+  /** Public, token-free Pouchy brand icon — safe to drop into an <img src>. */
+  brandIconUrl(size: 256 | 512 | 1024 = 256): string {
+    return pouchyBrandIconUrl(POUCHY_BASE_URL, size);
+  }
+
+  /** The connected companion's 2D portrait URL, when one exists (null for the
+   *  built-in models, which are VRM-only today). Used to swap the voice button's
+   *  icon from the brand mark to the actual "virtual human". */
+  async getAvatarImageUrl(): Promise<string | null> {
+    if (!this.isReady || !this.client) return null;
+    try {
+      const avatar = await this.client.getAvatar();
+      return avatar.imageUrl ?? null;
+    } catch {
+      return null;
+    }
   }
 
   private async handleToolCall(call: { id: string; name: string; args: string }) {

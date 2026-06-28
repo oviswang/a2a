@@ -32,6 +32,7 @@ export class CompanionUI {
   private sideStack!: HTMLElement;
   private toggleBtn!: HTMLButtonElement;
   private voiceBtn!: HTMLButtonElement;
+  private voiceImg!: HTMLImageElement;
   private panel!: HTMLElement;
   private transcript!: HTMLElement;
   private input!: HTMLInputElement;
@@ -63,7 +64,7 @@ export class CompanionUI {
     this.toggleBtn.type = "button";
     this.toggleBtn.className = "hud-mute-btn cmp-toggle-btn";
     this.toggleBtn.setAttribute("aria-label", t("Companion", "AI 伙伴"));
-    this.toggleBtn.innerHTML = `<span class="cmp-toggle-glyph">✦</span><span class="cmp-status-dot" data-state="off"></span>`;
+    this.toggleBtn.innerHTML = `<svg class="cmp-toggle-glyph" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg><span class="cmp-status-dot" data-state="off"></span>`;
     this.statusDot = this.toggleBtn.querySelector(".cmp-status-dot")!;
     this.toggleBtn.addEventListener("click", () => this.togglePanel());
 
@@ -71,7 +72,19 @@ export class CompanionUI {
     this.voiceBtn.type = "button";
     this.voiceBtn.className = "hud-mute-btn cmp-voice-btn";
     this.voiceBtn.setAttribute("aria-label", t("Voice co-pilot", "语音陪飞"));
-    this.voiceBtn.innerHTML = `🎙`;
+    this.voiceImg = document.createElement("img");
+    this.voiceImg.className = "cmp-voice-img";
+    this.voiceImg.alt = "Pouchy";
+    if (this.opts.brandIconUrl) {
+      this.voiceImg.src = this.opts.brandIconUrl;
+      // If the avatar ever fails to load, fall back to the brand mark.
+      this.voiceImg.addEventListener("error", () => {
+        if (this.opts.brandIconUrl && this.voiceImg.src !== this.opts.brandIconUrl) {
+          this.voiceImg.src = this.opts.brandIconUrl;
+        }
+      });
+    }
+    this.voiceBtn.appendChild(this.voiceImg);
     this.voiceBtn.style.display = "none";
     this.voiceBtn.addEventListener("click", () => this.opts.onToggleVoice());
 
@@ -146,6 +159,13 @@ export class CompanionUI {
         t("Companion couldn't connect. Check your token.", "伙伴连接失败，请检查你的令牌。"),
       );
     }
+  }
+
+  /** Swap the voice button's icon to the connected companion's portrait when one
+   *  is available; otherwise it keeps showing the Pouchy brand mark. */
+  setCompanionAvatar(url: string | null) {
+    if (url) this.voiceImg.src = url;
+    else if (this.opts.brandIconUrl) this.voiceImg.src = this.opts.brandIconUrl;
   }
 
   setVoiceActive(active: boolean) {
@@ -252,12 +272,16 @@ export class CompanionUI {
       .cmp-side-stack {
         position: absolute;
         top: max(72px, calc(64px + env(safe-area-inset-top)));
-        right: max(24px, calc(14px + env(safe-area-inset-right)));
-        display: flex; flex-direction: column; gap: 8px;
+        right: 36px;
+        display: flex; flex-direction: column; align-items: center; gap: 8px;
         z-index: 2; pointer-events: auto;
       }
       .cmp-toggle-btn, .cmp-voice-btn { position: relative; }
-      .cmp-toggle-glyph { font-size: 1rem; line-height: 1; }
+      .cmp-toggle-glyph { display: block; }
+      .cmp-voice-img {
+        width: 22px; height: 22px; border-radius: 50%; object-fit: cover;
+        display: block; pointer-events: none;
+      }
       .cmp-status-dot {
         position: absolute; top: 5px; right: 5px; width: 7px; height: 7px;
         border-radius: 50%; background: rgba(255,255,255,0.25);
