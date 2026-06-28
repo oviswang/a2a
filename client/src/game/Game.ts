@@ -194,6 +194,9 @@ const OCEAN_WAVES_LOOP_VOL = 0.32;
 /** One twister debuff burst (forced spin + slow); must not re-arm every frame while still inside. */
 const TWISTER_SPIN_DURATION_SEC = 1.5;
 const TWISTER_SPIN_COOLDOWN_SEC = 5;
+/** Steer rate the companion's voice/chat `control_vehicle` uses (matches a full
+ *  keyboard turn; see FlightControls turnRate ±1.2). */
+const VOICE_TURN_RATE = 1.2;
 
 const EXPLOSION_SFX_NAME = "explosion_1";
 const EXPLOSION_SFX_VOLUME = 0.48;
@@ -475,6 +478,18 @@ export class Game {
   /** Pouchy AI companion (opt-in). Null when no token / not yet connected. */
   private companion: CompanionManager | null = null;
   private companionUI: CompanionUI | null = null;
+  /** Timed control override set by the companion's `control_vehicle` tool; merged
+   *  into the per-frame control state in {@link tick} until `remaining` elapses. */
+  private voiceControl: {
+    turnRate: number;
+    forward: boolean;
+    brake: boolean;
+    elevate: boolean;
+    descend: boolean;
+    remaining: number;
+  } | null = null;
+  /** One-shot fire request from the companion (consumed next frame). */
+  private voiceFireQueued = false;
   private carpetLandmarkSelfieQuest: CarpetLandmarkSelfieQuest | null = null;
   private carpetSelfiePhotoUI: HotspringPhotoUI | null = null;
   private eternalFlameUI: EternalFlameUI | null = null;
@@ -881,6 +896,25 @@ export class Game {
           description: "Drop a marker at the player's current location to fly back to.",
           parameters: { type: "object", properties: {} },
         },
+        {
+          name: "control_vehicle",
+          description:
+            "Fly the player's vehicle (biplane, magic carpet or boat) by voice or chat. Each call is a short nudge that holds for ~1.2s (or the given duration) then releases, so call repeatedly to keep going. Actions: 'left'/'right' to steer, 'forward' to speed up, 'back' to slow down, 'climb'/'descend' to change altitude (biplane & carpet only), 'fire' to shoot a paintball (biplane only), 'stop' to return to neutral. Use this whenever the player asks you to steer or fly for them.",
+          parameters: {
+            type: "object",
+            properties: {
+              action: {
+                type: "string",
+                enum: ["left", "right", "forward", "back", "climb", "descend", "fire", "stop"],
+              },
+              duration: {
+                type: "number",
+                description: "Seconds to hold a movement (0.2–4, default 1.2). Ignored for 'fire' and 'stop'.",
+              },
+            },
+            required: ["action"],
+          },
+        },
       ],
       execTool: (name, args) => this.execCompanionTool(name, args),
       onMessage: (text) => {
@@ -962,7 +996,79 @@ export class Game {
       this.hud.showAmbientToast(t("Beacon dropped here.", "已在此处放置信标。"));
       return { ok: true, result: "Beacon dropped at the player's current location." };
     }
+    if (name === "control_vehicle") {
+      return this.execVehicleControl(args);
+    }
     return { ok: false, result: "unknown tool" };
+  }
+
+  /** Companion-driven flight: translate a high-level action into a short, timed
+   *  override on the per-frame control state (consumed in {@link tick}). */
+  private execVehicleControl(args: Record<string, unknown>): { ok: boolean; result?: unknown } {
+    if (!this.localPlayer || this.gamePhase !== "flying") {
+      return { ok: false, result: "The player isn't flying right now." };
+    }
+    const action = String(args.action ?? "").toLowerCase();
+    const rawDur = typeof args.duration === "number" ? args.duration : 1.2;
+    const duration = Math.max(0.2, Math.min(4, rawDur));
+    const vehicle = this.localPlayer.vehicle; // "plane" | "carpet" | "boat"
+    const canFly = vehicle !== "boat"; // climb/descend
+    const canFire = this.localPlayer instanceof Plane;
+
+    const hold = (patch: Partial<Omit<NonNullable<typeof this.voiceControl>, "remaining">>) => {
+      this.voiceControl = {
+        turnRate: 0,
+        forward: false,
+        brake: false,
+        elevate: false,
+        descend: false,
+        remaining: duration,
+        ...patch,
+      };
+    };
+
+    switch (action) {
+      case "left":
+        hold({ turnRate: VOICE_TURN_RATE });
+        return { ok: true, result: t(`Banking left for ${duration.toFixed(1)}s.`, `向左转 ${duration.toFixed(1)} 秒。`) };
+      case "right":
+        hold({ turnRate: -VOICE_TURN_RATE });
+        return { ok: true, result: t(`Banking right for ${duration.toFixed(1)}s.`, `向右转 ${duration.toFixed(1)} 秒。`) };
+      case "forward":
+      case "accelerate":
+      case "speed_up":
+        hold({ forward: true });
+        return { ok: true, result: t("Speeding up.", "加速中。") };
+      case "back":
+      case "brake":
+      case "slow":
+      case "slow_down":
+        hold({ brake: true });
+        return { ok: true, result: t("Slowing down.", "减速中。") };
+      case "climb":
+      case "up":
+        if (!canFly) return { ok: false, result: t("The boat can't climb.", "小船无法爬升。") };
+        hold({ forward: true, elevate: true });
+        return { ok: true, result: t("Climbing.", "正在爬升。") };
+      case "descend":
+      case "down":
+      case "dive":
+        if (!canFly) return { ok: false, result: t("The boat can't change altitude.", "小船无法改变高度。") };
+        hold({ forward: true, descend: true });
+        return { ok: true, result: t("Descending.", "正在下降。") };
+      case "fire":
+      case "shoot":
+        if (!canFire) return { ok: false, result: t("Only the biplane can fire.", "只有双翼机可以射击。") };
+        this.voiceFireQueued = true;
+        return { ok: true, result: t("Firing!", "开火！") };
+      case "stop":
+      case "neutral":
+      case "straight":
+        this.voiceControl = null;
+        return { ok: true, result: t("Levelling out.", "回正。") };
+      default:
+        return { ok: false, result: `Unknown action "${action}".` };
+    }
   }
 
   /** Resolve a set_waypoint target to a globe surface normal + a bilingual label.
@@ -2355,6 +2461,8 @@ export class Game {
     this.companion = null;
     this.companionUI?.dispose();
     this.companionUI = null;
+    this.voiceControl = null;
+    this.voiceFireQueued = false;
     this.stateSync?.stop();
     this.stateSync = null;
     this.socketClient?.disconnect();
@@ -3621,6 +3729,22 @@ export class Game {
 
     let { turnRate, forward, brake, elevate, descend, paintball, specialAction, interact } =
       this.touchControls ? this.touchControls.getState() : this.controls.getState();
+    // Companion voice/chat control: a timed override on top of the player's own
+    // input. Applied before the level-up / twister blocks so those still win.
+    if (this.voiceControl) {
+      const vc = this.voiceControl;
+      if (vc.turnRate !== 0) turnRate = vc.turnRate;
+      if (vc.forward) forward = true;
+      if (vc.brake) brake = true;
+      if (vc.elevate) elevate = true;
+      if (vc.descend) descend = true;
+      vc.remaining -= dt;
+      if (vc.remaining <= 0) this.voiceControl = null;
+    }
+    if (this.voiceFireQueued) {
+      paintball = true;
+      this.voiceFireQueued = false;
+    }
     if (this.choosingLevelUpUpgrade) {
       forward = false;
       brake = true;
