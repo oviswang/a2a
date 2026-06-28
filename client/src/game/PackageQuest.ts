@@ -235,6 +235,12 @@ export class PackageQuestManager {
     return this.questIndex;
   }
 
+  /** Outward unit normal of the active delivery destination, or null when not
+   *  carrying a package. Used to drop a navigation waypoint pillar. */
+  getDestinationNormal(): Vector3 | null {
+    return this.isCarrying ? (this.destination?.normal ?? null) : null;
+  }
+
   private state = QuestState.Spawning;
   private spawnTimer = 0;
   private spawnDelay = 0;
