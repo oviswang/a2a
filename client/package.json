@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@globefly/shared": "*",
+    "@pouchy_ai/companion-sdk": "^0.10.0",
     "@vercel/analytics": "^2.0.1",
     "socket.io-client": "^4.8.1",
     "three": "^0.172.0"

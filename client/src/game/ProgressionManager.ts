@@ -8,6 +8,8 @@ const PLAYER_WORLD_STATE_KEY = "globefly_player_world_state_v1";
 /** Campsite bookmark; cleared with `clearAll` for a full local reset. */
 const CAMPSITE_KEY = "globefly_campsite_v2";
 const LEGACY_CAMPSITE_KEY = "globefly_campsite";
+/** Pouchy companion access token (PAT, `pchy_…`). Opt-in; stored locally only. */
+const COMPANION_TOKEN_KEY = "globefly_companion_token";
 
 /** Carpet unlocks when any vehicle has reached at least this level. */
 export const UNLOCK_CARPET_MIN_MAX_LEVEL = 2;
@@ -249,6 +251,7 @@ export class ProgressionManager {
       localStorage.removeItem(PLAYER_WORLD_STATE_KEY);
       localStorage.removeItem(CAMPSITE_KEY);
       localStorage.removeItem(LEGACY_CAMPSITE_KEY);
+      localStorage.removeItem(COMPANION_TOKEN_KEY);
     } catch {}
   }
 
@@ -262,6 +265,23 @@ export class ProgressionManager {
 
   static savePlayerName(name: string) {
     try { localStorage.setItem(NAME_KEY, name); } catch {}
+  }
+
+  // ── Pouchy companion token persistence (opt-in; local only) ──
+
+  static loadCompanionToken(): string | null {
+    try {
+      const t = localStorage.getItem(COMPANION_TOKEN_KEY);
+      return t && t.trim() ? t.trim() : null;
+    } catch { return null; }
+  }
+
+  static saveCompanionToken(token: string) {
+    try { localStorage.setItem(COMPANION_TOKEN_KEY, token.trim()); } catch {}
+  }
+
+  static clearCompanionToken() {
+    try { localStorage.removeItem(COMPANION_TOKEN_KEY); } catch {}
   }
 
   static loadPlayerWorldState(): SavedPlayerWorldState {
