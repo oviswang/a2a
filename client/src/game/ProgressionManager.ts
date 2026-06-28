@@ -285,7 +285,14 @@ export class ProgressionManager {
   }
 
   static loadCompanionAutoVoice(): boolean {
-    try { return localStorage.getItem("globefly_companion_autovoice") === "1"; } catch { return false; }
+    try {
+      const v = localStorage.getItem("globefly_companion_autovoice");
+      if (v === "1") return true;
+      if (v === "0") return false;
+      // No explicit choice yet: default ON when a companion token is already
+      // bound, so a connected player gets voice auto-connected without opting in.
+      return ProgressionManager.loadCompanionToken() != null;
+    } catch { return false; }
   }
 
   static saveCompanionAutoVoice(on: boolean) {

@@ -437,6 +437,7 @@ export class Lobby {
     cmpDisconnect.addEventListener("click", () => {
       this.options.companionToken = null;
       this.options.onCompanionTokenChange?.(null);
+      this.options.companionAutoVoice = ProgressionManager.loadCompanionAutoVoice();
       refreshCompanionBtn();
       refreshModalState();
     });
@@ -449,6 +450,8 @@ export class Lobby {
       }
       this.options.companionToken = trimmed;
       this.options.onCompanionTokenChange?.(trimmed);
+      // Newly connected with no explicit voice choice → auto-voice defaults on.
+      this.options.companionAutoVoice = ProgressionManager.loadCompanionAutoVoice();
       refreshCompanionBtn();
       closeCmpModal();
     });
