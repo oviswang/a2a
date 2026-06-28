@@ -156,6 +156,12 @@ export class SocketClient {
   emitGhostPairInvite(toVisitorId: string) {
     this.socket.emit("ghostpair:invite", toVisitorId);
   }
+  emitGhostPairResolved(otherVisitorId: string) {
+    this.socket.emit("ghostpair:resolved", otherVisitorId);
+  }
+  emitGhostPairDecline(fromVisitorId: string) {
+    this.socket.emit("ghostpair:decline", fromVisitorId);
+  }
   onGhostPairIncoming(cb: (ev: GhostPairInvite) => void) {
     this.socket.on("ghostpair:incoming", cb);
   }

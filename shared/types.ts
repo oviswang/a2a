@@ -271,6 +271,11 @@ export interface ClientToServerEvents {
   /** A2A Phase C: ask the server to invite the owner of `toVisitorId` (a ghost) to
    *  come pair with me (relayed cross-world; queued if they're offline). */
   "ghostpair:invite": (toVisitorId: string) => void;
+  /** A2A Phase C: pairing with `otherVisitorId` succeeded — clear any queued
+   *  intents between us so they stop being retried. */
+  "ghostpair:resolved": (otherVisitorId: string) => void;
+  /** A2A Phase C: I declined the invite from `fromVisitorId` — drop that intent. */
+  "ghostpair:decline": (fromVisitorId: string) => void;
   "paintball:fire": () => void;
   "paintball:setUpgrades": (flags: PaintballUpgradeFlags) => void;
   /** True while the local player is in a non-world scene where flag play is suspended. */

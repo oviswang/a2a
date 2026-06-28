@@ -1322,7 +1322,10 @@ export class Game {
     const msg = IS_ZH
       ? `${ev.fromName} 想和你的 AI 伙伴成为 A2A 好友。前往 TA 的世界一起配对吗？`
       : `${ev.fromName} wants to make your AI companions A2A friends. Go to their world to pair?`;
-    if (!window.confirm(msg)) return;
+    if (!window.confirm(msg)) {
+      this.socketClient?.emitGhostPairDecline(ev.fromVisitorId);
+      return;
+    }
     try {
       sessionStorage.setItem(
         "globefly_pending_ghostpair",
@@ -1715,6 +1718,8 @@ export class Game {
         ? t(`Companions paired with ${ev.fromName}! 🤝`, `已与 ${ev.fromName} 的伙伴结为好友！🤝`)
         : t("Pairing failed (check your key's permissions).", "配对失败（请检查密钥权限）。"),
     );
+    // Success → clear any queued ghost-pair intents between us so they stop retrying.
+    if (pairId && ev.visitorId) this.socketClient?.emitGhostPairResolved(ev.visitorId);
   }
 
   private mountLobby(opts?: { deferUnlockModalsUntilMenuReveal?: boolean }) {
