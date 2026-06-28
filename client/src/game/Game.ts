@@ -27,6 +27,7 @@ import { t, IS_ZH } from "../i18n";
 import { localizeWorldName } from "../i18nNames";
 import { CompanionManager } from "../companion/CompanionManager";
 import { CompanionUI } from "../companion/CompanionUI";
+import { WaypointBeacon } from "./WaypointBeacon";
 import {
   BRAZIER_MOON_PAUSE_MS,
   getVehicleFeatures,
@@ -474,6 +475,8 @@ export class Game {
   private twisterSpinCooldown = 0;
   private volcanoes: Volcano[] = [];
   private braziers: Braziers | null = null;
+  /** Companion-placed navigation light pillar (set_waypoint / drop_beacon). */
+  private waypointBeacon: WaypointBeacon | null = null;
   private skyGremlins: SkyGremlins | null = null;
   private npcPlanes: NpcPlanes | null = null;
   private npcPaintballUnsub: (() => void) | null = null;
@@ -923,23 +926,65 @@ export class Game {
   ): Promise<{ ok: boolean; result?: unknown }> {
     if (name === "set_waypoint") {
       const target = String(args.target ?? "");
-      const labels: Record<string, [string, string]> = {
-        delivery: ["your delivery", "你的送货目标"],
-        nearest_brazier: ["the nearest brazier", "最近的火盆"],
-        race: ["the race banner", "竞速旗"],
-        home: ["your campsite", "你的营地"],
-        nearest_player: ["the nearest player", "最近的玩家"],
-      };
-      const label = labels[target];
-      if (!label) return { ok: false, result: "unknown target" };
-      this.hud.showAmbientToast(IS_ZH ? `→ 前往${label[1]}` : `→ Heading to ${label[0]}`);
-      return { ok: true, result: `Pointed the player toward ${label[0]}.` };
+      const resolved = this.resolveWaypointNormal(target);
+      if (!resolved) {
+        return { ok: false, result: `No "${target}" target is available right now.` };
+      }
+      this.waypointBeacon?.show(resolved.normal);
+      this.hud.showAmbientToast(IS_ZH ? `→ 前往${resolved.label[1]}` : `→ Heading to ${resolved.label[0]}`);
+      return { ok: true, result: `Marked ${resolved.label[0]} with a light beam.` };
     }
     if (name === "drop_beacon") {
+      if (!this.localPlayer) return { ok: false, result: "not flying" };
+      const here = new Vector3().setFromMatrixPosition(this.localPlayer.group.matrixWorld).normalize();
+      this.waypointBeacon?.show(here);
       this.hud.showAmbientToast(t("Beacon dropped here.", "已在此处放置信标。"));
       return { ok: true, result: "Beacon dropped at the player's current location." };
     }
     return { ok: false, result: "unknown tool" };
+  }
+
+  /** Resolve a set_waypoint target to a globe surface normal + a bilingual label.
+   *  Returns null when the target doesn't currently exist. */
+  private resolveWaypointNormal(
+    target: string,
+  ): { normal: Vector3; label: [string, string] } | null {
+    const player = new Vector3().setFromMatrixPosition(this.localPlayer.group.matrixWorld);
+    const nearestNormal = (positions: readonly Vector3[]): Vector3 | null => {
+      let best: Vector3 | null = null;
+      let bestD = Infinity;
+      for (const p of positions) {
+        const d = p.distanceToSquared(player);
+        if (d < bestD) { bestD = d; best = p; }
+      }
+      return best ? best.clone().normalize() : null;
+    };
+
+    if (target === "delivery") {
+      const n = this.packageQuest?.getDestinationNormal();
+      return n ? { normal: n, label: ["your delivery", "你的送货目标"] } : null;
+    }
+    if (target === "nearest_brazier") {
+      const n = this.braziers ? nearestNormal(this.braziers.unlitWorldPositions) : null;
+      return n ? { normal: n, label: ["the nearest brazier", "最近的火盆"] } : null;
+    }
+    if (target === "race") {
+      const centers = this.globe.raceBannerCenters;
+      if (!centers || centers.length === 0) return null;
+      const n = nearestNormal(centers.map((c) => c.normal));
+      return n ? { normal: n, label: ["the race banner", "竞速旗"] } : null;
+    }
+    if (target === "home") {
+      const wp = this.campsiteMarker?.worldPosition;
+      return wp ? { normal: wp.clone().normalize(), label: ["your campsite", "你的营地"] } : null;
+    }
+    if (target === "nearest_player") {
+      const positions: Vector3[] = [];
+      this.remotePlanes.forEachRemote((p) => positions.push(p.group.position.clone()));
+      const n = nearestNormal(positions);
+      return n ? { normal: n, label: ["the nearest player", "最近的玩家"] } : null;
+    }
+    return null;
   }
 
   /** A2A: join a friend's specific world by slug (from a sky letter). Reloads with
@@ -1449,6 +1494,9 @@ export class Game {
     if (CAMPSITE_HOME_ENABLED) {
       this.campsiteMarker = new CampsiteMarker(this.scene, globeRadius, seed, terrainType);
     }
+
+    this.waypointBeacon?.dispose();
+    this.waypointBeacon = new WaypointBeacon(this.scene, globeRadius, seed, terrainType);
 
     window.addEventListener("resize", this.onPreviewResize);
   }
@@ -2395,6 +2443,8 @@ export class Game {
     this.fireflyClusters = [];
     this.braziers?.dispose();
     this.braziers = null;
+    this.waypointBeacon?.dispose();
+    this.waypointBeacon = null;
     this.portalInteractionSuppressTimer = 0;
     this.hud.disposeBrazierTracker();
     this.campsiteScene?.dispose();
@@ -3743,6 +3793,7 @@ export class Game {
     this.localPlayer.group.updateMatrixWorld(true);
 
     this.collectVFX.update(dt);
+    this.waypointBeacon?.update(dt);
     if (this.vehicleFeatures.collectibleDiamonds && !portalInteractionSuppressed) {
       this.ringManager.update(dt, this.localPlayer.qPosition, this.localPlayer.altitude);
     }

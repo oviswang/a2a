@@ -656,6 +656,14 @@ export class Braziers {
     return this.states.map(s => s.worldPos);
   }
 
+  /** Bowl-top world positions of braziers that are not currently lit (for the
+   *  companion's "nearest brazier" waypoint). Falls back to all when every one
+   *  is lit. */
+  get unlitWorldPositions(): Vector3[] {
+    const unlit = this.states.filter(s => !s.lit).map(s => s.worldPos);
+    return unlit.length > 0 ? unlit : this.states.map(s => s.worldPos);
+  }
+
   /** True once all braziers have fully risen into place and can be interacted with. */
   isRevealed(): boolean {
     return this.revealComplete;
