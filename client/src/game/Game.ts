@@ -23,8 +23,10 @@ import {
   AdditiveBlending,
 } from "three";
 import { cartesianFromSpherical, tangentFrame } from "./SphericalMath";
-import { t } from "../i18n";
+import { t, IS_ZH } from "../i18n";
 import { localizeWorldName } from "../i18nNames";
+import { CompanionManager } from "../companion/CompanionManager";
+import { CompanionUI } from "../companion/CompanionUI";
 import {
   BRAZIER_MOON_PAUSE_MS,
   getVehicleFeatures,
@@ -453,6 +455,9 @@ export class Game {
   private landmarkDetector!: LandmarkDetector;
   private packageQuest: PackageQuestManager | null = null;
   private packageQuestHUD!: PackageQuestHUD;
+  /** Pouchy AI companion (opt-in). Null when no token / not yet connected. */
+  private companion: CompanionManager | null = null;
+  private companionUI: CompanionUI | null = null;
   private carpetLandmarkSelfieQuest: CarpetLandmarkSelfieQuest | null = null;
   private carpetSelfiePhotoUI: HotspringPhotoUI | null = null;
   private eternalFlameUI: EternalFlameUI | null = null;
@@ -680,14 +685,26 @@ export class Game {
     const serverUrl = this.getServerUrl();
 
     try {
-      const joinRes = await fetch(`${serverUrl}/api/worlds/auto-join`, {
-        method: "POST",
-      });
-      if (!joinRes.ok) throw new Error("Failed to auto-join world");
-      const data = await joinRes.json();
-      this.worldSlug = data.slug;
-      this.reservationId = data.reservationId;
-      this.worldConfig = data;
+      // A2A deep-link: `?w=<slug>` joins a friend's specific world (from a sky
+      // letter); otherwise fall back to auto-join into the best available world.
+      const requestedSlug = new URLSearchParams(window.location.search).get("w");
+      if (requestedSlug && /^[A-Za-z0-9_-]{6,16}$/.test(requestedSlug)) {
+        const res = await fetch(`${serverUrl}/api/worlds/${encodeURIComponent(requestedSlug)}`);
+        if (!res.ok) throw new Error("Failed to join the requested world");
+        const data = await res.json();
+        this.worldSlug = data.slug;
+        this.reservationId = undefined;
+        this.worldConfig = data;
+      } else {
+        const joinRes = await fetch(`${serverUrl}/api/worlds/auto-join`, {
+          method: "POST",
+        });
+        if (!joinRes.ok) throw new Error("Failed to auto-join world");
+        const data = await joinRes.json();
+        this.worldSlug = data.slug;
+        this.reservationId = data.reservationId;
+        this.worldConfig = data;
+      }
     } catch (err) {
       console.error("Server error:", err);
       this.showLoadingError();
@@ -813,6 +830,122 @@ export class Game {
     }
   }
 
+  /** Create the opt-in Pouchy AI companion if the player has connected a token. */
+  private initCompanion(vehicle: Vehicle) {
+    const token = ProgressionManager.loadCompanionToken();
+    if (!token) return;
+    this.companion?.dispose();
+    this.companionUI?.dispose();
+
+    const manager = new CompanionManager({
+      token,
+      locale: IS_ZH ? "zh" : "en",
+      appContext: {
+        name: "A2A.FUN",
+        description:
+          "A cosy multiplayer game where players fly biplanes, magic carpets and boats around tiny worlds, deliver packages, race, light braziers, and save the world from a falling moon.",
+      },
+      tools: [
+        {
+          name: "set_waypoint",
+          description: "Point the player toward a target in the world.",
+          parameters: {
+            type: "object",
+            properties: {
+              target: { type: "string", enum: ["delivery", "nearest_brazier", "race", "home", "nearest_player"] },
+            },
+            required: ["target"],
+          },
+        },
+        {
+          name: "drop_beacon",
+          description: "Drop a marker at the player's current location to fly back to.",
+          parameters: { type: "object", properties: {} },
+        },
+      ],
+      execTool: (name, args) => this.execCompanionTool(name, args),
+      onMessage: (text) => {
+        this.companionUI?.appendAssistantMessage(text);
+        this.packageQuestHUD?.showBubble("Pouchy", text);
+      },
+      onSocialMessage: (msg, slug) => this.companionUI?.showSkyLetter(msg.fromName, msg.content, slug),
+      onConfirmRequest: (p) =>
+        this.companionUI?.appendAssistantMessage(
+          IS_ZH ? `（需要在 Pouchy 里确认：${p.summary}）` : `(Approve in Pouchy: ${p.summary})`,
+        ),
+      onStatus: (s) => {
+        this.companionUI?.setStatus(s);
+        if (s.state === "ready" && this.worldSlug) {
+          this.companionUI?.setWorldInvite(
+            this.worldSlug,
+            this.worldConfig?.name ?? "",
+            s.scopes.includes("social.message"),
+          );
+        }
+      },
+    });
+    this.companion = manager;
+    this.companionUI = new CompanionUI(this.hud.root, {
+      mobile: this.mobile,
+      onSendText: (text) => void this.companion?.sendText(text),
+      onToggleVoice: () => void this.toggleCompanionVoice(),
+      onInviteFriends: () => {
+        if (this.worldSlug) void this.companion?.inviteFriends(this.worldSlug, this.worldConfig?.name ?? "");
+      },
+      onJoinWorld: (slug) => this.joinWorldBySlug(slug),
+    });
+
+    void manager.connect().then((ok) => {
+      if (!ok) return;
+      if (this.worldConfig) manager.setRetained("game.world", { name: this.worldConfig.name, slug: this.worldSlug });
+      manager.setRetained("game.player.vehicle", { vehicle });
+    });
+  }
+
+  private async toggleCompanionVoice() {
+    if (!this.companion) return;
+    if (this.companion.inCall) {
+      this.companion.stopVoice();
+      this.companionUI?.setVoiceActive(false);
+    } else {
+      const ok = await this.companion.startVoiceCopilot();
+      this.companionUI?.setVoiceActive(ok);
+    }
+  }
+
+  /** Execute a tool the companion asked for (Phase 2). Best-effort + defensive. */
+  private async execCompanionTool(
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<{ ok: boolean; result?: unknown }> {
+    if (name === "set_waypoint") {
+      const target = String(args.target ?? "");
+      const labels: Record<string, [string, string]> = {
+        delivery: ["your delivery", "你的送货目标"],
+        nearest_brazier: ["the nearest brazier", "最近的火盆"],
+        race: ["the race banner", "竞速旗"],
+        home: ["your campsite", "你的营地"],
+        nearest_player: ["the nearest player", "最近的玩家"],
+      };
+      const label = labels[target];
+      if (!label) return { ok: false, result: "unknown target" };
+      this.hud.showAmbientToast(IS_ZH ? `→ 前往${label[1]}` : `→ Heading to ${label[0]}`);
+      return { ok: true, result: `Pointed the player toward ${label[0]}.` };
+    }
+    if (name === "drop_beacon") {
+      this.hud.showAmbientToast(t("Beacon dropped here.", "已在此处放置信标。"));
+      return { ok: true, result: "Beacon dropped at the player's current location." };
+    }
+    return { ok: false, result: "unknown tool" };
+  }
+
+  /** A2A: join a friend's specific world by slug (from a sky letter). Reloads with
+   *  the `?w=` deep-link so the existing join flow handles it cleanly. */
+  private joinWorldBySlug(slug: string) {
+    if (!/^[A-Za-z0-9_-]{6,16}$/.test(slug)) return;
+    window.location.href = `${window.location.origin}/?w=${encodeURIComponent(slug)}`;
+  }
+
   private mountLobby(opts?: { deferUnlockModalsUntilMenuReveal?: boolean }) {
     this.lobby = new Lobby(this.container, {
       serverUrl: this.getServerUrl(),
@@ -820,6 +953,11 @@ export class Game {
       mobile: this.mobile,
       deferUnlockModalsUntilMenuReveal: opts?.deferUnlockModalsUntilMenuReveal ?? false,
       onNameChange: (name) => { this.playerName = name; ProgressionManager.savePlayerName(name); },
+      companionToken: ProgressionManager.loadCompanionToken(),
+      onCompanionTokenChange: (token) => {
+        if (token) ProgressionManager.saveCompanionToken(token);
+        else ProgressionManager.clearCompanionToken();
+      },
       onPlay: (vehicle, options) => {
         if (!ProgressionManager.isVehicleUnlocked(vehicle)) return;
         this.runFreeplayMode = !!options?.freeplay;
@@ -1213,6 +1351,7 @@ export class Game {
       moonApproachDurationSec(completedMoonRuns),
     );
     this.moonThreat.onShockwaveSpawn = () => {
+      this.companion?.emitMoment("game.event.moon_near", {}, { salience: 0.9, voiceRelevant: true });
       this.audioManager.playSFX(EXPLOSION_SFX_NAME, EXPLOSION_SFX_VOLUME);
     };
     this.moonThreat.onApproachPauseEnd = () => {
@@ -1618,6 +1757,8 @@ export class Game {
       showXpProgression: this.vehicleFeatures.xpProgressionUI,
     });
 
+    this.initCompanion(vehicle);
+
     if (this.localPlayer instanceof Boat && this.vehicleFeatures.fishingMiniGame) {
       this.oceanFish = new OceanFish(globeRadius, seed, spawnSessionSalt, terrainType, this.audioManager);
       this.scene.add(this.oceanFish.group);
@@ -1869,7 +2010,10 @@ export class Game {
     this.landmarkDetector = new LandmarkDetector(landmarkRegistry);
     this.landmarkHUD = new LandmarkHUD(this.hud.root);
     this.hud.registerLandmarkHUD(this.landmarkHUD);
-    this.landmarkDetector.onEnter = (lm) => this.landmarkHUD.show(lm.name, lm.type);
+    this.landmarkDetector.onEnter = (lm) => {
+      this.companion?.setRetained("game.player.location", { landmark: lm.name, type: lm.type });
+      this.landmarkHUD.show(lm.name, lm.type);
+    };
     this.landmarkDetector.onExit = () => this.landmarkHUD.hide();
 
     this.packageQuestHUD = new PackageQuestHUD(this.hud.root);
@@ -1906,6 +2050,7 @@ export class Game {
       getQPosition: () => this.localPlayer.qPosition,
       getHeading: () => this.localPlayer.heading,
       onWin: () => {
+        this.companion?.emitMoment("game.event.race_won", { world: this.worldConfig?.name }, { salience: 0.6 });
         this.hud.showRaceWinConfetti();
         this.hud.showXPGain(100);
         // Every win: +100 XP (ProgressionManager.addXP always save()s). Eternal flame below is once only.
@@ -1953,6 +2098,7 @@ export class Game {
       );
 
       this.packageQuest.onPickup = (_originName, destName, npcName, dialogue) => {
+        this.companion?.setRetained("game.quest.active", { carryingTo: destName });
         const boxPick =
           BOX_COLLECT_SFX_IDS[Math.floor(Math.random() * BOX_COLLECT_SFX_IDS.length)]!;
         this.audioManager.playSFX(boxPick, BOX_COLLECT_SFX_VOLUME);
@@ -1964,6 +2110,8 @@ export class Game {
       };
 
       this.packageQuest.onDelivered = (_destName, npcName, dialogue, xp, completedQuestIndex) => {
+        this.companion?.emitMoment("game.event.delivered", { to: _destName, xp }, { salience: 0.5 });
+        this.companion?.setRetained("game.quest.active", { carrying: false });
         const cheerPick =
           CHEER_SFX_IDS[Math.floor(Math.random() * CHEER_SFX_IDS.length)]!;
         this.audioManager.playSFX(cheerPick, CHEER_SFX_VOLUME);
@@ -2062,6 +2210,12 @@ export class Game {
   /** Tear down everything created in startGame (globe / moon / renderer stay). */
   private teardownGameplaySession(reason = "session_ended") {
     this.reportSessionEnded(reason);
+    // Consolidate the companion's run into memory, then release it.
+    void this.companion?.endSession();
+    this.companion?.dispose();
+    this.companion = null;
+    this.companionUI?.dispose();
+    this.companionUI = null;
     this.stateSync?.stop();
     this.stateSync = null;
     this.socketClient?.disconnect();
@@ -4159,6 +4313,11 @@ export class Game {
     if (String(this.gamePhase) === "moonstoneUnion" || String(this.gamePhase) === "moonImpact") return;
     if (this.globe.isMoonstonePostUnionActive()) return;
     if (this.globe.getMoonstoneCount() < 2) return;
+    this.companion?.emitMoment(
+      "game.event.world_saved",
+      { world: this.worldConfig?.name },
+      { salience: 1.0, voiceRelevant: true },
+    );
     this.raceManager?.abort();
     this.ensureBraziersSpawned();
 
@@ -5543,6 +5702,7 @@ export class Game {
     if (!this.voidMoths) return;
     const cfg = Game.VOID_WAVE_CONFIGS[wave - 1];
     if (!cfg) return;
+    this.companion?.emitMoment("game.event.void_wave", { wave }, { salience: 0.85, voiceRelevant: true });
     const [total, maxConc, spawnMin, spawnMax, elderChance] = cfg;
     this.voidMoths.configureWave(total, maxConc, spawnMin, spawnMax, elderChance);
     this.voidMoths.setMothSpawningEnabled(true);
@@ -6589,6 +6749,8 @@ export class Game {
   }
 
   private handleLevelUp(level: number) {
+    this.companion?.setRetained("game.player.level", { level });
+    this.companion?.emitMoment("game.event.level_up", { level }, { salience: 0.6 });
     this.playLevelUpSfx();
     this.ensureBraziersSpawned();
     this.hud.showLevelUp(level);
