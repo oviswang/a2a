@@ -224,6 +224,20 @@ type XpSource =
   | "jellyfish"
   | "fish";
 
+/** Cozy, infrequent XP sources worth telling the companion about (with a short
+ *  localized note for its reply). Frequent sources (diamond/gremlin) and ones
+ *  that already emit a richer moment (delivery) are intentionally omitted. */
+const COMPANION_XP_MOMENTS: Partial<Record<XpSource, string>> = {
+  selfie: t("took a selfie at a scenic spot", "在景点拍了张自拍"),
+  flock: t("flew in formation with a flock of birds", "与鸟群编队齐飞"),
+  rainbow: t("flew through a rainbow", "穿过了一道彩虹"),
+  lantern: t("flew among the floating lanterns", "在漂浮的灯笼之间飞行"),
+  firefly: t("flew through a cloud of fireflies", "穿过了一群萤火虫"),
+  volcano: t("did some extreme flying near a volcano", "在火山附近极限飞行"),
+  jellyfish: t("caught a sky jellyfish", "捕获了一只天空水母"),
+  fish: t("caught a fish", "钓到了一条鱼"),
+};
+
 const DIAMOND_SFX_IDS = [
   "diamond_collect_1",
   "diamond_collect_2",
@@ -3941,6 +3955,7 @@ export class Game {
         } else {
           this.hud.showBrazierLit();
         }
+        this.companion?.emitMoment("game.event.brazier_lit", {}, { salience: 0.6 });
         this.savePlayerWorldState();
       }
       const firstFlameFizzled =
@@ -5850,9 +5865,11 @@ export class Game {
       const max = this.voidFlameShield.getMaxHitPoints();
       if (!this.voidShieldWarnedHalf && hp <= Math.floor(max * 0.5)) {
         this.voidShieldWarnedHalf = true;
+        this.companion?.emitMoment("game.event.shield_low", { hp, max, level: "half" }, { salience: 0.9, voiceRelevant: true });
         this.packageQuestHUD.showBubble(ETERNAL_FLAME_SPEAKER, VOID_SHIELD_LOW_HP_DIALOGUE[0]);
       } else if (!this.voidShieldWarnedCritical && hp <= 3 && hp > 0) {
         this.voidShieldWarnedCritical = true;
+        this.companion?.emitMoment("game.event.shield_low", { hp, max, level: "critical" }, { salience: 0.95, voiceRelevant: true });
         this.packageQuestHUD.showBubble(ETERNAL_FLAME_SPEAKER, VOID_SHIELD_LOW_HP_DIALOGUE[1]);
       }
     }
@@ -6968,6 +6985,12 @@ export class Game {
     const rounded = Math.max(0, Math.round(amt));
     if (rounded <= 0) return;
     this.hud.showXPGain(rounded);
+    // Tell the companion about the cozy, infrequent collectibles (skip the
+    // high-frequency diamond/gremlin stream so we don't spam its budget).
+    if (this.companion) {
+      const note = COMPANION_XP_MOMENTS[source];
+      if (note) this.companion.emitMoment(`game.event.${source}`, { what: note, xp: rounded }, { salience: 0.4 });
+    }
     this.progression.addXP(rounded);
   }
 
