@@ -1716,7 +1716,7 @@ export class HUD {
         .hud-quest-trackers { font-size: 0.8rem; }
 
         .hud-xp-panel {
-          bottom: max(24px, calc(14px + env(safe-area-inset-bottom)));
+          top: max(20px, calc(12px + env(safe-area-inset-top)));
           padding: 8px 16px;
           min-width: 140px;
           backdrop-filter: none;
