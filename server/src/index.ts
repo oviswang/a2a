@@ -436,6 +436,9 @@ async function processIntentsForOnline(visitorId: string) {
         socketId: fromSocketId,
         worldSlug: fromMeta?.worldSlug ?? intent.worldSlug,
       });
+      // Heads-up to the inviter that the player they invited just came online.
+      const toMeta = visitorMetaBySocket.get(toSocketId);
+      io.sockets.sockets.get(fromSocketId)?.emit("ghostpair:notice", { name: toMeta?.name ?? "" });
     }
   } catch (err) {
     console.warn("processIntentsForOnline failed:", err);

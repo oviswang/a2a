@@ -165,6 +165,9 @@ export class SocketClient {
   onGhostPairIncoming(cb: (ev: GhostPairInvite) => void) {
     this.socket.on("ghostpair:incoming", cb);
   }
+  onGhostPairNotice(cb: (ev: { name: string }) => void) {
+    this.socket.on("ghostpair:notice", cb);
+  }
 
   disconnect() {
     this.socket.disconnect();
