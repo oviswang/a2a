@@ -398,33 +398,47 @@ function sendGhostPairInvite(
   });
 }
 
-/** When a player comes online, surface any queued pairing intents addressed to them
- *  — but only if the inviter is ALSO online now (pairing needs both live). Otherwise
- *  the intent waits. Stale intents (>7d) are pruned. */
-async function deliverPendingIntents(toVisitorId: string, toSocketId: string) {
+/** Re-delivery throttle per intent (`${from}->${to}` → last delivery ms) so a player
+ *  who reconnects a lot isn't spammed with the same invite. In-memory is fine. */
+const intentDeliverCooldown = new Map<string, number>();
+const INTENT_REDELIVER_MS = 5 * 60_000;
+const INTENT_TTL_MS = 7 * 864e5;
+
+/** Full matchmaking: when a player comes online, scan pairing intents in BOTH
+ *  directions involving them. An intent is actionable only when BOTH parties are
+ *  online (pairing needs both live); when so, deliver the invite to the TARGET,
+ *  pointing at the inviter's CURRENT world. Intents persist (durable retry) until
+ *  resolved (pairing succeeded), declined, or expired — so whoever logs in last
+ *  completes the match. */
+async function processIntentsForOnline(visitorId: string) {
   try {
     const intents = await prisma.pairIntent.findMany({
-      where: { toVisitorId },
+      where: { OR: [{ toVisitorId: visitorId }, { fromVisitorId: visitorId }] },
       orderBy: { createdAt: "desc" },
-      take: 5,
+      take: 20,
     });
+    const now = Date.now();
     for (const intent of intents) {
-      const inviterSocketId = onlineSocketByVisitor.get(intent.fromVisitorId);
-      if (!inviterSocketId) continue; // inviter offline → leave it for next time
-      const inviterMeta = visitorMetaBySocket.get(inviterSocketId);
+      if (now - new Date(intent.createdAt).getTime() > INTENT_TTL_MS) {
+        await prisma.pairIntent.delete({ where: { id: intent.id } }).catch(() => {});
+        continue;
+      }
+      const fromSocketId = onlineSocketByVisitor.get(intent.fromVisitorId);
+      const toSocketId = onlineSocketByVisitor.get(intent.toVisitorId);
+      if (!fromSocketId || !toSocketId) continue; // need BOTH live
+      const key = `${intent.fromVisitorId}->${intent.toVisitorId}`;
+      if (now - (intentDeliverCooldown.get(key) ?? 0) < INTENT_REDELIVER_MS) continue;
+      intentDeliverCooldown.set(key, now);
+      const fromMeta = visitorMetaBySocket.get(fromSocketId);
       sendGhostPairInvite(toSocketId, {
         visitorId: intent.fromVisitorId,
         name: intent.fromName,
-        socketId: inviterSocketId,
-        worldSlug: inviterMeta?.worldSlug ?? intent.worldSlug,
+        socketId: fromSocketId,
+        worldSlug: fromMeta?.worldSlug ?? intent.worldSlug,
       });
-      await prisma.pairIntent.delete({ where: { id: intent.id } }).catch(() => {});
     }
-    await prisma.pairIntent
-      .deleteMany({ where: { toVisitorId, createdAt: { lt: new Date(Date.now() - 7 * 864e5) } } })
-      .catch(() => {});
   } catch (err) {
-    console.warn("deliverPendingIntents failed:", err);
+    console.warn("processIntentsForOnline failed:", err);
   }
 }
 
@@ -463,7 +477,7 @@ io.on("connection", (socket) => {
     if (typeof visitorId === "string" && visitorId) {
       onlineSocketByVisitor.set(visitorId, socket.id);
       visitorMetaBySocket.set(socket.id, { visitorId, name: playerName, worldSlug: slug });
-      void deliverPendingIntents(visitorId, socket.id);
+      void processIntentsForOnline(visitorId);
     }
   });
 
@@ -472,25 +486,60 @@ io.on("connection", (socket) => {
   socket.on("ghostpair:invite", async (toVisitorId) => {
     const meta = visitorMetaBySocket.get(socket.id);
     if (!meta || typeof toVisitorId !== "string" || !toVisitorId || toVisitorId === meta.visitorId) return;
+    // Persist a durable intent so the match completes (and retries) whenever both
+    // players are online — not just at this instant.
+    try {
+      await prisma.pairIntent.upsert({
+        where: { fromVisitorId_toVisitorId: { fromVisitorId: meta.visitorId, toVisitorId } },
+        create: { fromVisitorId: meta.visitorId, fromName: meta.name, toVisitorId, worldSlug: meta.worldSlug },
+        update: { fromName: meta.name, worldSlug: meta.worldSlug, createdAt: new Date() },
+      });
+    } catch (err) {
+      console.warn("queue pair intent failed:", err);
+    }
+    // Deliver live right now if the target is online.
     const targetSocketId = onlineSocketByVisitor.get(toVisitorId);
     if (targetSocketId) {
+      intentDeliverCooldown.set(`${meta.visitorId}->${toVisitorId}`, Date.now());
       sendGhostPairInvite(targetSocketId, {
         visitorId: meta.visitorId,
         name: meta.name,
         socketId: socket.id,
         worldSlug: meta.worldSlug,
       });
-    } else {
-      try {
-        await prisma.pairIntent.upsert({
-          where: { fromVisitorId_toVisitorId: { fromVisitorId: meta.visitorId, toVisitorId } },
-          create: { fromVisitorId: meta.visitorId, fromName: meta.name, toVisitorId, worldSlug: meta.worldSlug },
-          update: { fromName: meta.name, worldSlug: meta.worldSlug, createdAt: new Date() },
-        });
-      } catch (err) {
-        console.warn("queue pair intent failed:", err);
-      }
     }
+  });
+
+  // A pairing between me and `otherVisitorId` succeeded → clear intents both ways.
+  socket.on("ghostpair:resolved", async (otherVisitorId) => {
+    const meta = visitorMetaBySocket.get(socket.id);
+    if (!meta || typeof otherVisitorId !== "string" || !otherVisitorId) return;
+    try {
+      await prisma.pairIntent.deleteMany({
+        where: {
+          OR: [
+            { fromVisitorId: meta.visitorId, toVisitorId: otherVisitorId },
+            { fromVisitorId: otherVisitorId, toVisitorId: meta.visitorId },
+          ],
+        },
+      });
+    } catch {
+      /* best-effort */
+    }
+    intentDeliverCooldown.delete(`${meta.visitorId}->${otherVisitorId}`);
+    intentDeliverCooldown.delete(`${otherVisitorId}->${meta.visitorId}`);
+  });
+
+  // I declined an invite from `fromVisitorId` → drop that intent so it stops asking.
+  socket.on("ghostpair:decline", async (fromVisitorId) => {
+    const meta = visitorMetaBySocket.get(socket.id);
+    if (!meta || typeof fromVisitorId !== "string" || !fromVisitorId) return;
+    try {
+      await prisma.pairIntent.deleteMany({ where: { fromVisitorId, toVisitorId: meta.visitorId } });
+    } catch {
+      /* best-effort */
+    }
+    intentDeliverCooldown.delete(`${fromVisitorId}->${meta.visitorId}`);
   });
 
   socket.on("disconnect", () => {
