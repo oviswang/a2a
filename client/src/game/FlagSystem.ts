@@ -262,7 +262,7 @@ export class FlagSystem {
     this.scratchWorld.set(ev.x, ev.y, ev.z);
     this.applyFreeAt(this.scratchWorld);
     if (!this.suppressed) {
-      this.hud.showFlagAnnounce("A flag has spawned in the world!", 4000);
+      this.hud.showFlagAnnounce(t("A flag has spawned in the world!", "世界中出现了一面旗帜！"), 4000);
     }
   }
 
@@ -314,11 +314,14 @@ export class FlagSystem {
     const youVictim = ev.previousHolderId === lid;
     let msg: string;
     if (youThief) {
-      msg = `You stole the flag from ${ev.previousHolderName}!`;
+      msg = t(`You stole the flag from ${ev.previousHolderName}!`, `你从 ${ev.previousHolderName} 手中夺走了旗帜！`);
     } else if (youVictim) {
-      msg = `${ev.newHolderName} stole the flag from you!`;
+      msg = t(`${ev.newHolderName} stole the flag from you!`, `${ev.newHolderName} 从你手中夺走了旗帜！`);
     } else {
-      msg = `${ev.newHolderName} stole the flag from ${ev.previousHolderName}!`;
+      msg = t(
+        `${ev.newHolderName} stole the flag from ${ev.previousHolderName}!`,
+        `${ev.newHolderName} 从 ${ev.previousHolderName} 手中夺走了旗帜！`,
+      );
     }
     if (!this.suppressed) {
       this.hud.showFlagAnnounce(msg, 4500);
