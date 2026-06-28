@@ -80,7 +80,7 @@ export class LandmarkHUD {
     style.textContent = `
       .landmark-hud {
         position: absolute;
-        top: 90px;
+        top: 104px;
         left: 50%;
         transform: translate(-50%, -8px);
         display: flex;
@@ -107,7 +107,7 @@ export class LandmarkHUD {
 
       @media (max-width: 480px) {
         .landmark-hud {
-          top: max(88px, calc(24px + env(safe-area-inset-top) + 52px));
+          top: max(104px, calc(24px + env(safe-area-inset-top) + 72px));
         }
         .landmark-hud-type { font-size: 0.55rem; }
         .landmark-hud-name { font-size: 1.1rem; }

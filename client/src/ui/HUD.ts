@@ -931,7 +931,7 @@ export class HUD {
 
       .hud-xp-panel {
         position: absolute;
-        bottom: max(36px, calc(28px + env(safe-area-inset-bottom, 0px)));
+        top: max(20px, calc(12px + env(safe-area-inset-top, 0px)));
         left: 50%;
         transform: translateX(-50%);
         display: flex;
@@ -982,7 +982,7 @@ export class HUD {
 
       .hud-xp-popup {
         position: absolute;
-        bottom: 80px;
+        top: 72px;
         left: 50%;
         transform: translateX(-50%) translateY(0px);
         font-size: 1.25rem;
@@ -1013,7 +1013,7 @@ export class HUD {
       }
       .hud-xp-popup-animate {
         opacity: 1;
-        transform: translateX(-50%) translateY(-40px);
+        transform: translateX(-50%) translateY(40px);
       }
       .hud-xp-popup-bonus {
         color: rgba(255, 255, 255, 1.0);
@@ -1724,7 +1724,7 @@ export class HUD {
         .hud-xp-level { font-size: 0.6rem; }
         .hud-xp-value { font-size: 0.55rem; }
 
-        .hud-xp-popup { bottom: 120px; font-size: 1.05rem; }
+        .hud-xp-popup { top: 96px; font-size: 1.05rem; }
         .hud-xp-popup-bonus { font-size: 1.2rem; }
         .hud-xp-popup::before, .hud-xp-popup::after { width: 32px; }
 
