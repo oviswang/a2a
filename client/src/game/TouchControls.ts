@@ -388,15 +388,15 @@ export class TouchControls {
         display: flex;
         flex-direction: column;
         align-items: flex-end;
-        gap: 10px;
-        max-width: min(168px, 46vw);
+        gap: 12px;
+        max-width: min(220px, 52vw);
         pointer-events: none;
       }
       .tc-right-stack {
         display: flex;
         flex-direction: column;
         align-items: flex-end;
-        gap: 9px;
+        gap: 13px;
         pointer-events: auto;
       }
       .tc-elevate-btn,
@@ -405,16 +405,16 @@ export class TouchControls {
         position: relative;
         right: auto;
         bottom: auto;
-        width: 52px;
-        height: 52px;
-        min-width: 52px;
-        min-height: 52px;
+        width: 72px;
+        height: 72px;
+        min-width: 72px;
+        min-height: 72px;
         border-radius: 50%;
         border: 1px solid rgba(255, 255, 255, 0.12);
         background: rgba(255, 255, 255, 0.08);
         backdrop-filter: blur(10px);
         color: rgba(255, 255, 255, 0.72);
-        font-size: 1.05rem;
+        font-size: 1.5rem;
         font-weight: 700;
         font-family: inherit;
         pointer-events: auto;
@@ -430,8 +430,8 @@ export class TouchControls {
         padding: 0;
       }
       .tc-action-btn .tc-portal-icon {
-        width: 1.4rem;
-        height: 1.4rem;
+        width: 1.9rem;
+        height: 1.9rem;
         max-width: 68%;
         max-height: 68%;
         display: block;

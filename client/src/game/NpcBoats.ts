@@ -3,6 +3,7 @@ import { createSmallBoat } from "./BoatMesh";
 import { moveOnSphere, buildBoatMatrix, seededRandom, cartesianFromSpherical, tangentFrame } from "./SphericalMath";
 import { randomOceanQuaternion } from "./Boat";
 import { isLand } from "./SimplexNoise";
+import { t } from "../i18n";
 
 const NPC_COUNT = 16;
 const NPC_ALTITUDE = 0.0; // slightly above ocean surface
@@ -24,10 +25,10 @@ const BOB_SPEED = 2.6;
 const BOB_AMP = 0.008;
 
 const WAVE_MESSAGES = [
-  "A small boat waves at you!",
-  "A fisherman gives you a friendly nod.",
-  "Someone on a dinghy waves hello.",
-  "A passing sailor tips their hat.",
+  t("A small boat waves at you!", "一艘小船向你挥手！"),
+  t("A fisherman gives you a friendly nod.", "一位渔夫友好地向你点头。"),
+  t("Someone on a dinghy waves hello.", "小艇上有人向你挥手问好。"),
+  t("A passing sailor tips their hat.", "一位路过的水手向你脱帽致意。"),
 ];
 
 const NPC_COLORS = [0x5588cc, 0xcc5544, 0x44aa66, 0xbb8833];
