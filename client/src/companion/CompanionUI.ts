@@ -21,6 +21,8 @@ export interface CompanionUIOptions {
   onToggleVoice: () => void;
   onInviteFriends: () => void;
   onJoinWorld: (slug: string) => void;
+  /** Phase 4: pair companions with a co-present player. */
+  onPairNearby: () => void;
 }
 
 export class CompanionUI {
@@ -90,6 +92,7 @@ export class CompanionUI {
       <div class="cmp-invite-row" style="display:none">
         <span class="cmp-invite-text"></span>
         <button type="button" class="cmp-invite-btn"></button>
+        <button type="button" class="cmp-pair-btn"></button>
       </div>
       <div class="cmp-transcript" aria-live="polite"></div>
       <form class="cmp-input-row">
@@ -103,8 +106,11 @@ export class CompanionUI {
     this.inviteRow = this.panel.querySelector(".cmp-invite-row")!;
     this.inviteBtn = this.panel.querySelector(".cmp-invite-btn")!;
     this.inviteBtn.textContent = t("Invite friends", "邀请好友");
+    const pairBtn = this.panel.querySelector(".cmp-pair-btn") as HTMLButtonElement;
+    pairBtn.textContent = t("Pair nearby", "与附近玩家配对");
     this.panel.querySelector(".cmp-panel-close")!.addEventListener("click", () => this.togglePanel(false));
     this.inviteBtn.addEventListener("click", () => this.opts.onInviteFriends());
+    pairBtn.addEventListener("click", () => this.opts.onPairNearby());
     this.panel.querySelector(".cmp-input-row")!.addEventListener("submit", (e) => {
       e.preventDefault();
       const text = this.input.value.trim();
@@ -279,10 +285,11 @@ export class CompanionUI {
         background: rgba(255,255,255,0.06); border-radius: 10px; padding: 7px 10px;
       }
       .cmp-invite-text { font-size: 0.74rem; color: rgba(255,255,255,0.78); }
-      .cmp-invite-btn {
+      .cmp-invite-btn, .cmp-pair-btn {
         background: rgba(120,180,255,0.22); color: #fff; border: none; border-radius: 8px;
         padding: 6px 12px; font-size: 0.72rem; font-weight: 600; cursor: pointer; white-space: nowrap;
       }
+      .cmp-pair-btn { background: rgba(180,140,255,0.24); }
       .cmp-transcript {
         flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;
         font-size: 0.82rem; line-height: 1.4; min-height: 80px;

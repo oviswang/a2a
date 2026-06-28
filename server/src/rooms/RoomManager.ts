@@ -102,6 +102,26 @@ export class RoomManager {
       room.forceFlagSpawn();
     });
 
+    // A2A companion pairing relay — only between players in THIS room. The
+    // responder's token rides through on accept (their consent + proof); it is
+    // forwarded in-memory to the requester only and never stored or logged.
+    socket.on("pair:request", (toId) => {
+      const target = room.getPlayer(toId);
+      if (!target) return;
+      target.socket.emit("pair:incoming", { fromId: socket.id, fromName: state.name });
+    });
+    socket.on("pair:respond", (toId, accept, visitorToken, visitorId) => {
+      const target = room.getPlayer(toId);
+      if (!target) return;
+      target.socket.emit("pair:answered", {
+        fromId: socket.id,
+        fromName: state.name,
+        accept,
+        visitorToken: accept ? visitorToken : undefined,
+        visitorId: accept ? visitorId : undefined,
+      });
+    });
+
     socket.on("disconnect", () => {
       room.removePlayer(socket.id);
       if (room.isEmpty) {
