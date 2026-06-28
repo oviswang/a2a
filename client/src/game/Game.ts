@@ -28,6 +28,7 @@ import { localizeWorldName } from "../i18nNames";
 import { CompanionManager } from "../companion/CompanionManager";
 import { CompanionUI } from "../companion/CompanionUI";
 import { VoiceCommander } from "../companion/VoiceCommander";
+import { CompanionVoice } from "../companion/CompanionVoice";
 import { WaypointBeacon } from "./WaypointBeacon";
 import {
   BRAZIER_MOON_PAUSE_MS,
@@ -491,9 +492,13 @@ export class Game {
   } | null = null;
   /** One-shot fire request from the companion (consumed next frame). */
   private voiceFireQueued = false;
-  /** Dedicated always-listening speech recognizer for flight commands (separate
-   *  from the companion voice call, which mutes the mic while the companion talks). */
+  /** Browser-native voice loop: an always-listening speech recognizer that owns the
+   *  mic (so commands are reliable) + device TTS for the companion's spoken replies. */
   private voiceCommander: VoiceCommander | null = null;
+  private companionVoice: CompanionVoice | null = null;
+  /** True while the companion's TTS is talking — gates the recognizer to avoid
+   *  feeding the companion's own voice back in as a command/chat. */
+  private companionTtsSpeaking = false;
   /** Dedup guard so a single spoken utterance (re-emitted as interim results)
    *  doesn't trigger the same command many times. */
   private lastVoiceCmdAction: string | null = null;
@@ -930,6 +935,8 @@ export class Game {
       onMessage: (text) => {
         this.companionUI?.appendAssistantMessage(text);
         this.packageQuestHUD?.showBubble("Pouchy", text);
+        // Speak replies aloud when the browser voice loop is active.
+        this.companionVoice?.speak(text);
       },
       onSocialMessage: (msg, slug) => this.companionUI?.showSkyLetter(msg.fromName, msg.content, slug),
       onConfirmRequest: (p) =>
@@ -971,40 +978,64 @@ export class Game {
       if (this.worldConfig) manager.setRetained("game.world", { name: this.worldConfig.name, slug: this.worldSlug });
       manager.setRetained("game.player.vehicle", { vehicle });
       if (ProgressionManager.loadCompanionAutoVoice()) {
-        const started = await manager.startVoiceCopilot();
-        this.companionUI?.setVoiceActive(started);
-        if (started) this.startVoiceCommander();
+        this.startCompanionVoiceLoop();
       }
     });
   }
 
-  private async toggleCompanionVoice() {
+  private toggleCompanionVoice() {
     if (!this.companion) return;
-    if (this.companion.inCall) {
-      this.companion.stopVoice();
-      this.stopVoiceCommander();
-      this.companionUI?.setVoiceActive(false);
-    } else {
-      const ok = await this.companion.startVoiceCopilot();
-      this.companionUI?.setVoiceActive(ok);
-      if (ok) this.startVoiceCommander();
-    }
+    if (this.voiceCommander) this.stopCompanionVoiceLoop();
+    else this.startCompanionVoiceLoop();
   }
 
-  /** Start the dedicated speech-command recognizer (best-effort; no-ops if the
-   *  browser lacks the Web Speech API). Commands are parsed by handleVoiceCommand
-   *  so they work continuously even while the companion is talking. */
-  private startVoiceCommander() {
-    if (this.voiceCommander || !VoiceCommander.supported) return;
-    this.voiceCommander = new VoiceCommander(IS_ZH ? "zh-CN" : "en-US", (text) =>
-      this.handleVoiceCommand(text),
+  /** Start the BROWSER-NATIVE voice loop: an always-listening speech recognizer for
+   *  the mic (it owns the mic, so commands are reliable + fast) plus device TTS for
+   *  the companion's spoken replies. We deliberately do NOT open the provider voice
+   *  call here — that call would seize the mic and mute it while the companion talks,
+   *  which made commands unreliable, and it can't see the live game state anyway. */
+  private startCompanionVoiceLoop() {
+    if (this.voiceCommander) {
+      this.companionUI?.setVoiceActive(true);
+      return;
+    }
+    if (!VoiceCommander.supported) {
+      this.hud.showAmbientToast(
+        t("Voice isn't supported in this browser.", "此浏览器不支持语音功能。"),
+      );
+      return;
+    }
+    this.companionVoice = new CompanionVoice(IS_ZH ? "zh-CN" : "en-US", (speaking) => {
+      this.companionTtsSpeaking = speaking;
+    });
+    this.companionVoice.enable();
+    this.voiceCommander = new VoiceCommander(IS_ZH ? "zh-CN" : "en-US", (text, isFinal) =>
+      this.onVoicePhrase(text, isFinal),
     );
     this.voiceCommander.start();
+    this.companionUI?.setVoiceActive(true);
   }
 
-  private stopVoiceCommander() {
+  private stopCompanionVoiceLoop() {
     this.voiceCommander?.stop();
     this.voiceCommander = null;
+    this.companionVoice?.stop();
+    this.companionVoice = null;
+    this.companionTtsSpeaking = false;
+    this.companionUI?.setVoiceActive(false);
+  }
+
+  /** Route a recognized utterance: flight command (act instantly, even on interim
+   *  results) or, if not a command, a final utterance becomes a chat message to the
+   *  state-aware companion. Ignored while the companion's own TTS is playing so its
+   *  voice isn't fed back in. */
+  private onVoicePhrase(text: string, isFinal: boolean) {
+    if (this.companionTtsSpeaking) return;
+    if (this.handleVoiceCommand(text)) return;
+    if (isFinal && text.trim().length >= 2) {
+      this.emitCompanionSituation();
+      void this.companion?.sendText(text.trim());
+    }
   }
 
   /** Execute a tool the companion asked for (Phase 2). Best-effort + defensive. */
@@ -1195,7 +1226,49 @@ export class Game {
       };
     }
     snap.suggestion = this.computeNextStepHint();
+    snap.summary = this.composeSituationSummary(snap);
     this.companion.setRetained("game.situation", snap);
+  }
+
+  /** A plain-language one-liner of the current state — LLMs ground far better on
+   *  prose than on nested JSON, so this is what the companion mostly reads. */
+  private composeSituationSummary(snap: Record<string, unknown>): string {
+    const parts: string[] = [];
+    const vehicleName =
+      this.playerVehicle === "plane" ? "biplane" : this.playerVehicle === "carpet" ? "magic carpet" : "boat";
+    parts.push(`The player is flying a ${vehicleName} at level ${this.progression.getLevel()}.`);
+    const carrying = snap.carrying as { to?: string | null; distance_m?: number | null } | undefined;
+    if (carrying) {
+      parts.push(
+        carrying.to
+          ? `Carrying a package to ${carrying.to}${carrying.distance_m != null ? ` (~${carrying.distance_m}m away)` : ""}.`
+          : "Carrying a package to deliver.",
+      );
+    }
+    if (this.playerVehicle === "plane") {
+      const g = snap.gremlins as { current: number; max: number };
+      const d = snap.deliveries as { current: number; max: number };
+      parts.push(`Sky gremlins downed ${g.current}/${g.max}; deliveries ${d.current}/${d.max}.`);
+    } else if (this.playerVehicle === "carpet") {
+      const j = snap.jellyfish as { current: number; max: number };
+      parts.push(`Jellyfish collected ${j.current}/${j.max}.`);
+    } else if (this.playerVehicle === "boat") {
+      const f = snap.fish as { current: number; max: number };
+      parts.push(`Fish caught ${f.current}/${f.max}.`);
+    }
+    const v = snap.void as { wave?: number; shield_hp?: number | null; shield_max?: number | null } | undefined;
+    if (v) {
+      parts.push(`In the cosmic void defending the eternal flame — wave ${v.wave}, shield ${v.shield_hp}/${v.shield_max}.`);
+    } else {
+      const moon = snap.moon as { danger: number; frozen: boolean };
+      parts.push(
+        moon.frozen
+          ? "The moon has been frozen — the world is safe."
+          : `Moon danger ${Math.round(moon.danger * 100)}% (it falls slowly toward the world).`,
+      );
+    }
+    parts.push(`Suggested next step: ${snap.suggestion as string}`);
+    return parts.join(" ");
   }
 
   /** A short, accurate "what to do next" line derived from the live state. The
@@ -2605,7 +2678,7 @@ export class Game {
     this.companion = null;
     this.companionUI?.dispose();
     this.companionUI = null;
-    this.stopVoiceCommander();
+    this.stopCompanionVoiceLoop();
     this.voiceControl = null;
     this.voiceFireQueued = false;
     this.stateSync?.stop();
