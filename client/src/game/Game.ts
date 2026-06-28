@@ -23,6 +23,7 @@ import {
   AdditiveBlending,
 } from "three";
 import { cartesianFromSpherical, tangentFrame } from "./SphericalMath";
+import { t } from "../i18n";
 import {
   BRAZIER_MOON_PAUSE_MS,
   getVehicleFeatures,
@@ -292,25 +293,25 @@ type VehicleTutorialStep = ControlHintRow & { id: VehicleTutorialStepId };
 
 const VEHICLE_TUTORIAL_STEPS: Record<Vehicle, VehicleTutorialStep[]> = {
   plane: [
-    { id: "move", keys: ["W", "A", "S", "D"], label: "Fly with WASD" },
-    { id: "elevate", keys: ["↑"], label: "Climb with Up Arrow" },
-    { id: "shoot", keys: ["Space"], label: "Shoot with Space" },
+    { id: "move", keys: ["W", "A", "S", "D"], label: t("Fly with WASD", "用 WASD 飞行") },
+    { id: "elevate", keys: ["↑"], label: t("Climb with Up Arrow", "用上箭头爬升") },
+    { id: "shoot", keys: ["Space"], label: t("Shoot with Space", "用空格射击") },
   ],
   carpet: [
-    { id: "move", keys: ["W", "A", "S", "D"], label: "Fly with WASD" },
-    { id: "portal1", keys: ["Space"], label: "Open Portal 1 with Space" },
-    { id: "portal2", keys: ["Space"], label: "Open Portal 2 with Space" },
-    { id: "portalTravel", keys: [], label: "Fly through a portal" },
+    { id: "move", keys: ["W", "A", "S", "D"], label: t("Fly with WASD", "用 WASD 飞行") },
+    { id: "portal1", keys: ["Space"], label: t("Open Portal 1 with Space", "用空格开启传送门 1") },
+    { id: "portal2", keys: ["Space"], label: t("Open Portal 2 with Space", "用空格开启传送门 2") },
+    { id: "portalTravel", keys: [], label: t("Fly through a portal", "穿过传送门") },
   ],
   boat: [
-    { id: "move", keys: ["W", "A", "S", "D"], label: "Move with WASD" },
-    { id: "fish", keys: [], label: "Find a fish pool and catch a fish" },
+    { id: "move", keys: ["W", "A", "S", "D"], label: t("Move with WASD", "用 WASD 移动") },
+    { id: "fish", keys: [], label: t("Find a fish pool and catch a fish", "找到鱼塘并钓一条鱼") },
   ],
 };
 const VEHICLE_TUTORIAL_FINISH_LABELS: Record<Vehicle, string> = {
-  plane: "That's it. Enjoy flying!",
-  carpet: "That's it. Enjoy flying!",
-  boat: "That's it. Enjoy boating!",
+  plane: t("That's it. Enjoy flying!", "就这样。尽情飞翔吧！"),
+  carpet: t("That's it. Enjoy flying!", "就这样。尽情飞翔吧！"),
+  boat: t("That's it. Enjoy boating!", "就这样。尽情航行吧！"),
 };
 const VEHICLE_TUTORIAL_ADVANCE_DELAY_MS = 2000;
 /** After Space / portal travel steps, advance quickly so the next prompt is not buried. */
@@ -943,7 +944,7 @@ export class Game {
       if (this.transitionOverlay) {
         await this.transitionOverlay.fadeOut({
           durationSec: 1.65,
-          message: "Oops. You died.",
+          message: t("Oops. You died.", "糟糕，你死了。"),
           holdAtFullSec: 1.35,
         });
       }
@@ -983,10 +984,10 @@ export class Game {
     this.loadingEl.id = "loading-overlay";
     this.loadingEl.innerHTML = `
       <div class="loading-stack">
-        <div class="loading-built-with" aria-label="Built with Cursor">
-          <span class="loading-built-text">Built with</span>
+        <div class="loading-built-with" aria-label="${t("Built with Cursor", "由 Cursor 构建")}">
+          <span class="loading-built-text">${t("Built with", "构建工具")}</span>
           <img class="loading-cursor-logo" src="/2D/logo_cursor.png" alt="" width="180" height="47" decoding="async" />
-          <span class="loading-best-enjoyed">Best enjoyed on desktop with sound</span>
+          <span class="loading-best-enjoyed">${t("Best enjoyed on desktop with sound", "建议在桌面端并开启声音体验")}</span>
         </div>
       </div>
     `;
@@ -1064,19 +1065,19 @@ export class Game {
     this.loadingEl.innerHTML = `
       <div style="text-align:center;padding:0 24px;">
         <div class="loading-stack">
-          <div class="loading-built-with" aria-label="Built with Cursor">
-            <span class="loading-built-text">Built with</span>
+          <div class="loading-built-with" aria-label="${t("Built with Cursor", "由 Cursor 构建")}">
+            <span class="loading-built-text">${t("Built with", "构建工具")}</span>
             <img class="loading-cursor-logo" src="/2D/logo_cursor.png" alt="" width="180" height="47" decoding="async" />
-            <span class="loading-best-enjoyed">Best enjoyed on desktop with sound</span>
+            <span class="loading-best-enjoyed">${t("Best enjoyed on desktop with sound", "建议在桌面端并开启声音体验")}</span>
           </div>
         </div>
         <p style="color:rgba(180,200,255,0.5);margin:16px 0 20px;font-size:0.9rem;">
-          Could not connect to server
+          ${t("Could not connect to server", "无法连接到服务器")}
         </p>
         <button id="btn-retry" style="padding:14px 32px;min-height:48px;border:none;border-radius:8px;
           background:linear-gradient(135deg,#3366dd,#2288ee);color:white;
           font-weight:600;font-size:0.9rem;cursor:pointer;font-family:inherit;">
-          Retry
+          ${t("Retry", "重试")}
         </button>
       </div>
     `;
@@ -2029,13 +2030,13 @@ export class Game {
         this.audioManager.resumeContextIfNeeded();
         this.audioManager.playSFX("camera", SELFIE_CAMERA_SFX_VOLUME);
         if (payload.kind === "hotspring") {
-          this.carpetSelfiePhotoUI?.showSelfie("/2D/capybara_hotspring.jpg", "Hot spring selfie");
+          this.carpetSelfiePhotoUI?.showSelfie("/2D/capybara_hotspring.jpg", t("Hot spring selfie", "温泉自拍"));
         } else if (payload.kind === "shrine") {
-          this.carpetSelfiePhotoUI?.showSelfie("/2D/capybara_shrine.jpg", "Shrine selfie");
+          this.carpetSelfiePhotoUI?.showSelfie("/2D/capybara_shrine.jpg", t("Shrine selfie", "神社自拍"));
         } else if (payload.kind === "mushroom") {
-          this.carpetSelfiePhotoUI?.showSelfie("/2D/capybara_mushroom_garden.jpg", "Mushroom garden selfie");
+          this.carpetSelfiePhotoUI?.showSelfie("/2D/capybara_mushroom_garden.jpg", t("Mushroom garden selfie", "蘑菇花园自拍"));
         } else if (payload.kind === "butterfly") {
-          this.carpetSelfiePhotoUI?.showSelfie("/2D/capybara_butterfly_garden.jpg", "Butterfly garden selfie");
+          this.carpetSelfiePhotoUI?.showSelfie("/2D/capybara_butterfly_garden.jpg", t("Butterfly garden selfie", "蝴蝶花园自拍"));
         }
         this.awardXP("selfie", LANDMARK_SELFIE_XP);
         this.progression.save();
@@ -2244,9 +2245,9 @@ export class Game {
   private static readonly MOON_CREDITS_FADE_OUT_MS = 4000;
 
   private static readonly MOON_EPITAPH_LINES = [
-    "You tried. You flew. It wasn't enough.",
-    "No one could stop it. Not even you.",
-    "The moon fell. You couldn't stop it.",
+    t("You tried. You flew. It wasn't enough.", "你尽力了，你飞翔了，但还不够。"),
+    t("No one could stop it. Not even you.", "没人能阻止它，连你也不能。"),
+    t("The moon fell. You couldn't stop it.", "月亮坠落了，你没能阻止它。"),
   ] as const;
 
   private static readonly MOON_EPITAPH_FADE_IN_MS = 2500;
@@ -2257,9 +2258,12 @@ export class Game {
   private static readonly ETERNAL_VICTORY_FADE_TO_BLACK_SEC = 4.2;
   private static readonly ETERNAL_VICTORY_HOLD_ON_BLACK_SEC = 6.5;
   private static readonly ETERNAL_VICTORY_END_TEXT = [
-    "Five braziers burn with Eternal Flame.",
-    "Their light together holds the moon in the sky, now and for good.",
-    "The world is saved.",
+    t("Five braziers burn with Eternal Flame.", "五座火盆燃起了永恒之火。"),
+    t(
+      "Their light together holds the moon in the sky, now and for good.",
+      "它们的光芒共同将月亮稳稳托在天空，从此长存。",
+    ),
+    t("The world is saved.", "世界得救了。"),
   ].join("\n\n");
   /** Matches fadeOut1 so other players see us fade out instead of freezing in place. */
   private static readonly MOON_NETWORK_VISIBILITY_FADE_SEC = 0.7;
@@ -2903,7 +2907,7 @@ export class Game {
       fontSize: this.mobile ? "0.85rem" : "0.95rem",
       zIndex: "300",
     });
-    toast.textContent = "Finding a new world...";
+    toast.textContent = t("Finding a new world...", "正在寻找新世界…");
     this.container.appendChild(toast);
 
     try {
@@ -5314,7 +5318,7 @@ export class Game {
       this.hud.root,
       !this.mobile,
       vehicleTutorialRows(vehicle),
-      vehicle === "boat" ? "First voyage" : "First flight",
+      vehicle === "boat" ? t("First voyage", "首次航行") : t("First flight", "首次飞行"),
     );
     this.vehicleTutorialOverallTimeout = setTimeout(() => {
       this.vehicleTutorialOverallTimeout = null;
@@ -5625,7 +5629,7 @@ export class Game {
 
     await this.transitionOverlay.fadeOut({
       durationSec: 1.5,
-      message: "You failed to protect the eternal flame.",
+      message: t("You failed to protect the eternal flame.", "你没能守护住永恒之火。"),
       holdAtFullSec: 2.0,
     });
 

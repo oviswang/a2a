@@ -1,5 +1,6 @@
 import type { Vehicle } from "@globefly/shared";
 import { CAMPSITE_HOME_ENABLED } from "../config/features";
+import { t } from "../i18n";
 
 /** Quest progress shown under the world name (driven from {@link HUD.setQuestTrackers}). */
 export type QuestTrackerState =
@@ -91,7 +92,8 @@ export class HUD {
   }
 
   private buildUI() {
-    this.el.innerHTML = `
+    this.el.innerHTML = t(
+      `
       <div class="hud-top">
         <div class="hud-world-name"></div>
         <div class="hud-player-count">1 player</div>
@@ -140,7 +142,58 @@ export class HUD {
           <span class="hud-xp-value">0 XP</span>
         </div>
       </div>
-    `;
+    `,
+      `
+      <div class="hud-top">
+        <div class="hud-world-name"></div>
+        <div class="hud-player-count">1 名玩家</div>
+        <div class="hud-quest-trackers" style="display:none" aria-label="任务进度"></div>
+      </div>
+      <div class="hud-top-right">
+        <button class="hud-campsite-btn" aria-label="前往营地">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2 3 20h18Z"/>
+            <path d="M9 20v-6l3-2 3 2v6"/>
+          </svg>
+        </button>
+        <button class="hud-fullscreen-btn" aria-label="进入全屏">
+          <svg class="hud-fullscreen-icon-enter" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="8 3 3 3 3 8"/>
+            <polyline points="16 3 21 3 21 8"/>
+            <polyline points="8 21 3 21 3 16"/>
+            <polyline points="16 21 21 21 21 16"/>
+          </svg>
+          <svg class="hud-fullscreen-icon-exit" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+            <polyline points="9 3 9 9 3 9"/>
+            <polyline points="15 3 15 9 21 9"/>
+            <polyline points="9 21 9 15 3 15"/>
+            <polyline points="15 21 15 15 21 15"/>
+          </svg>
+        </button>
+        <button class="hud-mute-btn" aria-label="切换音乐">
+          <svg class="hud-mute-icon-on" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+          </svg>
+          <svg class="hud-mute-icon-off" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <line x1="23" y1="9" x2="17" y2="15"/>
+            <line x1="17" y1="9" x2="23" y2="15"/>
+          </svg>
+        </button>
+      </div>
+      <div class="hud-xp-panel">
+        <span class="hud-xp-level">LVL 1</span>
+        <div class="hud-xp-bar-row">
+          <div class="hud-xp-bar">
+            <div class="hud-xp-bar-fill"></div>
+          </div>
+          <span class="hud-xp-value">0 XP</span>
+        </div>
+      </div>
+    `,
+    );
 
     this.worldNameEl = this.el.querySelector(".hud-world-name")!;
     this.playerCountEl = this.el.querySelector(".hud-player-count")!;
@@ -214,7 +267,10 @@ export class HUD {
   }
 
   setPlayerCount(count: number) {
-    this.playerCountEl.textContent = `${count} player${count !== 1 ? "s" : ""}`;
+    this.playerCountEl.textContent = t(
+      `${count} player${count !== 1 ? "s" : ""}`,
+      `${count} 名玩家`,
+    );
   }
 
   setPlayerCountVisible(v: boolean) {
@@ -253,8 +309,8 @@ export class HUD {
         parts.push(row(`${QT_ICONS.package}${frac(p.current, p.max)}`));
       }
       const raceLabel = state.raceCompleted
-        ? `<span class="hud-quest-done">Finish a race ✓</span>`
-        : `<span class="hud-quest-hint">Finish a race</span>`;
+        ? `<span class="hud-quest-done">${t("Finish a race ✓", "完成一场竞速 ✓")}</span>`
+        : `<span class="hud-quest-hint">${t("Finish a race", "完成一场竞速")}</span>`;
       parts.push(row(`${QT_ICONS.race}${raceLabel}`));
       this.questTrackersEl.innerHTML = parts.join("");
     } else if (state.vehicle === "carpet") {
@@ -262,12 +318,12 @@ export class HUD {
       const parts: string[] = [row(`${QT_ICONS.jellyfish}${frac(j.current, j.max)}`)];
       if (state.brazierHint) {
         parts.push(
-          row(`${QT_ICONS.brazier}<span class="hud-quest-hint">Figure out how to raise the braziers</span>`),
+          row(`${QT_ICONS.brazier}<span class="hud-quest-hint">${t("Figure out how to raise the braziers", "想办法升起火盆")}</span>`),
         );
       }
       const flameLabel = state.eternalFlameActive
-        ? `<span class="hud-quest-done">Defend the eternal flame ✓</span>`
-        : `<span class="hud-quest-hint">Defend the eternal flame</span>`;
+        ? `<span class="hud-quest-done">${t("Defend the eternal flame ✓", "守护永恒之火 ✓")}</span>`
+        : `<span class="hud-quest-hint">${t("Defend the eternal flame", "守护永恒之火")}</span>`;
       parts.push(row(`${QT_ICONS.flame}${flameLabel}`));
       this.questTrackersEl.innerHTML = parts.join("");
     } else {
@@ -297,7 +353,7 @@ export class HUD {
   showLevelUp(level: number) {
     const banner = document.createElement("div");
     banner.className = "hud-levelup";
-    banner.textContent = `LEVEL ${level}`;
+    banner.textContent = t(`LEVEL ${level}`, `升级 ${level}`);
     this.el.appendChild(banner);
 
     requestAnimationFrame(() => banner.classList.add("hud-levelup-animate"));
@@ -322,7 +378,7 @@ export class HUD {
     if (!this.flagCarrierWarningEl) {
       const el = document.createElement("div");
       el.className = "hud-flag-carrier-warning";
-      el.textContent = "Someone is circling you!";
+      el.textContent = t("Someone is circling you!", "有人正在你身边盘旋！");
       el.setAttribute("aria-live", "polite");
       el.style.display = "none";
       this.el.appendChild(el);
@@ -338,18 +394,18 @@ export class HUD {
 
   /** Shown when bird flock formation completes; matches XP popup line + float styling, below the flock ring. */
   showFlockFormationCelebrate() {
-    this.showCenteredToast("hud-flock-celebration", "You flew with the birds", 1600);
+    this.showCenteredToast("hud-flock-celebration", t("You flew with the birds", "你与群鸟齐飞"), 1600);
   }
 
   showRainbowCelebrate() {
-    this.showCenteredToast("hud-rainbow-celebration", "You went through the rainbow", 1600);
+    this.showCenteredToast("hud-rainbow-celebration", t("You went through the rainbow", "你穿越了彩虹"), 1600);
   }
 
   /** Gremlin King spawns after 7 sky gremlin takedowns in a session. */
   showGremlinKingWarning() {
     this.showCenteredToast(
       "hud-gremlin-king-warning",
-      "Your actions have angered the Gremlin King. He seeks vengeance.",
+      t("Your actions have angered the Gremlin King. He seeks vengeance.", "你的行为激怒了小妖精王。他要寻仇了。"),
       5200,
     );
   }
@@ -362,8 +418,8 @@ export class HUD {
     const el = document.createElement("div");
     el.className = "hud-ocean-mystery-toast";
     el.textContent = rewardAlreadyClaimed
-      ? "The ocean stirs, but you already carry its hidden flame."
-      : "You feel a large presence in the ocean…";
+      ? t("The ocean stirs, but you already carry its hidden flame.", "海洋泛起波澜，但你已携带着它隐藏的火焰。")
+      : t("You feel a large presence in the ocean…", "你感到海中有一个庞然存在……");
     el.setAttribute("role", "status");
     document.body.appendChild(el);
     requestAnimationFrame(() => el.classList.add("hud-ocean-mystery-toast--in"));
@@ -377,7 +433,7 @@ export class HUD {
   showLanternCelebrate(_count: number) {
     this.showCenteredToast(
       "hud-lantern-celebration",
-      "You flew amongst the lanterns",
+      t("You flew amongst the lanterns", "你在灯笼之间飞翔"),
       1600,
     );
   }
@@ -422,22 +478,22 @@ export class HUD {
   }
 
   showFireflyCelebrate() {
-    this.showCenteredToast("hud-firefly-celebration", "Fireflies!", 1400);
+    this.showCenteredToast("hud-firefly-celebration", t("Fireflies!", "萤火虫！"), 1400);
   }
 
   showVolcanoCelebrate() {
-    this.showCenteredToast("hud-volcano-celebration", "Extreme flying!", 1600);
+    this.showCenteredToast("hud-volcano-celebration", t("Extreme flying!", "极限飞行！"), 1600);
   }
 
   showBrazierLit() {
-    this.showCenteredToast("hud-brazier-celebration", "Brazier lit!", 2000);
+    this.showCenteredToast("hud-brazier-celebration", t("Brazier lit!", "火盆点燃了！"), 2000);
   }
 
   /** Brazier ignited with an eternal flame (permanent burn). */
   showBrazierEternalFlameLit() {
     this.showCenteredToast(
       "hud-brazier-eternal-celebration",
-      "Eternal flame — this brazier never goes out.",
+      t("Eternal flame — this brazier never goes out.", "永恒之火——这座火盆永不熄灭。"),
       2600,
     );
   }
@@ -446,21 +502,21 @@ export class HUD {
   showBrazierMoonSlowed() {
     this.showCenteredToast(
       "hud-brazier-moon-slowed",
-      "The braziers have slowed the moon — for a little while.",
+      t("The braziers have slowed the moon — for a little while.", "火盆暂缓了月亮的逼近——只能维持片刻。"),
       3200,
     );
   }
 
   /** After shield pause ends — moon approach advances again. */
   showBrazierMoonResumed() {
-    this.showCenteredToast("hud-brazier-moon-resumed", "The moon has resumed its movement.", 3200);
+    this.showCenteredToast("hud-brazier-moon-resumed", t("The moon has resumed its movement.", "月亮重新开始移动了。"), 3200);
   }
 
   /** Post-moonstone-union world-state toast. */
   showBrazierRiseQuest() {
     this.showCenteredToast(
       "hud-brazier-celebration",
-      "5 ancient braziers have risen around the world. Find them",
+      t("5 ancient braziers have risen around the world. Find them", "5 座古老的火盆已在世界各地升起。去找到它们"),
       4200,
     );
   }
@@ -469,7 +525,7 @@ export class HUD {
   showBrazierFizzleHint() {
     this.showCenteredToast(
       "hud-brazier-moon-resumed",
-      "The brazier flame has died out. There must be a way to keep it burning eternally.",
+      t("The brazier flame has died out. There must be a way to keep it burning eternally.", "火盆的火焰熄灭了。一定有办法让它永恒燃烧。"),
       5200,
     );
   }
@@ -484,7 +540,7 @@ export class HUD {
 
     const tracker = document.createElement("div");
     tracker.className = "hud-brazier-tracker";
-    tracker.setAttribute("aria-label", "Brazier status");
+    tracker.setAttribute("aria-label", t("Brazier status", "火盆状态"));
 
     this.brazierIconEls = [];
     this.brazierFillEls = [];
@@ -540,7 +596,7 @@ export class HUD {
 
   /** After 3–2–1 when the timed lap begins. */
   showRaceGoToast() {
-    this.showAmbientToast("GO!", 1400);
+    this.showAmbientToast(t("GO!", "出发！"), 1400);
   }
 
   /** Full-viewport falling confetti when the plane time trial is completed. */
@@ -623,7 +679,7 @@ export class HUD {
         border: "1px solid rgba(255,255,255,0.28)",
         textShadow: "none",
       } as CSSStyleDeclaration);
-      this.campsitePromptEl.textContent = "Press F to land at camp";
+      this.campsitePromptEl.textContent = t("Press F to land at camp", "按 F 降落到营地");
       this.el.appendChild(this.campsitePromptEl);
     } else if (!visible && this.campsitePromptEl) {
       this.campsitePromptEl.remove();
@@ -1832,7 +1888,7 @@ export class HUD {
     const isActive = visible && this.isFullscreenActive();
     this.fullscreenBtn.querySelector<SVGElement>(".hud-fullscreen-icon-enter")!.style.display = isActive ? "none" : "";
     this.fullscreenBtn.querySelector<SVGElement>(".hud-fullscreen-icon-exit")!.style.display = isActive ? "" : "none";
-    this.fullscreenBtn.setAttribute("aria-label", isActive ? "Exit fullscreen" : "Enter fullscreen");
+    this.fullscreenBtn.setAttribute("aria-label", isActive ? t("Exit fullscreen", "退出全屏") : t("Enter fullscreen", "进入全屏"));
     this.updateTopRightReservedWidth();
   }
 

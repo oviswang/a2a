@@ -1,22 +1,23 @@
 import type { LandmarkType } from "../game/Landmarks";
+import { t } from "../i18n";
 
 const TYPE_LABELS: Record<LandmarkType, string> = {
-  village: "Village",
-  peak: "Summit",
-  forest: "Forest",
-  coast: "Coast",
-  island: "Island",
-  lighthouse: "Lighthouse",
-  windmill: "Windmill",
-  observatory: "Observatory",
-  stonehenge: "Stone Circle",
-  shrine: "Shrine",
-  hotspring: "Hot Spring",
-  mushroom: "Mushroom Grove",
-  butterfly: "Butterfly Garden",
-  pyramid: "Pyramid",
-  statue: "Memorial Statue",
-  race_banner: "Race Start",
+  village: t("Village", "村庄"),
+  peak: t("Summit", "山峰"),
+  forest: t("Forest", "森林"),
+  coast: t("Coast", "海岸"),
+  island: t("Island", "岛屿"),
+  lighthouse: t("Lighthouse", "灯塔"),
+  windmill: t("Windmill", "风车"),
+  observatory: t("Observatory", "天文台"),
+  stonehenge: t("Stone Circle", "巨石阵"),
+  shrine: t("Shrine", "神社"),
+  hotspring: t("Hot Spring", "温泉"),
+  mushroom: t("Mushroom Grove", "蘑菇林"),
+  butterfly: t("Butterfly Garden", "蝴蝶园"),
+  pyramid: t("Pyramid", "金字塔"),
+  statue: t("Memorial Statue", "纪念雕像"),
+  race_banner: t("Race Start", "比赛起点"),
 };
 
 export class LandmarkHUD {

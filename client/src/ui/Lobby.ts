@@ -7,15 +7,16 @@ import {
 } from "../game/vehicleColors";
 import { EpilogueStatuePreview } from "./EpilogueStatuePreview";
 import { VehicleUnlockPreview } from "./VehicleUnlockPreview";
+import { t } from "../i18n";
 
 const VEHICLE_ORDER: Vehicle[] = ["plane", "carpet", "boat"];
 
 const LOCK_ICON_SRC = "/2D/icon_lock.svg";
 
 const SHORT_LABELS: Record<Vehicle, string> = {
-  plane: "Biplane",
-  boat: "Boat",
-  carpet: "Carpet",
+  plane: t("Biplane", "双翼机"),
+  boat: t("Boat", "小船"),
+  carpet: t("Carpet", "飞毯"),
 };
 
 /** Vehicle silhouettes from `client/public/2D/` (black art → inverted to match lobby `currentColor`). */
@@ -125,7 +126,7 @@ export class Lobby {
 
   private levelLine(level: number | null): string {
     const n = Math.max(1, level ?? 1);
-    return `Level ${n}`;
+    return t(`Level ${n}`, `等级 ${n}`);
   }
 
   private vehicleColorHexForSelectedVehicle(): string {
@@ -173,7 +174,7 @@ export class Lobby {
           role="radio"
           aria-checked="false"
           aria-disabled="true"
-          aria-label="Locked vehicle">
+          aria-label="${t("Locked vehicle", "未解锁的载具")}">
           <span class="lobby-vicon lobby-vicon--lock" aria-hidden="true"><img class="lobby-vicon-asset lobby-vicon-asset--lock" src="${LOCK_ICON_SRC}" alt="" width="28" height="28" decoding="async" /></span>
         </button>`;
       }
@@ -195,28 +196,28 @@ export class Lobby {
       <div class="lobby-overlay">
         <div class="lobby-header">
           <div class="lobby-title-block" style="--title-last-char-i:${LOBBY_TITLE_LAST_CHAR_I}">
-            <p class="lobby-tagline">A Cosy Exploration Game</p>
+            <p class="lobby-tagline">${t("A Cosy Exploration Game", "一款惬意的探索游戏")}</p>
             <h1 class="lobby-title" aria-label="${LOBBY_DISPLAY_TITLE}">${lobbyTitleLettersHtml()}</h1>
           </div>
           <div class="lobby-username">
             <div class="lobby-greeting-row">
-              <span class="lobby-greeting-hi">Hello, </span>
+              <span class="lobby-greeting-hi">${t("Hello, ", "你好，")}</span>
               <span class="lobby-name-wrap">
                 <span class="lobby-name" contenteditable="true" spellcheck="false">${this.options.playerName}</span>
-                <button type="button" class="lobby-edit-btn" aria-label="Edit name"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></button>
+                <button type="button" class="lobby-edit-btn" aria-label="${t("Edit name", "编辑名字")}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></button>
               </span>
             </div>
           </div>
           <div class="lobby-bar">
-            <div class="lobby-vehicles" role="radiogroup" aria-label="Vehicle">
+            <div class="lobby-vehicles" role="radiogroup" aria-label="${t("Vehicle", "载具")}">
               ${this.buildVehicleButtonsHTML()}
             </div>
-            <button type="button" class="lobby-fly" id="btn-fly"><span class="lobby-fly__label">GO!</span></button>
+            <button type="button" class="lobby-fly" id="btn-fly"><span class="lobby-fly__label">${t("GO!", "出发！")}</span></button>
           </div>
           <div class="lobby-freeplay-wrap" id="lobby-freeplay-wrap" hidden>
             <label class="lobby-freeplay-label">
               <input type="checkbox" id="lobby-freeplay-cb" />
-              <span class="lobby-freeplay-text">Freeplay mode — The moon will not fall on this run.</span>
+              <span class="lobby-freeplay-text">${t("Freeplay mode — The moon will not fall on this run.", "自由模式——本局月亮不会坠落。")}</span>
             </label>
           </div>
           <div class="lobby-save-feed" id="lobby-save-feed" hidden>
@@ -227,8 +228,8 @@ export class Lobby {
               </svg>
               <span class="lobby-save-feed-deco"></span>
             </div>
-            <ul class="lobby-save-feed-list" aria-label="Recent world saves"></ul>
-            <p class="lobby-save-feed-empty" hidden aria-live="polite">No one has saved the world yet.</p>
+            <ul class="lobby-save-feed-list" aria-label="${t("Recent world saves", "最近的拯救世界记录")}"></ul>
+            <p class="lobby-save-feed-empty" hidden aria-live="polite">${t("No one has saved the world yet.", "还没有人拯救过世界。")}</p>
           </div>
         </div>
         <div class="lobby-unlock-modal" id="lobby-unlock-modal" aria-hidden="true">
@@ -238,7 +239,7 @@ export class Lobby {
             <div class="lobby-unlock-preview-canvas lobby-unlock-preview-canvas--statue" id="lobby-unlock-preview-statue" aria-hidden="true"></div>
             <h2 class="lobby-unlock-title" id="lobby-unlock-title"></h2>
             <p class="lobby-unlock-body"></p>
-            <button type="button" class="lobby-unlock-ok" id="btn-unlock-ok">Got it</button>
+            <button type="button" class="lobby-unlock-ok" id="btn-unlock-ok">${t("Got it", "知道了")}</button>
           </div>
         </div>
         <a
@@ -246,12 +247,15 @@ export class Lobby {
           href="${VIBEJAM_PORTAL_BASE}"
           target="_blank"
           rel="noopener noreferrer"
-          aria-label="Vibe Jam 2026 — continue to the next game in the webring"
+          aria-label="${t("Vibe Jam 2026 — continue to the next game in the webring", "Vibe Jam 2026 — 继续前往环链中的下一个游戏")}"
         >
           <img src="${PORTAL_ICON_SRC}" alt="" width="26" height="26" decoding="async" />
-          <span class="lobby-vibejam-portal__label" aria-hidden="true">Vibejam Portal</span>
+          <span class="lobby-vibejam-portal__label" aria-hidden="true">${t("Vibejam Portal", "Vibejam 传送门")}</span>
         </a>
-        <p class="lobby-attribution">Built with <strong class="lobby-attribution__brand">Cursor</strong>, Music by <strong class="lobby-attribution__brand">Suno</strong>, SFX by <strong class="lobby-attribution__brand">ElevenLabs</strong>, 3D Assets by <strong class="lobby-attribution__brand">Tripo3D</strong></p>
+        <p class="lobby-attribution">${t(
+          `Built with <strong class="lobby-attribution__brand">Cursor</strong>, Music by <strong class="lobby-attribution__brand">Suno</strong>, SFX by <strong class="lobby-attribution__brand">ElevenLabs</strong>, 3D Assets by <strong class="lobby-attribution__brand">Tripo3D</strong>`,
+          `使用 <strong class="lobby-attribution__brand">Cursor</strong> 构建，音乐 <strong class="lobby-attribution__brand">Suno</strong>，音效 <strong class="lobby-attribution__brand">ElevenLabs</strong>，3D 素材 <strong class="lobby-attribution__brand">Tripo3D</strong>`,
+        )}</p>
       </div>
     `;
 
@@ -264,7 +268,7 @@ export class Lobby {
       nameEl.style.cursor = "pointer";
 
       const promptName = () => {
-        const result = window.prompt("Enter your name", this.options.playerName);
+        const result = window.prompt(t("Enter your name", "输入你的名字"), this.options.playerName);
         if (result !== null && result.trim().length > 0) {
           this.options.playerName = result.trim();
           nameEl.textContent = result.trim();
@@ -378,18 +382,22 @@ export class Lobby {
         }
         this.epilogueStatuePreview.show();
         unlockModal.classList.add("lobby-unlock-modal--epilogue");
-        unlockTitle.textContent = "The world is safe";
-        unlockBody.textContent =
-          "All five braziers now hold Eternal Flame. The moon will not fall on this world again. Whenever you play Tiny Skies, you can wander the sky without that last threat closing in. A memorial statue has been placed on the globe as a new landmark—fly by and see it. Thank you for flying for us all.";
+        unlockTitle.textContent = t("The world is safe", "世界安全了");
+        unlockBody.textContent = t(
+          "All five braziers now hold Eternal Flame. The moon will not fall on this world again. Whenever you play Tiny Skies, you can wander the sky without that last threat closing in. A memorial statue has been placed on the globe as a new landmark—fly by and see it. Thank you for flying for us all.",
+          "五座火盆如今都燃着永恒之火。月亮不会再坠落到这个世界上。无论何时你游玩 Tiny Skies，都可以在天空中自由翱翔，不必担心最后的威胁逼近。一座纪念雕像已作为新地标安置在地球上——飞过去看看吧。感谢你为我们大家而飞翔。",
+        );
       } else if (kind === "freeplay") {
         this.epilogueStatuePreview?.hide();
         this.unlockPreview?.hide();
         unlockStatuePreviewHost.style.display = "none";
         unlockPreviewHost.style.display = "none";
         unlockModal.classList.remove("lobby-unlock-modal--epilogue");
-        unlockTitle.textContent = "Freeplay mode unlocked";
-        unlockBody.textContent =
-          "Freeplay is unlocked — use it whenever you want to relax, explore, and have fun without the moon bearing down on you. Before you fly, tick Freeplay mode under the vehicle bar: the moon stays in the sky and your run won't end from the cataclysm.";
+        unlockTitle.textContent = t("Freeplay mode unlocked", "自由模式已解锁");
+        unlockBody.textContent = t(
+          "Freeplay is unlocked — use it whenever you want to relax, explore, and have fun without the moon bearing down on you. Before you fly, tick Freeplay mode under the vehicle bar: the moon stays in the sky and your run won't end from the cataclysm.",
+          "自由模式已解锁——当你想要放松、探索、尽情游玩而不被月亮逼近困扰时就用它。起飞前，在载具栏下方勾选自由模式：月亮会留在天上，你的这一局不会因灾变而结束。",
+        );
       } else {
         this.epilogueStatuePreview?.hide();
         unlockStatuePreviewHost.style.display = "none";
@@ -400,13 +408,17 @@ export class Lobby {
         }
         this.unlockPreview?.show(kind);
         if (kind === "carpet") {
-          unlockTitle.textContent = "Magic Carpet unlocked";
-          unlockBody.textContent =
-            "You reached level 2 on a run. Take to the skies as a sightseeing capybara on a magic carpet!";
+          unlockTitle.textContent = t("Magic Carpet unlocked", "魔法飞毯已解锁");
+          unlockBody.textContent = t(
+            "You reached level 2 on a run. Take to the skies as a sightseeing capybara on a magic carpet!",
+            "你在一局中达到了等级 2。化身一只乘着魔法飞毯观光的水豚，飞向天空吧！",
+          );
         } else {
-          unlockTitle.textContent = "Boat unlocked";
-          unlockBody.textContent =
-            "You reached level 4 with the biplane or carpet. The ocean is yours to sail.";
+          unlockTitle.textContent = t("Boat unlocked", "小船已解锁");
+          unlockBody.textContent = t(
+            "You reached level 4 with the biplane or carpet. The ocean is yours to sail.",
+            "你用双翼机或飞毯达到了等级 4。大海任你航行。",
+          );
         }
       }
       unlockModal.classList.add("open");
@@ -517,7 +529,7 @@ export class Lobby {
           ...entries.map((e) => {
             const li = document.createElement("li");
             li.className = "lobby-save-feed-item";
-            li.textContent = `${e.playerName} saved ${e.worldName}.`;
+            li.textContent = t(`${e.playerName} saved ${e.worldName}.`, `${e.playerName} 拯救了 ${e.worldName}。`);
             return li;
           }),
         );

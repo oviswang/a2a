@@ -1,5 +1,6 @@
 import { getNpcPortraitUrl } from "../game/PackageDialogue";
 import { CircularProgressRing } from "./CircularProgressRing";
+import { t } from "../i18n";
 
 /** Match phones / small tablets; CSS alone isn’t enough because showBubble sets inline `transform`. */
 function isNarrowDialogueViewport(): boolean {
@@ -63,7 +64,7 @@ export class PackageQuestHUD {
     this.bannerEl.className = "pkg-banner";
     const lead = document.createElement("span");
     lead.className = "pkg-banner-lead";
-    lead.textContent = "Deliver to ";
+    lead.textContent = t("Deliver to ", "送达至 ");
     this.bannerNameEl = document.createElement("span");
     this.bannerNameEl.className = "pkg-banner-name";
     this.bannerEl.appendChild(lead);

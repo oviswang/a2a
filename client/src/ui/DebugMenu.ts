@@ -1,3 +1,5 @@
+import { t } from "../i18n";
+
 export class DebugMenu {
   private container: HTMLElement;
   private menu: HTMLElement;
@@ -36,15 +38,15 @@ export class DebugMenu {
     this.menu.className = "debug-menu";
     this.menu.style.display = "none";
     this.menu.innerHTML = `
-      <h3>Debug Menu</h3>
-      <button id="debug-spawn-eternal-flame">Spawn Eternal Flame</button>
-      <button id="debug-enter-cosmic-void">Enter Cosmic Void (carpet)</button>
-      <button id="debug-exit-cosmic-void">Exit Cosmic Void</button>
-      <button id="debug-void-victory">Void Victory</button>
-      <button id="debug-shield-to-zero">Energy Shield → 0</button>
-      <button id="debug-light-all-braziers-eternal">Light all 5 braziers (Eternal)</button>
-      <button id="debug-moon-70">Moon progress → 70%</button>
-      <button id="debug-force-flag-spawn">Spawn Flag (Single Player)</button>
+      <h3>${t("Debug Menu", "调试菜单")}</h3>
+      <button id="debug-spawn-eternal-flame">${t("Spawn Eternal Flame", "生成永恒之火")}</button>
+      <button id="debug-enter-cosmic-void">${t("Enter Cosmic Void (carpet)", "进入宇宙虚空（飞毯）")}</button>
+      <button id="debug-exit-cosmic-void">${t("Exit Cosmic Void", "退出宇宙虚空")}</button>
+      <button id="debug-void-victory">${t("Void Victory", "虚空胜利")}</button>
+      <button id="debug-shield-to-zero">${t("Energy Shield → 0", "能量护盾 → 0")}</button>
+      <button id="debug-light-all-braziers-eternal">${t("Light all 5 braziers (Eternal)", "点燃全部 5 个火盆（永恒）")}</button>
+      <button id="debug-moon-70">${t("Moon progress → 70%", "月亮进度 → 70%")}</button>
+      <button id="debug-force-flag-spawn">${t("Spawn Flag (Single Player)", "生成旗帜（单人）")}</button>
     `;
 
     this.container.appendChild(this.menu);

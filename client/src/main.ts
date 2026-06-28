@@ -1,5 +1,6 @@
 import { Game } from "./game/Game";
 import { ProgressionManager } from "./game/ProgressionManager";
+import { enableWakeLock } from "./runtime/wakeLock";
 import { inject } from "@vercel/analytics";
 
 // Initialize Vercel Web Analytics
@@ -24,6 +25,9 @@ if (import.meta.env.DEV) {
 const app = document.getElementById("app")!;
 const game = new Game(app);
 game.start();
+
+// Keep the screen awake while the game is open (no dimming / screensaver).
+enableWakeLock();
 
 if (import.meta.hot) {
   import.meta.hot.accept();
