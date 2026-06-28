@@ -396,6 +396,8 @@ export class Game {
   private mobile = false;
   private cameraRig!: CameraRig;
   private remotePlanes!: RemotePlaneManager;
+  /** Co-present player names by socket id, for the A2A pairing picker. */
+  private readonly remotePlayerNames = new Map<string, string>();
   private paintballSystem: PaintballSystem | null = null;
   private flagSystem: FlagSystem | null = null;
   private speedLines!: SpeedLines;
@@ -893,6 +895,7 @@ export class Game {
         if (this.worldSlug) void this.companion?.inviteFriends(this.worldSlug, this.worldConfig?.name ?? "");
       },
       onJoinWorld: (slug) => this.joinWorldBySlug(slug),
+      onPairNearby: () => this.initiateCompanionPairing(),
     });
 
     void manager.connect().then((ok) => {
@@ -944,6 +947,71 @@ export class Game {
   private joinWorldBySlug(slug: string) {
     if (!/^[A-Za-z0-9_-]{6,16}$/.test(slug)) return;
     window.location.href = `${window.location.origin}/?w=${encodeURIComponent(slug)}`;
+  }
+
+  /** A2A (Phase 4): ask a co-present player to pair companions. Picks the first
+   *  known co-present player. Requires this player's key to hold `represent:pair`. */
+  private initiateCompanionPairing() {
+    if (!this.companion || !this.socketClient) return;
+    const target = this.remotePlayerNames.entries().next().value as [string, string] | undefined;
+    if (!target) {
+      this.hud.showAmbientToast(t("No one else is here to pair with.", "这里还没有其他玩家可以配对。"));
+      return;
+    }
+    this.socketClient.emitPairRequest(target[0]);
+    this.hud.showAmbientToast(
+      t(`Pairing request sent to ${target[1]}…`, `已向 ${target[1]} 发送配对请求…`),
+    );
+  }
+
+  /** Another player wants to pair companions with us. Ask for explicit consent;
+   *  on accept we hand back our OWN token (consent + proof) so they can pair. */
+  private handlePairIncoming(fromId: string, fromName: string) {
+    if (!this.socketClient) return;
+    const myToken = ProgressionManager.loadCompanionToken();
+    if (!myToken) {
+      this.socketClient.emitPairRespond(fromId, false);
+      return;
+    }
+    const ok = window.confirm(
+      t(
+        `${fromName} wants to make your Pouchy companions friends (A2A). Accepting shares a one-time pairing handshake with them so the two companions can message each other. Only accept if you trust this player. Continue?`,
+        `${fromName} 想让你们的 Pouchy 伙伴结为好友（A2A）。接受会与对方进行一次性配对握手，让两个伙伴能互相发消息。仅在你信任该玩家时接受。是否继续？`,
+      ),
+    );
+    if (!ok) {
+      this.socketClient.emitPairRespond(fromId, false);
+      return;
+    }
+    this.socketClient.emitPairRespond(
+      fromId,
+      true,
+      myToken,
+      ProgressionManager.loadOrCreateVisitorId(),
+    );
+    this.hud.showAmbientToast(t("Pairing accepted.", "已接受配对。"));
+  }
+
+  /** The other player answered our pairing request. On accept, run the
+   *  representative pairing with their token + stable visitor id. */
+  private async handlePairAnswered(ev: {
+    fromId: string;
+    fromName: string;
+    accept: boolean;
+    visitorToken?: string;
+    visitorId?: string;
+  }) {
+    if (!ev.accept || !ev.visitorToken || !ev.visitorId) {
+      this.hud.showAmbientToast(t("Pairing was declined.", "对方拒绝了配对。"));
+      return;
+    }
+    if (!this.companion) return;
+    const pairId = await this.companion.pairWithVisitor(ev.visitorToken, ev.visitorId, ev.fromName);
+    this.hud.showAmbientToast(
+      pairId
+        ? t(`Companions paired with ${ev.fromName}! 🤝`, `已与 ${ev.fromName} 的伙伴结为好友！🤝`)
+        : t("Pairing failed (check your key's permissions).", "配对失败（请检查密钥权限）。"),
+    );
   }
 
   private mountLobby(opts?: { deferUnlockModalsUntilMenuReveal?: boolean }) {
@@ -2965,11 +3033,14 @@ export class Game {
 
     this.socketClient.onPlayerJoined((player) => {
       this.remotePlanes.addPlayer(player);
+      this.remotePlayerNames.set(player.id, player.name);
+      this.companion?.emitMoment("game.event.met_player", { name: player.name }, { salience: 0.4 });
       this.hud.setPlayerCount(this.remotePlanes.count + 1);
     });
 
     this.socketClient.onPlayerLeft((playerId) => {
       this.remotePlanes.removePlayer(playerId);
+      this.remotePlayerNames.delete(playerId);
       this.hud.setPlayerCount(this.remotePlanes.count + 1);
     });
 
@@ -2980,9 +3051,14 @@ export class Game {
     this.socketClient.onWorldState((players) => {
       for (const p of players) {
         this.remotePlanes.addPlayer(p);
+        this.remotePlayerNames.set(p.id, p.name);
       }
       this.hud.setPlayerCount(this.remotePlanes.count + 1);
     });
+
+    // A2A companion pairing relay (Phase 4).
+    this.socketClient.onPairIncoming((ev) => this.handlePairIncoming(ev.fromId, ev.fromName));
+    this.socketClient.onPairAnswered((ev) => this.handlePairAnswered(ev));
 
     this.socketClient.onWorldFull(() => {
       this.handleWorldFull();

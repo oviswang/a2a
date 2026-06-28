@@ -212,6 +212,25 @@ export interface ServerToClientEvents {
   "flag:dropped": (ev: FlagDroppedEvent) => void;
   "flag:cleared": () => void;
   "flag:sync": (ev: FlagSyncEvent) => void;
+  /** A2A companion pairing (relayed between co-present players). */
+  "pair:incoming": (ev: PairRequestEvent) => void;
+  "pair:answered": (ev: PairAnswerEvent) => void;
+}
+
+/** A2A: player `fromId` asks to pair companions with the recipient. */
+export interface PairRequestEvent {
+  fromId: string;
+  fromName: string;
+}
+/** A2A: the recipient's answer, relayed back to the requester. On accept it
+ *  carries the responder's OWN Pouchy token (their consent + proof) plus a
+ *  stable visitor id, so the requester can run the representative pairVisitor. */
+export interface PairAnswerEvent {
+  fromId: string;
+  fromName: string;
+  accept: boolean;
+  visitorToken?: string;
+  visitorId?: string;
 }
 
 export interface ClientToServerEvents {
@@ -227,4 +246,9 @@ export interface ClientToServerEvents {
   /** True while the local player is in a non-world scene where flag play is suspended. */
   "flag:setSuppressed": (suppressed: boolean) => void;
   "debug:forceFlagSpawn": () => void;
+  /** A2A companion pairing: ask `toId` to pair (relayed, same room only). */
+  "pair:request": (toId: string) => void;
+  /** A2A companion pairing: answer a request from `toId`. `visitorToken` is the
+   *  responder's own Pouchy PAT, sent ONLY on accept as consent + proof. */
+  "pair:respond": (toId: string, accept: boolean, visitorToken?: string, visitorId?: string) => void;
 }

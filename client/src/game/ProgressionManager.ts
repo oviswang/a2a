@@ -284,6 +284,21 @@ export class ProgressionManager {
     try { localStorage.removeItem(COMPANION_TOKEN_KEY); } catch {}
   }
 
+  /** Stable, anonymous per-browser id used as the A2A pairing `visitorId`
+   *  (never the secret token). Created on first use. */
+  static loadOrCreateVisitorId(): string {
+    try {
+      let id = localStorage.getItem("globefly_visitor_id");
+      if (!id) {
+        id = "v_" + Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 8);
+        localStorage.setItem("globefly_visitor_id", id);
+      }
+      return id;
+    } catch {
+      return "v_anon";
+    }
+  }
+
   static loadPlayerWorldState(): SavedPlayerWorldState {
     try {
       const raw = localStorage.getItem(PLAYER_WORLD_STATE_KEY);

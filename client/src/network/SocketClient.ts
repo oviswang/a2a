@@ -7,6 +7,8 @@ import type {
   FlagSpawnedEvent,
   FlagStolenEvent,
   FlagSyncEvent,
+  PairRequestEvent,
+  PairAnswerEvent,
   PaintballFiredEvent,
   PaintballHitEvent,
   PaintballUpgradeFlags,
@@ -127,6 +129,20 @@ export class SocketClient {
 
   onFlagSync(cb: (ev: FlagSyncEvent) => void) {
     this.socket.on("flag:sync", cb);
+  }
+
+  // ── A2A companion pairing ──
+  emitPairRequest(toId: string) {
+    this.socket.emit("pair:request", toId);
+  }
+  emitPairRespond(toId: string, accept: boolean, visitorToken?: string, visitorId?: string) {
+    this.socket.emit("pair:respond", toId, accept, visitorToken, visitorId);
+  }
+  onPairIncoming(cb: (ev: PairRequestEvent) => void) {
+    this.socket.on("pair:incoming", cb);
+  }
+  onPairAnswered(cb: (ev: PairAnswerEvent) => void) {
+    this.socket.on("pair:answered", cb);
   }
 
   disconnect() {

@@ -136,6 +136,11 @@ export class Room {
     return this.players.size >= MAX_PLAYERS;
   }
 
+  /** A co-present player by socket id (for same-room A2A pairing relay). */
+  getPlayer(id: string): ConnectedPlayer | undefined {
+    return this.players.get(id);
+  }
+
   private broadcastFlagSpawned(ev: FlagSpawnedEvent) {
     for (const [, p] of this.players) {
       p.socket.emit("flag:spawned", ev);
