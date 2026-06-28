@@ -596,93 +596,93 @@ export function pickObservatoryGreeting(
 /* ── Stonehenge whisper lines ─────────────────────────────────────── */
 
 const STONEHENGE_CALM = [
-  "The stone circle hums. You hear a whisper... \"The stones remember when the sky was whole.\"",
-  "Standing inside the stone circle, a vision stirs... lanterns floating upward, each one a prayer unanswered.",
-  "Something is carved into the stone circle: \"When the moon swells, keep your eyes on the horizon.\"",
-  "The stone circle resonates. You hear a whisper... \"They built this circle to watch the sky. They stopped watching.\"",
-  "The shadows cast by the stone circle always point toward the moon, no matter the hour.",
-  "A clear carving names the moonstones: two halves of one ring, split across the world until someone joins them again.",
-  "Someone scratched into the stone: gremlins in the clouds — small trouble. The moon is the big trouble.",
+  t("The stone circle hums. You hear a whisper... \"The stones remember when the sky was whole.\"", "石环在低鸣。你听见一声低语……「这些石头记得天空完好如初的时候。」"),
+  t("Standing inside the stone circle, a vision stirs... lanterns floating upward, each one a prayer unanswered.", "站在石环之中，一个幻象浮现……灯笼向上飘升，每一盏都是一个未被回应的祈愿。"),
+  t("Something is carved into the stone circle: \"When the moon swells, keep your eyes on the horizon.\"", "石环上刻着什么：「当月亮膨胀时，把目光投向地平线。」"),
+  t("The stone circle resonates. You hear a whisper... \"They built this circle to watch the sky. They stopped watching.\"", "石环在共鸣。你听见一声低语……「他们建造这石环是为了守望天空。他们停止了守望。」"),
+  t("The shadows cast by the stone circle always point toward the moon, no matter the hour.", "无论何时，石环投下的影子总是指向月亮。"),
+  t("A clear carving names the moonstones: two halves of one ring, split across the world until someone joins them again.", "一段清晰的刻文道出了月光石之名：同一枚指环的两块，分散在世界各处，直到有人将它们重新合一。"),
+  t("Someone scratched into the stone: gremlins in the clouds — small trouble. The moon is the big trouble.", "有人在石上刻道：云中的小妖精——小麻烦。月亮才是大麻烦。"),
 ];
 
 const STONEHENGE_UNEASY = [
-  "The stone circle leans as if drawn toward something. A vision stirs... the moon, closer than it should be.",
-  "You hear a whisper from the stone circle... \"Count the stars between the pillars. There are fewer than before.\"",
-  "The ground around the stone circle vibrates faintly. An inscription reads: \"The circle holds as long as the sky does.\"",
-  "A vision ripples through the stone circle... a constellation rearranging itself. One star missing.",
-  "You hear a whisper from the stones... \"Do not mistake warning for rescue.\"",
-  "Words appear in the dust: light the five braziers with eternal flame — real eternal flame — and the moon can be stopped for good.",
-  "The stone remembers gremlins swarming like gnats. The Gremlin King, it says, was always a cousin to the moon's fall.",
+  t("The stone circle leans as if drawn toward something. A vision stirs... the moon, closer than it should be.", "石环倾斜着，仿佛被什么牵引。一个幻象浮现……月亮，近得超乎寻常。"),
+  t("You hear a whisper from the stone circle... \"Count the stars between the pillars. There are fewer than before.\"", "你听见石环传来一声低语……「数数石柱之间的星星。比从前少了。」"),
+  t("The ground around the stone circle vibrates faintly. An inscription reads: \"The circle holds as long as the sky does.\"", "石环周围的地面微微震动。一段刻文写道：「天空不塌，石环不倒。」"),
+  t("A vision ripples through the stone circle... a constellation rearranging itself. One star missing.", "一个幻象在石环中荡漾……一个星座正在重新排列。缺了一颗星。"),
+  t("You hear a whisper from the stones... \"Do not mistake warning for rescue.\"", "你听见石头传来一声低语……「别把警告误认作救赎。」"),
+  t("Words appear in the dust: light the five braziers with eternal flame — real eternal flame — and the moon can be stopped for good.", "尘土中浮现文字：用永恒之火点燃五座火盆——真正的永恒之火——月亮便能被永远阻止。"),
+  t("The stone remembers gremlins swarming like gnats. The Gremlin King, it says, was always a cousin to the moon's fall.", "石头记得小妖精像蚊蚋般成群。它说，妖精王一直都是月亮坠落的同宗。"),
 ];
 
 const STONEHENGE_DREAD = [
-  "You hear a whisper from the stone circle... \"The last keeper saw it coming. Seeing changed nothing.\"",
-  "A vision tears through the stone circle... the moon filling the entire sky. Someone screaming. Then silence.",
-  "The air inside the stone circle is wrong. An inscription reads: \"Do not look up. Do not look up.\"",
-  "You hear a whisper from the stones... \"Run. There is nowhere to run. Fly then. Fly as far as you can.\"",
-  "A vision stirs inside the stone circle... prayers rising into the dark. The moon keeps coming.",
-  "The carving shouts: find five braziers, keep the eternal flames burning — not the cheap kind. The Gremlin King kind.",
-  "The stones say: moonstone first, braziers second. The world is a machine with missing instructions.",
+  t("You hear a whisper from the stone circle... \"The last keeper saw it coming. Seeing changed nothing.\"", "你听见石环传来一声低语……「最后一位守护者预见了它的到来。预见改变不了什么。」"),
+  t("A vision tears through the stone circle... the moon filling the entire sky. Someone screaming. Then silence.", "一个幻象撕裂了石环……月亮填满了整片天空。有人在尖叫。然后归于死寂。"),
+  t("The air inside the stone circle is wrong. An inscription reads: \"Do not look up. Do not look up.\"", "石环内的空气不对劲。一段刻文写道：「不要抬头。不要抬头。」"),
+  t("You hear a whisper from the stones... \"Run. There is nowhere to run. Fly then. Fly as far as you can.\"", "你听见石头传来一声低语……「逃吧。无处可逃。那就飞吧。能飞多远飞多远。」"),
+  t("A vision stirs inside the stone circle... prayers rising into the dark. The moon keeps coming.", "一个幻象在石环中浮现……祈祷声升入黑暗。月亮仍在逼近。"),
+  t("The carving shouts: find five braziers, keep the eternal flames burning — not the cheap kind. The Gremlin King kind.", "刻文在呐喊：找到五座火盆，让永恒之火燃烧——不是廉价的那种。是妖精王的那种。"),
+  t("The stones say: moonstone first, braziers second. The world is a machine with missing instructions.", "石头说：先月光石，后火盆。这世界是一台缺了说明书的机器。"),
 ];
 
 const STONEHENGE_PANIC = [
-  "You hear a whisper from the stone circle... \"Too late. Too late. Too--\"",
-  "The stone circle is cracking. An inscription reads: \"We tried. We are sorry.\"",
-  "A vision tears open inside the stone circle... the moon above the globe, close enough to touch. Then nothing.",
-  "You hear a whisper from the stones... \"Fly. Just fly. Don't stop.\"",
-  "Even the gremlins have gone quiet. And the moonstone halves feel hot through the ground.",
+  t("You hear a whisper from the stone circle... \"Too late. Too late. Too--\"", "你听见石环传来一声低语……「太迟了。太迟了。太——」"),
+  t("The stone circle is cracking. An inscription reads: \"We tried. We are sorry.\"", "石环正在崩裂。一段刻文写道：「我们尽力了。我们很抱歉。」"),
+  t("A vision tears open inside the stone circle... the moon above the globe, close enough to touch. Then nothing.", "一个幻象在石环中撕裂开来……月亮悬于大地之上，近得触手可及。然后什么都没有了。"),
+  t("You hear a whisper from the stones... \"Fly. Just fly. Don't stop.\"", "你听见石头传来一声低语……「飞吧。只管飞。别停下。」"),
+  t("Even the gremlins have gone quiet. And the moonstone halves feel hot through the ground.", "连小妖精都安静了。隔着地面都能感到月光石两块碎片的灼热。"),
 ];
 
 /* ── Brazier whisper lines ───────────────────────────────────────── */
 
 /** Approaching an extinguished brazier — ancient, dormant. */
 const BRAZIER_UNLIT = [
-  "The brazier's iron is cold. An inscription reads: \"Five fires hold the veil. Let them go dark and the sky opens.\"",
-  "The wood inside has turned to stone. Carved into the bowl: \"Do not let it go dark.\"",
-  "Lichen covers the metal. Beneath it: \"Five flames, one shield. Against what comes from beyond the stars.\"",
-  "A voice, not quite heard: \"We placed these five across the world. We did not tell anyone why. We should have.\"",
-  "The brazier has not burned in a very long time. The air around it smells faintly of something that has no name.",
-  "A newer plaque, in plain letters: \"Gremlins in the sky are a nuisance. The moon is the war. Light these five.\"",
-  "Someone scratched: eternal flame — the blue kind from the Gremlin King — never goes out. Use it here.",
+  t("The brazier's iron is cold. An inscription reads: \"Five fires hold the veil. Let them go dark and the sky opens.\"", "火盆的铁身冰冷。一段刻文写道：「五团火维系着帷幕。任它们熄灭，天空便会洞开。」"),
+  t("The wood inside has turned to stone. Carved into the bowl: \"Do not let it go dark.\"", "里面的木柴已化作石头。盆内刻着：「不要让它熄灭。」"),
+  t("Lichen covers the metal. Beneath it: \"Five flames, one shield. Against what comes from beyond the stars.\"", "地衣覆盖着金属。其下刻着：「五团火焰，一道护盾。抵御来自群星之外的东西。」"),
+  t("A voice, not quite heard: \"We placed these five across the world. We did not tell anyone why. We should have.\"", "一个似有若无的声音：「我们把这五座布置在世界各处。我们没告诉任何人缘由。我们本该说的。」"),
+  t("The brazier has not burned in a very long time. The air around it smells faintly of something that has no name.", "这火盆已许久未曾燃烧。它周围的空气隐隐散发着某种无以名状之物的气味。"),
+  t("A newer plaque, in plain letters: \"Gremlins in the sky are a nuisance. The moon is the war. Light these five.\"", "一块较新的牌匾，朴素地写着：「天上的小妖精只是滋扰。月亮才是战争。点燃这五座。」"),
+  t("Someone scratched: eternal flame — the blue kind from the Gremlin King — never goes out. Use it here.", "有人刻道：永恒之火——来自妖精王的那种蓝色火焰——永不熄灭。在这里用它。"),
 ];
 
 /** Approaching a lit brazier when only 1–2 total are burning — the network stirs. */
 const BRAZIER_LIT_FEW = [
-  "The brazier burns. Something in the flame whispers... \"One down. Four to find. The veil thins slower now.\"",
-  "The flame casts no shadow. An inscription glows: \"Light all five before it arrives.\"",
-  "You hear something in the crackling... \"They are watching. Whatever built the veil watches you light it back.\"",
-  "The flame burns upward even when the wind says otherwise. The other four are out there, cold and waiting.",
-  "Standing near the fire, you feel a warmth that isn't entirely from the flame. The brazier hums.",
-  "This fire is ordinary — it will go out. An eternal flame from a Gremlin King would stay forever.",
-  "Gremlins hate the cold braziers. Good luck getting gremlins to help, though.",
+  t("The brazier burns. Something in the flame whispers... \"One down. Four to find. The veil thins slower now.\"", "火盆燃烧着。火焰中有什么在低语……「一座点亮了。还有四座要找。帷幕变薄得慢些了。」"),
+  t("The flame casts no shadow. An inscription glows: \"Light all five before it arrives.\"", "火焰不投下影子。一段刻文发出微光：「在它到来之前点燃全部五座。」"),
+  t("You hear something in the crackling... \"They are watching. Whatever built the veil watches you light it back.\"", "你在噼啪声中听见了什么……「它们在注视。无论是谁建起了帷幕，都在看你将它重新点燃。」"),
+  t("The flame burns upward even when the wind says otherwise. The other four are out there, cold and waiting.", "即便风向相反，火焰仍向上燃烧。另外四座就在外面，冰冷地等待着。"),
+  t("Standing near the fire, you feel a warmth that isn't entirely from the flame. The brazier hums.", "站在火旁，你感到一股暖意，并不全然来自火焰。火盆在低鸣。"),
+  t("This fire is ordinary — it will go out. An eternal flame from a Gremlin King would stay forever.", "这火很普通——它会熄灭。来自妖精王的永恒之火则会永远燃烧。"),
+  t("Gremlins hate the cold braziers. Good luck getting gremlins to help, though.", "小妖精讨厌冰冷的火盆。不过，想让小妖精帮忙，祝你好运。"),
 ];
 
 /** Approaching any brazier when 3–4 are burning — urgency rises. */
 const BRAZIER_LIT_MANY = [
-  "The air feels charged. An inscription: \"When four burn, the fifth must follow. The interval matters.\"",
-  "The flame leans toward the sky, as if pointing at something above.",
-  "The brazier flickers faster as you approach. You hear, barely: \"Almost. Almost. Do not stop now.\"",
-  "You sense the other fires from here — a thread of heat connecting them across the world. One gap remains.",
-  "Half-buried inscription: \"The ancients lit all five in one hour. They are not here to say what happened next.\"",
-  "Three or four lit — keep going. If you have eternal flame left, save it for the last braziers.",
-  "The moon feels closer when most braziers burn. Gremlins get louder too. Coincidence.",
+  t("The air feels charged. An inscription: \"When four burn, the fifth must follow. The interval matters.\"", "空气中弥漫着张力。一段刻文：「四座燃起时，第五座必须紧随。间隔至关重要。」"),
+  t("The flame leans toward the sky, as if pointing at something above.", "火焰朝天空倾斜，仿佛在指向上方的某物。"),
+  t("The brazier flickers faster as you approach. You hear, barely: \"Almost. Almost. Do not stop now.\"", "你靠近时，火盆闪烁得更快。你勉强听见：「快了。快了。现在别停下。」"),
+  t("You sense the other fires from here — a thread of heat connecting them across the world. One gap remains.", "你在此处感知到其他几团火——一缕热流跨越世界将它们相连。还剩一处缺口。"),
+  t("Half-buried inscription: \"The ancients lit all five in one hour. They are not here to say what happened next.\"", "半埋的刻文：「先民在一小时内点燃了全部五座。他们没能留下来诉说之后发生了什么。」"),
+  t("Three or four lit — keep going. If you have eternal flame left, save it for the last braziers.", "点亮了三四座——继续。如果你还剩永恒之火，留给最后几座火盆。"),
+  t("The moon feels closer when most braziers burn. Gremlins get louder too. Coincidence.", "大多数火盆燃起时，月亮仿佛更近了。小妖精也更吵了。巧合罢了。"),
 ];
 
 /** Approaching any brazier when all 5 are burning — the shield holds. */
 const BRAZIER_ALL_LIT = [
-  "All five burn. The air above the globe feels heavier. Like something is pressing against it. Or pressing away.",
-  "The flame is still. The inscription reads: \"You have done what we could not. We do not know if it will be enough.\"",
-  "A hum runs through the ground — faint, global, old. The veil holds. For now.",
-  "\"The shield is not a wall — it is a warning. Whatever it keeps out knows it is there.\"",
-  "The flame burns cold. An inscription glows: \"Five fires, one breath. Hold it.\"",
-  "All five braziers are lit — the moon should slow down. If you used eternal flame on each, it lasts forever.",
+  t("All five burn. The air above the globe feels heavier. Like something is pressing against it. Or pressing away.", "五座全都燃起。大地之上的空气变得更沉。仿佛有什么在压向它。或是在向外推。"),
+  t("The flame is still. The inscription reads: \"You have done what we could not. We do not know if it will be enough.\"", "火焰静止不动。刻文写道：「你做到了我们未能做到的事。我们不知道这是否足够。」"),
+  t("A hum runs through the ground — faint, global, old. The veil holds. For now.", "一阵低鸣贯穿大地——微弱、遍及全球、古老。帷幕守住了。暂时而已。"),
+  t("\"The shield is not a wall — it is a warning. Whatever it keeps out knows it is there.\"", "「这护盾不是一堵墙——它是一个警告。被它挡在外面的东西知道它的存在。」"),
+  t("The flame burns cold. An inscription glows: \"Five fires, one breath. Hold it.\"", "火焰冷冷燃烧。一段刻文发出微光：「五团火，一口气。屏住它。」"),
+  t("All five braziers are lit — the moon should slow down. If you used eternal flame on each, it lasts forever.", "五座火盆全点亮了——月亮应当会减速。若你在每座都用了永恒之火，它便永不熄灭。"),
 ];
 
 /** All five burning with eternal flame; moon stopped for good. */
 const BRAZIER_ALL_ETERNAL_VICTORY = [
-  "Every flame is an eternal flame. The moon has stopped. The inscription says: the world is saved.",
-  "Five blue eternal flames. The Gremlin King would be proud. The moon hangs frozen in the sky.",
-  "You did it. Eternal flame on all five braziers. The moon won't fall again.",
+  t("Every flame is an eternal flame. The moon has stopped. The inscription says: the world is saved.", "每一团火都是永恒之火。月亮停住了。刻文写道：世界得救了。"),
+  t("Five blue eternal flames. The Gremlin King would be proud. The moon hangs frozen in the sky.", "五团蓝色的永恒之火。妖精王会感到骄傲。月亮凝固在天空中。"),
+  t("You did it. Eternal flame on all five braziers. The moon won't fall again.", "你做到了。五座火盆都燃着永恒之火。月亮不会再坠落了。"),
 ];
 
 /** Context from Game (save + runtime brazier state). */
@@ -719,10 +719,10 @@ export function pickBrazierWhisper(
     litCount < 5 &&
     Math.random() < 0.22
   ) {
-    return "You carry an eternal flame from the Gremlin King. Light a brazier with it — it never burns out.";
+    return t("You carry an eternal flame from the Gremlin King. Light a brazier with it — it never burns out.", "你带着一团来自妖精王的永恒之火。用它点燃一座火盆——它永不熄灭。");
   }
   if (context?.eternalFlameInInventory && litCount < 5 && Math.random() < 0.18) {
-    return "You have an eternal flame in your pack. Use it at a brazier — the flame stays forever.";
+    return t("You have an eternal flame in your pack. Use it at a brazier — the flame stays forever.", "你的包里有一团永恒之火。在火盆处使用它——这火焰会永远燃烧。");
   }
 
   let pool: readonly string[];
