@@ -113,6 +113,10 @@ interface LobbyOptions {
   deferUnlockModalsUntilMenuReveal?: boolean;
   onPlay: (vehicle: Vehicle, options?: PlayOptions) => void;
   onNameChange?: (name: string) => void;
+  /** Current Pouchy companion token (masked in the UI), or null if not connected. */
+  companionToken?: string | null;
+  /** Player pasted / cleared their Pouchy companion token (opt-in AI co-pilot). */
+  onCompanionTokenChange?: (token: string | null) => void;
 }
 
 export class Lobby {
@@ -228,6 +232,10 @@ export class Lobby {
                 <button type="button" class="lobby-edit-btn" aria-label="${t("Edit name", "编辑名字")}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></button>
               </span>
             </div>
+            <div class="lobby-companion-row">
+              <button type="button" class="lobby-companion-btn" id="lobby-companion-btn"></button>
+              <a class="lobby-companion-help" href="https://www.pouchy.ai/sdk" target="_blank" rel="noopener noreferrer">${t("What's this?", "这是什么？")}</a>
+            </div>
           </div>
           <div class="lobby-bar">
             <div class="lobby-vehicles" role="radiogroup" aria-label="${t("Vehicle", "载具")}">
@@ -318,6 +326,42 @@ export class Lobby {
         this.updateVibejamPortalLink();
       });
     }
+
+    // ── Pouchy companion token (opt-in AI co-pilot) ──
+    const companionBtn = this.el.querySelector("#lobby-companion-btn") as HTMLButtonElement;
+    const refreshCompanionBtn = () => {
+      const tok = this.options.companionToken ?? null;
+      if (tok) {
+        companionBtn.textContent = t(
+          `🤖 Companion connected (pchy_••${tok.slice(-4)})`,
+          `🤖 AI 伙伴已连接（pchy_••${tok.slice(-4)}）`,
+        );
+        companionBtn.classList.add("connected");
+      } else {
+        companionBtn.textContent = t("🤖 Connect your Pouchy companion", "🤖 连接你的 Pouchy AI 伙伴");
+        companionBtn.classList.remove("connected");
+      }
+    };
+    refreshCompanionBtn();
+    companionBtn.addEventListener("click", () => {
+      const current = this.options.companionToken ?? "";
+      const entered = window.prompt(
+        t(
+          "Paste your Pouchy access key (pchy_…). Get it at pouchy.ai → Wallet → Companion access keys. Leave blank to disconnect.",
+          "粘贴你的 Pouchy 访问密钥（pchy_…）。在 pouchy.ai → 钱包 → 伴侣接入密钥 获取。留空则断开。",
+        ),
+        current,
+      );
+      if (entered === null) return; // cancelled
+      const trimmed = entered.trim();
+      if (trimmed && !trimmed.startsWith("pchy_")) {
+        window.alert(t("That doesn't look like a pchy_ key.", "这看起来不是 pchy_ 密钥。"));
+        return;
+      }
+      this.options.companionToken = trimmed || null;
+      this.options.onCompanionTokenChange?.(this.options.companionToken);
+      refreshCompanionBtn();
+    });
 
     const flyBtn = this.el.querySelector("#btn-fly") as HTMLButtonElement;
     const vehiclesEl = this.el.querySelector(".lobby-vehicles") as HTMLElement;
@@ -872,6 +916,18 @@ export class Lobby {
         flex-wrap: nowrap;
         max-width: calc(100% - 48px);
       }
+      .lobby-companion-row {
+        display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+        margin-top: 10px;
+      }
+      .lobby-companion-btn {
+        background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14);
+        color: rgba(255,255,255,0.85); border-radius: 999px; padding: 7px 14px;
+        font: inherit; font-size: 0.78rem; cursor: pointer; transition: background 0.2s, border-color 0.2s;
+      }
+      .lobby-companion-btn:hover { background: rgba(255,255,255,0.14); }
+      .lobby-companion-btn.connected { border-color: rgba(90,209,122,0.55); color: #cfeeda; }
+      .lobby-companion-help { font-size: 0.72rem; color: rgba(255,255,255,0.45); text-decoration: underline; }
       .lobby-greeting-hi { flex-shrink: 0; white-space: nowrap; }
       .lobby-name-wrap {
         position: relative;
