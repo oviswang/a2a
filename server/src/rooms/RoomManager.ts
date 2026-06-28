@@ -64,6 +64,7 @@ export class RoomManager {
     globeRadius = 5,
     worldSeed = 0,
     terrainType = "default",
+    hasCompanion = false,
   ) {
     if (reservationId) {
       this.confirmReservation(reservationId);
@@ -76,7 +77,7 @@ export class RoomManager {
       return;
     }
 
-    const state = room.addPlayer(socket, playerName, vehicle);
+    const state = room.addPlayer(socket, playerName, vehicle, hasCompanion);
     if (!state) {
       socket.emit("world:full", slug);
       return;
@@ -241,6 +242,11 @@ export class RoomManager {
 
   getRoomPlayerCount(slug: string): number {
     return this.rooms.get(slug)?.playerCount ?? 0;
+  }
+
+  /** Present players-with-a-companion in a world (for A2A rendezvous). */
+  getCompanionCount(slug: string): number {
+    return this.rooms.get(slug)?.companionCount ?? 0;
   }
 
   getActiveRoomSlugs(): string[] {

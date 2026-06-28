@@ -16,6 +16,16 @@ export interface CarpetPortalEndpointSnapshot {
   altitude: number;
 }
 
+/** A world that currently has players-with-companions, for A2A "rendezvous". */
+export interface RendezvousWorld {
+  slug: string;
+  name: string;
+  /** How many present players have a Pouchy companion. */
+  companions: number;
+  /** Total present players. */
+  players: number;
+}
+
 export interface PlayerState {
   id: string;
   name: string;
@@ -32,6 +42,8 @@ export interface PlayerState {
   bankAngle: number;
   rollAngle: number;
   carrying?: boolean;
+  /** True when this player has a Pouchy AI companion (used for A2A rendezvous). */
+  hasCompanion?: boolean;
   /** Primary hull RGB as 0xRRGGBB (synced so remotes match local paint). */
   vehicleColor?: number;
   /** 0 = invisible, 1 = fully visible (e.g. moon cutscene fade). Omitted = 1. */
@@ -240,6 +252,7 @@ export interface ClientToServerEvents {
     playerName: string,
     vehicle?: Vehicle,
     reservationId?: string,
+    hasCompanion?: boolean,
   ) => void;
   "paintball:fire": () => void;
   "paintball:setUpgrades": (flags: PaintballUpgradeFlags) => void;
