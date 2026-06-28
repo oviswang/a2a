@@ -242,16 +242,6 @@ export class Lobby {
             <button type="button" class="lobby-unlock-ok" id="btn-unlock-ok">${t("Got it", "知道了")}</button>
           </div>
         </div>
-        <a
-          class="lobby-vibejam-portal"
-          href="${VIBEJAM_PORTAL_BASE}"
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="${t("Vibe Jam 2026 — continue to the next game in the webring", "Vibe Jam 2026 — 继续前往环链中的下一个游戏")}"
-        >
-          <img src="${PORTAL_ICON_SRC}" alt="" width="26" height="26" decoding="async" />
-          <span class="lobby-vibejam-portal__label" aria-hidden="true">${t("Vibejam Portal", "Vibejam 传送门")}</span>
-        </a>
         <p class="lobby-attribution">${t(
           `Built with <strong class="lobby-attribution__brand">Cursor</strong>, Music by <strong class="lobby-attribution__brand">Suno</strong>, SFX by <strong class="lobby-attribution__brand">ElevenLabs</strong>, 3D Assets by <strong class="lobby-attribution__brand">Tripo3D</strong>`,
           `使用 <strong class="lobby-attribution__brand">Cursor</strong> 构建，音乐 <strong class="lobby-attribution__brand">Suno</strong>，音效 <strong class="lobby-attribution__brand">ElevenLabs</strong>，3D 素材 <strong class="lobby-attribution__brand">Tripo3D</strong>`,
