@@ -117,9 +117,14 @@ interface LobbyOptions {
   companionToken?: string | null;
   /** Player pasted / cleared their Pouchy companion token (opt-in AI co-pilot). */
   onCompanionTokenChange?: (token: string | null) => void;
+  /** Whether to auto-connect voice when the game starts. */
+  companionAutoVoice?: boolean;
+  onCompanionAutoVoiceChange?: (on: boolean) => void;
 }
 
 export class Lobby {
+  /** Auto-open the companion connect modal only once per page load. */
+  private static companionModalAutoShown = false;
   private container: HTMLElement;
   private el: HTMLDivElement;
   private options: LobbyOptions;
@@ -271,6 +276,34 @@ export class Lobby {
             <button type="button" class="lobby-unlock-ok" id="btn-unlock-ok">${t("Got it", "知道了")}</button>
           </div>
         </div>
+        <div class="lobby-companion-modal" id="lobby-companion-modal" aria-hidden="true">
+          <div class="lobby-companion-backdrop" id="lobby-companion-backdrop"></div>
+          <div class="lobby-companion-panel" role="dialog" aria-modal="true" aria-labelledby="lobby-companion-modal-title">
+            <h2 class="lobby-companion-modal-title" id="lobby-companion-modal-title">${t("AI co-pilot · Pouchy companion", "AI 陪玩 · Pouchy 伴侣")}</h2>
+            <p class="lobby-companion-status" id="lobby-companion-status"></p>
+            <label class="lobby-companion-field-label">${t("Companion access key (pchy_…)", "伴侣接入令牌（pchy_…）")}</label>
+            <input class="lobby-companion-input" id="lobby-companion-input" type="text" autocomplete="off" spellcheck="false"
+              placeholder="${t("Paste your pchy_… key", "粘贴 pchy_… 令牌")}" />
+            <details class="lobby-companion-help-box" open>
+              <summary>${t("How do I get a key?", "如何获取令牌？")}</summary>
+              <ol class="lobby-companion-steps">
+                <li>${t("Open <strong>Pouchy</strong> (pouchy.ai or the app) and tap the <strong>Wallet</strong> (top-right, the one showing your balance).", "打开 <strong>Pouchy</strong>（pouchy.ai 或 App），点右上角的<strong>钱包</strong>（显示余额的那个）。")}</li>
+                <li>${t("On the wallet page, scroll down to <strong>Companion access keys</strong>.", "在「钱包余额」页向下滚动，找到<strong>「伴侣接入密钥」</strong>。")}</li>
+                <li>${t("(Optional) name the key, e.g. \"A2A.FUN\".", "（可选）填个密钥名称，比如「A2A.FUN」。")}</li>
+                <li>${t("Leave <strong>Allow execution</strong> OFF for basic co-pilot. Turn it ON only for A2A social (inviting friends / pairing).", "基础陪玩<strong>保持「允许执行」关闭</strong>。只有要用 A2A 社交（邀请好友 / 配对）时才打开。")}</li>
+                <li>${t("Tap <strong>Generate</strong>. The pchy_… key is shown <strong>once</strong> — copy it immediately.", "点<strong>「生成密钥」</strong>。令牌 pchy_… <strong>只显示一次</strong>，请立刻复制。")}</li>
+                <li>${t("Come back here, paste it, and tap Save.", "回到这里粘贴，点「保存并绑定」。")}</li>
+              </ol>
+            </details>
+            <p class="lobby-companion-note">${t("The key is stored only on this device (localStorage) and only connects your own Pouchy companion. Voice usage is billed to your Pouchy account.", "令牌只存在你本机（localStorage），只用于连接你自己的 Pouchy 伴侣。语音费用记在你的 Pouchy 账户上。")}</p>
+            <label class="lobby-companion-autovoice"><input type="checkbox" id="lobby-companion-autovoice-cb" /> <span>${t("Auto-connect voice when the game starts", "游戏开始时自动接通语音")}</span></label>
+            <div class="lobby-companion-actions">
+              <button type="button" class="lobby-companion-save" id="lobby-companion-save">${t("Save & connect", "保存并绑定")}</button>
+              <button type="button" class="lobby-companion-later" id="lobby-companion-later">${t("Later", "稍后")}</button>
+            </div>
+            <button type="button" class="lobby-companion-disconnect" id="lobby-companion-disconnect">${t("Disconnect", "断开连接")}</button>
+          </div>
+        </div>
         <p class="lobby-attribution">${t(
           `Built with <strong class="lobby-attribution__brand">Cursor</strong>, Music by <strong class="lobby-attribution__brand">Suno</strong>, SFX by <strong class="lobby-attribution__brand">ElevenLabs</strong>, 3D Assets by <strong class="lobby-attribution__brand">Tripo3D</strong>`,
           `使用 <strong class="lobby-attribution__brand">Cursor</strong> 构建，音乐 <strong class="lobby-attribution__brand">Suno</strong>，音效 <strong class="lobby-attribution__brand">ElevenLabs</strong>，3D 素材 <strong class="lobby-attribution__brand">Tripo3D</strong>`,
@@ -343,25 +376,63 @@ export class Lobby {
       }
     };
     refreshCompanionBtn();
-    companionBtn.addEventListener("click", () => {
-      const current = this.options.companionToken ?? "";
-      const entered = window.prompt(
-        t(
-          "Paste your Pouchy access key (pchy_…). Get it at pouchy.ai → Wallet → Companion access keys. Leave blank to disconnect.",
-          "粘贴你的 Pouchy 访问密钥（pchy_…）。在 pouchy.ai → 钱包 → 伴侣接入密钥 获取。留空则断开。",
-        ),
-        current,
-      );
-      if (entered === null) return; // cancelled
-      const trimmed = entered.trim();
-      if (trimmed && !trimmed.startsWith("pchy_")) {
-        window.alert(t("That doesn't look like a pchy_ key.", "这看起来不是 pchy_ 密钥。"));
+
+    // ── Companion connect modal ──
+    const cmpModal = this.el.querySelector("#lobby-companion-modal") as HTMLElement;
+    const cmpInput = this.el.querySelector("#lobby-companion-input") as HTMLInputElement;
+    const cmpStatus = this.el.querySelector("#lobby-companion-status") as HTMLElement;
+    const cmpAutoVoice = this.el.querySelector("#lobby-companion-autovoice-cb") as HTMLInputElement;
+    const cmpDisconnect = this.el.querySelector("#lobby-companion-disconnect") as HTMLButtonElement;
+    const refreshModalState = () => {
+      const tok = this.options.companionToken ?? null;
+      cmpStatus.textContent = tok
+        ? t(`Connected (pchy_••${tok.slice(-4)}). Paste a new key to replace it.`, `已连接（pchy_••${tok.slice(-4)}）。粘贴新令牌可替换。`)
+        : t("Not connected. Paste a key and save to enable your AI co-pilot.", "未绑定。粘贴令牌并保存即可开启 AI 陪玩。");
+      cmpInput.value = "";
+      cmpAutoVoice.checked = this.options.companionAutoVoice ?? false;
+      cmpDisconnect.style.display = tok ? "block" : "none";
+    };
+    const openCmpModal = () => {
+      refreshModalState();
+      cmpModal.classList.add("open");
+      cmpModal.setAttribute("aria-hidden", "false");
+      setTimeout(() => cmpInput.focus(), 40);
+    };
+    const closeCmpModal = () => {
+      cmpModal.classList.remove("open");
+      cmpModal.setAttribute("aria-hidden", "true");
+    };
+    companionBtn.addEventListener("click", openCmpModal);
+    this.el.querySelector("#lobby-companion-later")!.addEventListener("click", closeCmpModal);
+    this.el.querySelector("#lobby-companion-backdrop")!.addEventListener("click", closeCmpModal);
+    cmpAutoVoice.addEventListener("change", () => {
+      this.options.companionAutoVoice = cmpAutoVoice.checked;
+      this.options.onCompanionAutoVoiceChange?.(cmpAutoVoice.checked);
+    });
+    cmpDisconnect.addEventListener("click", () => {
+      this.options.companionToken = null;
+      this.options.onCompanionTokenChange?.(null);
+      refreshCompanionBtn();
+      refreshModalState();
+    });
+    this.el.querySelector("#lobby-companion-save")!.addEventListener("click", () => {
+      const trimmed = cmpInput.value.trim();
+      if (!trimmed) { closeCmpModal(); return; }
+      if (!trimmed.startsWith("pchy_")) {
+        cmpStatus.textContent = t("That doesn't look like a pchy_ key.", "这看起来不是 pchy_ 令牌。");
         return;
       }
-      this.options.companionToken = trimmed || null;
-      this.options.onCompanionTokenChange?.(this.options.companionToken);
+      this.options.companionToken = trimmed;
+      this.options.onCompanionTokenChange?.(trimmed);
       refreshCompanionBtn();
+      closeCmpModal();
     });
+
+    // Auto-open on first lobby visit when no companion is connected yet.
+    if (!this.options.companionToken && !Lobby.companionModalAutoShown) {
+      Lobby.companionModalAutoShown = true;
+      setTimeout(openCmpModal, 650);
+    }
 
     const flyBtn = this.el.querySelector("#btn-fly") as HTMLButtonElement;
     const vehiclesEl = this.el.querySelector(".lobby-vehicles") as HTMLElement;
@@ -917,17 +988,77 @@ export class Lobby {
         max-width: calc(100% - 48px);
       }
       .lobby-companion-row {
-        display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-        margin-top: 10px;
+        display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
+        margin-top: 14px;
       }
+      /* Primary CTA: connecting the AI companion is the hero action. */
       .lobby-companion-btn {
-        background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14);
-        color: rgba(255,255,255,0.85); border-radius: 999px; padding: 7px 14px;
-        font: inherit; font-size: 0.78rem; cursor: pointer; transition: background 0.2s, border-color 0.2s;
+        background: linear-gradient(135deg, rgba(120,170,255,0.32), rgba(170,130,255,0.32));
+        border: 1px solid rgba(170,190,255,0.45);
+        color: #fff; border-radius: 999px; padding: 11px 22px;
+        font: inherit; font-size: 0.92rem; font-weight: 600; cursor: pointer;
+        transition: background 0.2s, border-color 0.2s, transform 0.1s;
+        box-shadow: 0 4px 18px rgba(80,110,220,0.28);
       }
-      .lobby-companion-btn:hover { background: rgba(255,255,255,0.14); }
-      .lobby-companion-btn.connected { border-color: rgba(90,209,122,0.55); color: #cfeeda; }
+      .lobby-companion-btn:hover { background: linear-gradient(135deg, rgba(120,170,255,0.45), rgba(170,130,255,0.45)); }
+      .lobby-companion-btn:active { transform: scale(0.98); }
+      .lobby-companion-btn.connected {
+        background: rgba(90,209,122,0.16); border-color: rgba(90,209,122,0.55);
+        color: #cfeeda; box-shadow: none; font-weight: 500; font-size: 0.82rem; padding: 8px 16px;
+      }
       .lobby-companion-help { font-size: 0.72rem; color: rgba(255,255,255,0.45); text-decoration: underline; }
+
+      /* De-emphasize the name (no longer a login step). */
+      .lobby-greeting-hi, .lobby-name { font-size: 0.95rem; opacity: 0.8; }
+      .lobby-name { font-weight: 600; }
+
+      /* ── Companion connect modal ── */
+      .lobby-companion-modal {
+        position: fixed; inset: 0; z-index: 60; display: none;
+        align-items: center; justify-content: center; padding: 16px;
+      }
+      .lobby-companion-modal.open { display: flex; }
+      .lobby-companion-backdrop {
+        position: absolute; inset: 0; background: rgba(6,8,18,0.62); backdrop-filter: blur(4px);
+      }
+      .lobby-companion-panel {
+        position: relative; width: min(440px, 94vw); max-height: 90vh; overflow-y: auto;
+        background: rgba(20,26,42,0.96); border: 1px solid rgba(255,255,255,0.10);
+        border-radius: 18px; padding: 22px; color: rgba(255,255,255,0.92);
+        font-family: 'Domine', Georgia, serif; box-shadow: 0 18px 60px rgba(0,0,0,0.5);
+      }
+      .lobby-companion-modal-title { font-size: 1.2rem; font-weight: 700; margin: 0 0 8px; }
+      .lobby-companion-status { font-size: 0.84rem; color: rgba(255,255,255,0.62); margin: 0 0 14px; line-height: 1.45; }
+      .lobby-companion-field-label { display: block; font-size: 0.78rem; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 6px; }
+      .lobby-companion-input {
+        width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.07);
+        border: 1px solid rgba(255,255,255,0.14); border-radius: 10px; padding: 11px 13px;
+        color: #fff; font: inherit; font-size: 0.9rem; outline: none; margin-bottom: 14px;
+      }
+      .lobby-companion-help-box { margin-bottom: 12px; }
+      .lobby-companion-help-box summary {
+        cursor: pointer; font-size: 0.86rem; font-weight: 600; color: #9ad1ff; list-style: revert;
+      }
+      .lobby-companion-steps { margin: 10px 0 0; padding-left: 22px; }
+      .lobby-companion-steps li { font-size: 0.82rem; line-height: 1.5; margin-bottom: 7px; color: rgba(255,255,255,0.85); }
+      .lobby-companion-steps strong { color: #fff; }
+      .lobby-companion-note { font-size: 0.74rem; color: rgba(255,255,255,0.45); line-height: 1.5; margin: 6px 0 14px; }
+      .lobby-companion-note code { font-family: ui-monospace, monospace; font-size: 0.92em; }
+      .lobby-companion-autovoice { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: rgba(255,255,255,0.8); margin-bottom: 18px; cursor: pointer; }
+      .lobby-companion-actions { display: flex; gap: 10px; }
+      .lobby-companion-save {
+        flex: 1; background: linear-gradient(135deg, #5b8cf0, #7a5bf0); color: #fff;
+        border: none; border-radius: 10px; padding: 13px; font: inherit; font-size: 0.92rem;
+        font-weight: 700; cursor: pointer;
+      }
+      .lobby-companion-later {
+        background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.8); border: none;
+        border-radius: 10px; padding: 13px 20px; font: inherit; font-size: 0.9rem; cursor: pointer;
+      }
+      .lobby-companion-disconnect {
+        display: none; width: 100%; margin-top: 12px; background: none; border: none;
+        color: rgba(255,140,140,0.8); font: inherit; font-size: 0.78rem; cursor: pointer; text-decoration: underline;
+      }
       .lobby-greeting-hi { flex-shrink: 0; white-space: nowrap; }
       .lobby-name-wrap {
         position: relative;
