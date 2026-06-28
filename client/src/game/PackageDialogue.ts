@@ -1,5 +1,6 @@
 import { ProgressionManager } from "./ProgressionManager";
 import { t } from "../i18n";
+import { npcDisplayName } from "../i18nNames";
 
 function seededRandom(seed: number): () => number {
   let s = seed;
@@ -352,10 +353,10 @@ export function generateQuestDialogue(
   let pickupLine = pickupPool[Math.floor(rand() * pickupPool.length)];
   pickupLine = pickupLine
     .replace(/\{dest\}/g, destName)
-    .replace(/\{receiver\}/g, receiverName);
+    .replace(/\{receiver\}/g, npcDisplayName(receiverName));
 
   let deliveryLine = deliveryPool[Math.floor(rand() * deliveryPool.length)];
-  deliveryLine = deliveryLine.replace(/\{sender\}/g, senderName);
+  deliveryLine = deliveryLine.replace(/\{sender\}/g, npcDisplayName(senderName));
 
   if (
     questIndex === THIRD_PACKAGE_DELIVERY_INDEX &&
@@ -365,7 +366,7 @@ export function generateQuestDialogue(
       THIRD_PACKAGE_HEIRLOOM_DELIVERY_TEMPLATES[
         Math.floor(rand() * THIRD_PACKAGE_HEIRLOOM_DELIVERY_TEMPLATES.length)
       ]!;
-    deliveryLine = heirloomLine.replace(/\{sender\}/g, senderName);
+    deliveryLine = heirloomLine.replace(/\{sender\}/g, npcDisplayName(senderName));
   }
 
   return { senderName, receiverName, pickupLine, deliveryLine };
