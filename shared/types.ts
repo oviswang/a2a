@@ -227,6 +227,19 @@ export interface ServerToClientEvents {
   /** A2A companion pairing (relayed between co-present players). */
   "pair:incoming": (ev: PairRequestEvent) => void;
   "pair:answered": (ev: PairAnswerEvent) => void;
+  /** A2A Phase C: an invite to come pair with a player whose "ghost" you met
+   *  (or who left you a pending intent). Brings you to their world to pair. */
+  "ghostpair:incoming": (ev: GhostPairInvite) => void;
+}
+
+/** A2A Phase C: a cross-world invite to pair with `fromName` (the owner of a ghost
+ *  you encountered, or who invited you). Accepting takes you to their `worldSlug`,
+ *  then auto-requests pairing with `fromSocketId`. */
+export interface GhostPairInvite {
+  fromVisitorId: string;
+  fromName: string;
+  fromSocketId: string;
+  worldSlug: string;
 }
 
 /** A2A: player `fromId` asks to pair companions with the recipient. */
@@ -253,7 +266,11 @@ export interface ClientToServerEvents {
     vehicle?: Vehicle,
     reservationId?: string,
     hasCompanion?: boolean,
+    visitorId?: string,
   ) => void;
+  /** A2A Phase C: ask the server to invite the owner of `toVisitorId` (a ghost) to
+   *  come pair with me (relayed cross-world; queued if they're offline). */
+  "ghostpair:invite": (toVisitorId: string) => void;
   "paintball:fire": () => void;
   "paintball:setUpgrades": (flags: PaintballUpgradeFlags) => void;
   /** True while the local player is in a non-world scene where flag play is suspended. */

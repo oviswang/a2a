@@ -9,6 +9,7 @@ import type {
   FlagSyncEvent,
   PairRequestEvent,
   PairAnswerEvent,
+  GhostPairInvite,
   PaintballFiredEvent,
   PaintballHitEvent,
   PaintballUpgradeFlags,
@@ -53,8 +54,9 @@ export class SocketClient {
     vehicle: Vehicle = "plane",
     reservationId?: string,
     hasCompanion = false,
+    visitorId?: string,
   ) {
-    this.socket.emit("world:join", slug, playerName, vehicle, reservationId, hasCompanion);
+    this.socket.emit("world:join", slug, playerName, vehicle, reservationId, hasCompanion, visitorId);
   }
 
   sendMove(state: Omit<PlayerState, "id">) {
@@ -149,6 +151,13 @@ export class SocketClient {
   }
   onPairAnswered(cb: (ev: PairAnswerEvent) => void) {
     this.socket.on("pair:answered", cb);
+  }
+  // ── A2A Phase C: ghost pairing (cross-world invite) ──
+  emitGhostPairInvite(toVisitorId: string) {
+    this.socket.emit("ghostpair:invite", toVisitorId);
+  }
+  onGhostPairIncoming(cb: (ev: GhostPairInvite) => void) {
+    this.socket.on("ghostpair:incoming", cb);
   }
 
   disconnect() {

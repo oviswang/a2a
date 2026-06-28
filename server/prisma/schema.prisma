@@ -55,6 +55,21 @@ model WorldVisitor {
   @@index([worldSlug, lastSeenAt(sort: Desc)])
 }
 
+/** A pending A2A "pairing intent" left for a ghost's owner who was offline. When
+ *  that owner next comes online AND the inviter is also online, we surface it as a
+ *  live cross-world invite so the real (live, consented) pairing can complete. */
+model PairIntent {
+  id            String   @id @default(cuid())
+  fromVisitorId String
+  fromName      String
+  toVisitorId   String
+  worldSlug     String
+  createdAt     DateTime @default(now())
+
+  @@unique([fromVisitorId, toVisitorId])
+  @@index([toVisitorId, createdAt(sort: Desc)])
+}
+
 /** Milestone-only history for dashboards; never high-frequency telemetry. */
 model GameEvent {
   id             String   @id @default(cuid())
