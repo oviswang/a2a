@@ -84,6 +84,7 @@ import { VoidMothsManager, type VoidMothPlaneContext } from "./VoidMoths";
 import { VoidFlameShield } from "./VoidFlameShield";
 import { Lobby, generateWhimsicalName } from "../ui/Lobby";
 import { RemotePlayerNameLabels } from "../ui/RemotePlayerNameLabels";
+import { FriendBondFX, type FriendInWorld } from "./FriendBondFX";
 import { HUD } from "../ui/HUD";
 import {
   mountControlHints,
@@ -589,6 +590,10 @@ export class Game {
   private boatOctopusEternalFlameRewardTimeout: ReturnType<typeof setTimeout> | null = null;
   private flockFormationHUD: FlockFormationHUD | null = null;
   private remotePlayerNameLabels!: RemotePlayerNameLabels;
+  /** "Friends, together" FX — pointer + tether + heart for paired A2A friends. */
+  private friendBondFX: FriendBondFX | null = null;
+  /** Cached set of paired-friend visitorIds, for recognising them in the world. */
+  private friendVisitorIds = new Set<string>();
   private balloonInRange: boolean[] = [];
   private balloonGreetCooldown: number[] = [];
   private balloonGreetSalt = 0;
@@ -1993,6 +1998,15 @@ export class Game {
 
   private friendsRosterCleanup: (() => void) | null = null;
 
+  /** Refresh the cached paired-friend visitorId set (call after a successful pair). */
+  private refreshFriendIds() {
+    this.friendVisitorIds = new Set(
+      ProgressionManager.loadFriends()
+        .map((f) => f.visitorId)
+        .filter((v): v is string => !!v),
+    );
+  }
+
   /** Ask the server which of our paired A2A friends are online right now + where. */
   private async fetchFriendsPresence(): Promise<FriendPresence[]> {
     const friends = ProgressionManager.loadFriends();
@@ -2548,6 +2562,7 @@ export class Game {
         companionName: fromCompanionName,
         pairedAt: Date.now(),
       });
+      this.refreshFriendIds();
     }
     this.hud.showAmbientToast(t("Pairing accepted.", "已接受配对。"));
   }
@@ -2581,6 +2596,7 @@ export class Game {
         companionName: ev.companionName,
         pairedAt: Date.now(),
       });
+      this.refreshFriendIds();
       this.socketClient?.emitGhostPairResolved(ev.visitorId);
     }
   }
@@ -3473,6 +3489,8 @@ export class Game {
     this.propagateUpgrades();
 
     this.remotePlayerNameLabels = new RemotePlayerNameLabels(this.hud.root);
+    this.friendBondFX = new FriendBondFX(this.scene, this.hud.root);
+    this.refreshFriendIds();
 
     if (this.skyJellyfish) {
       this.jellyfishCaptureRing = new CircularProgressRing(this.hud.root, {
@@ -3996,6 +4014,8 @@ export class Game {
     this.flockFormationHUD?.dispose();
     this.flockFormationHUD = null;
     this.remotePlayerNameLabels.dispose();
+    this.friendBondFX?.dispose();
+    this.friendBondFX = null;
     this.hud.dispose();
 
     if (this.playerLight) {
@@ -4647,6 +4667,7 @@ export class Game {
       getCarpetPortalTeleportSeq: () =>
         this.playerVehicle === "carpet" ? this.carpetPortalTeleportSeq : undefined,
       getCompanionName: () => this.companion?.companionDisplayName ?? undefined,
+      getVisitorId: () => ProgressionManager.loadOrCreateVisitorId(),
     });
     this.stateSync.start();
 
@@ -4941,6 +4962,30 @@ export class Game {
         this.renderer.domElement,
         this.localPlayerWorldScratch.setFromMatrixPosition(this.localPlayer.group.matrixWorld),
       );
+
+      // "Friends, together": pointer to + tether/heart with paired A2A friends here.
+      if (this.friendBondFX) {
+        const friends: FriendInWorld[] = [];
+        if (this.friendVisitorIds.size > 0) {
+          this.remotePlanes.forEachRemote((p) => {
+            if (p.visitorId && this.friendVisitorIds.has(p.visitorId)) {
+              p.group.updateMatrixWorld(true);
+              friends.push({ name: p.name, pos: new Vector3().setFromMatrixPosition(p.group.matrixWorld) });
+            }
+          });
+        }
+        if (friends.length > 0) {
+          this.friendBondFX.update(
+            this.localPlayerWorldScratch,
+            this.cameraRig.camera,
+            this.renderer.domElement,
+            friends,
+            dt,
+          );
+        } else {
+          this.friendBondFX.clear();
+        }
+      }
 
       // Focus shadow camera on the player for high-resolution local shadows.
       // Covers ±5 world units around the player (2048/10 = 205 texels/unit vs 47 at globe-wide).
@@ -8917,6 +8962,8 @@ export class Game {
     this.transitionOverlay?.dispose();
     this.flockFormationHUD?.dispose();
     this.remotePlayerNameLabels.dispose();
+    this.friendBondFX?.dispose();
+    this.friendBondFX = null;
     this.flagSystem?.dispose();
     this.flagSystem = null;
     this.stateSync?.stop();

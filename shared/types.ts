@@ -46,6 +46,9 @@ export interface PlayerState {
   hasCompanion?: boolean;
   /** The player's AI companion display name, shown on their name pill (A2A identity). */
   companionName?: string;
+  /** Stable, non-secret A2A visitorId — lets clients recognise a paired friend in
+   *  the world (for the friend pointer + flight tether). Never the secret token. */
+  visitorId?: string;
   /** Primary hull RGB as 0xRRGGBB (synced so remotes match local paint). */
   vehicleColor?: number;
   /** 0 = invisible, 1 = fully visible (e.g. moon cutscene fade). Omitted = 1. */
