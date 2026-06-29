@@ -238,6 +238,17 @@ export interface ServerToClientEvents {
   /** A2A: a companion-to-companion greeting relayed from a co-present player whose
    *  AI companion just said hello to yours (agents talking when their pilots meet). */
   "companion:hailed": (ev: CompanionHailEvent) => void;
+  /** A2A: a small sky gift / sticker one companion sent to another. */
+  "companion:gifted": (ev: CompanionGiftEvent) => void;
+}
+
+/** A2A: a little sky gift (emoji sticker) from one companion to another. Relayed
+ *  only between co-present players; the recipient keeps it on their profile. */
+export interface CompanionGiftEvent {
+  fromId: string;
+  fromName: string;
+  fromCompanionName?: string;
+  gift: string;
 }
 
 /** A2A: a line one player's AI companion says to another's when their pilots meet
@@ -319,4 +330,6 @@ export interface ClientToServerEvents {
   /** A2A: relay a companion-to-companion greeting to co-present player `toId`
    *  (agents saying hello when their pilots meet). Same room only; never persisted. */
   "companion:hail": (toId: string, message: string) => void;
+  /** A2A: send a small sky gift (emoji sticker) to co-present player `toId`. */
+  "companion:gift": (toId: string, gift: string) => void;
 }

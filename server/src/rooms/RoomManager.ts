@@ -146,6 +146,21 @@ export class RoomManager {
       });
     });
 
+    // A2A: relay a small sky gift (emoji sticker) to a co-present player.
+    socket.on("companion:gift", (toId, gift) => {
+      const g = typeof gift === "string" ? gift.slice(0, 16).trim() : "";
+      if (!g) return;
+      const target = room.getPlayer(toId);
+      if (!target) return;
+      const me = room.getPlayer(socket.id)?.state;
+      target.socket.emit("companion:gifted", {
+        fromId: socket.id,
+        fromName: me?.name ?? state.name,
+        fromCompanionName: me?.companionName,
+        gift: g,
+      });
+    });
+
     socket.on("disconnect", () => {
       room.removePlayer(socket.id);
       if (room.isEmpty) {

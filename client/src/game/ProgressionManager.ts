@@ -21,6 +21,16 @@ export interface CompanionFriend {
   pairedAt: number;
 }
 
+/** A2A sky gifts received from other companions (kept on the player's profile). */
+const GIFTS_KEY = "globefly_a2a_gifts_v1";
+
+export interface ReceivedGift {
+  gift: string;
+  fromName: string;
+  fromCompanion?: string;
+  at: number;
+}
+
 /** Carpet unlocks when any vehicle has reached at least this level. */
 export const UNLOCK_CARPET_MIN_MAX_LEVEL = 2;
 /** Boat unlocks when plane or carpet reaches this level (boat’s own level does not count). */
@@ -263,6 +273,7 @@ export class ProgressionManager {
       localStorage.removeItem(LEGACY_CAMPSITE_KEY);
       localStorage.removeItem(COMPANION_TOKEN_KEY);
       localStorage.removeItem(FRIENDS_KEY);
+      localStorage.removeItem(GIFTS_KEY);
     } catch {}
   }
 
@@ -342,6 +353,23 @@ export class ProgressionManager {
       const all = ProgressionManager.loadFriends().filter((f) => f.visitorId !== friend.visitorId);
       all.unshift(friend);
       localStorage.setItem(FRIENDS_KEY, JSON.stringify(all.slice(0, 100)));
+    } catch {}
+  }
+
+  /** Sky gifts other companions have sent us (most recent first). */
+  static loadReceivedGifts(): ReceivedGift[] {
+    try {
+      const raw = localStorage.getItem(GIFTS_KEY);
+      if (raw) return JSON.parse(raw) as ReceivedGift[];
+    } catch {}
+    return [];
+  }
+
+  static addReceivedGift(g: ReceivedGift) {
+    try {
+      const all = ProgressionManager.loadReceivedGifts();
+      all.unshift(g);
+      localStorage.setItem(GIFTS_KEY, JSON.stringify(all.slice(0, 200)));
     } catch {}
   }
 

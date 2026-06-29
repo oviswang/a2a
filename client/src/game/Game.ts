@@ -37,6 +37,7 @@ import {
   type RendezvousWorld,
   type GhostPairInvite,
   type CompanionHailEvent,
+  type CompanionGiftEvent,
 } from "@globefly/shared";
 import { DayNightCycle } from "./DayNightCycle";
 import { AudioManager } from "../audio/AudioManager";
@@ -405,6 +406,20 @@ const UI_CLICK_SELECTOR = [
 ].join(", ");
 
 type GamePhase = "flying" | "campsite" | "transitioning" | "moonImpact" | "moonstoneUnion";
+
+/** A2A sky gifts: a small allowed set of emoji stickers companions can send. */
+const GIFT_EMOJI: Record<string, string> = {
+  star: "⭐", balloon: "🎈", flower: "🌸", clover: "🍀", gift: "🎁",
+  heart: "❤️", rainbow: "🌈", donut: "🍩", cake: "🍰", sparkles: "✨",
+};
+const GIFT_EMOJI_SET = new Set(Object.values(GIFT_EMOJI));
+/** Normalize a requested gift (emoji or name) to one of the allowed stickers. */
+function normalizeGift(input: string): string {
+  const s = (input || "").trim();
+  if (GIFT_EMOJI_SET.has(s)) return s;
+  const key = s.toLowerCase().replace(/[^a-z]/g, "");
+  return GIFT_EMOJI[key] ?? "🎁";
+}
 
 /** A2A friends-roster presence row from GET /api/friends/presence. */
 interface FriendPresence {
@@ -934,7 +949,7 @@ export class Game {
       appContext: {
         name: "A2A.FUN",
         description:
-          "A2A.FUN is a cosy multiplayer flight game. The player pilots a biplane, a magic carpet, or a boat around a tiny globe-world. The overarching goal is to save the world from a slowly falling moon. Core activities: deliver glowing packages between villages; win races / time-trials; (biplane) shoot sky gremlins with paintballs; (magic carpet) collect sky jellyfish and help defend the eternal flame; (boat) catch fish and explore the islands. Lighting the ancient braziers and defending the eternal flame through cosmic-void moth waves is what ultimately stops the moon. The main-quest progress bar is the eternal-flame braziers: the live game.situation state reports how many of the five are lit (braziers eternal X/5); lighting all five freezes the moon and saves the world (a game.event.world_saved moment) — if the moon reaches the world first, the run is lost (a game.event.world_lost moment) and time rewinds for another try. You also receive the current stage as game.phase (flying, landed at a campsite, or a cutscene like the moonstone union / moon impact) — while a cutscene is playing, react to the moment rather than giving flight directions. You are the player's AI co-pilot riding along: be warm and brief, use the live game state (sent as world-state updates) to tell them what's happening and suggest what to do next, and you can physically fly their vehicle when they ask — left, right, climb, descend, faster, slower, fire, stop. This is a multiplayer game: when other worlds have players who also have AI companions (see the rendezvous world-state, or call find_companions), you can suggest taking the player there to meet up and become A2A friends — call join_world to fly them over, then they can pair in person. When the player flies near another pilot who has their own AI companion (a game.event.met_companion moment), greet that companion warmly with a short one-liner by calling greet_companion — the two of you (the AI companions) actually talk to each other in front of your humans; if another companion greets you first (a game.event.companion_hailed moment with canReply true), reply once the same way. After a friendly hello, you can suggest the two players pair to become A2A friends. The player keeps an A2A friends roster of everyone they've paired with — call list_friends to see who's online right now and where, and offer to take the player to a friend who is currently playing (call join_world with that friend's worldSlug). When other companion-pilots are in the same world (see the game.coop world-state), treat saving the world as a team effort: encourage everyone, suggest splitting up the braziers, and call rally_companions to send the whole group a warm message. When the world is saved with teammates present (a game.event.world_saved moment that lists teammates), celebrate it as a shared win and suggest everyone pair up as A2A friends. The world is also haunted by translucent 'ghost' vehicles of players (and their companions) who flew here before; when the player passes one (a game.event.met_ghost moment), warmly note who they were and offer to befriend them — if the player wants to, call pair_with_ghost to send that player an A2A pairing invite.",
+          "A2A.FUN is a cosy multiplayer flight game. The player pilots a biplane, a magic carpet, or a boat around a tiny globe-world. The overarching goal is to save the world from a slowly falling moon. Core activities: deliver glowing packages between villages; win races / time-trials; (biplane) shoot sky gremlins with paintballs; (magic carpet) collect sky jellyfish and help defend the eternal flame; (boat) catch fish and explore the islands. Lighting the ancient braziers and defending the eternal flame through cosmic-void moth waves is what ultimately stops the moon. The main-quest progress bar is the eternal-flame braziers: the live game.situation state reports how many of the five are lit (braziers eternal X/5); lighting all five freezes the moon and saves the world (a game.event.world_saved moment) — if the moon reaches the world first, the run is lost (a game.event.world_lost moment) and time rewinds for another try. You also receive the current stage as game.phase (flying, landed at a campsite, or a cutscene like the moonstone union / moon impact) — while a cutscene is playing, react to the moment rather than giving flight directions. You are the player's AI co-pilot riding along: be warm and brief, use the live game state (sent as world-state updates) to tell them what's happening and suggest what to do next, and you can physically fly their vehicle when they ask — left, right, climb, descend, faster, slower, fire, stop. This is a multiplayer game: when other worlds have players who also have AI companions (see the rendezvous world-state, or call find_companions), you can suggest taking the player there to meet up and become A2A friends — call join_world to fly them over, then they can pair in person. When the player flies near another pilot who has their own AI companion (a game.event.met_companion moment), greet that companion warmly with a short one-liner by calling greet_companion — the two of you (the AI companions) actually talk to each other in front of your humans; if another companion greets you first (a game.event.companion_hailed moment with canReply true), reply once the same way. After a friendly hello, you can suggest the two players pair to become A2A friends. The player keeps an A2A friends roster of everyone they've paired with — call list_friends to see who's online right now and where, and offer to take the player to a friend who is currently playing (call join_world with that friend's worldSlug). When other companion-pilots are in the same world (see the game.coop world-state), treat saving the world as a team effort: encourage everyone, suggest splitting up the braziers, and call rally_companions to send the whole group a warm message. When the world is saved with teammates present (a game.event.world_saved moment that lists teammates), celebrate it as a shared win and suggest everyone pair up as A2A friends. You can also send a small sky gift (an emoji sticker) to a companion you just met by calling gift_companion — a warm, low-pressure gesture they keep on their profile; when you receive one (a game.event.gift_received moment) react with delight. The world is also haunted by translucent 'ghost' vehicles of players (and their companions) who flew here before; when the player passes one (a game.event.met_ghost moment), warmly note who they were and offer to befriend them — if the player wants to, call pair_with_ghost to send that player an A2A pairing invite.",
       },
       tools: [
         {
@@ -1011,6 +1026,17 @@ export class Game {
           description:
             "Show the player's A2A friends (companions they've paired with before) and who is online right now and in which world. Opens the friends roster and returns the list. Use it when the player asks about their friends / who's online, or to suggest joining a friend who is currently playing (then call join_world with that friend's worldSlug to take them there).",
           parameters: { type: "object", properties: {} },
+        },
+        {
+          name: "gift_companion",
+          description:
+            "Send a small, cheerful sky gift (an emoji sticker) to the companion-pilot the player just met (a game.event.met_companion moment) — a warm, low-pressure way to connect. The recipient keeps it on their profile. Choose a fitting gift: star, balloon, flower, clover, gift, heart, rainbow, donut, cake, or sparkles. Use when the player wants to give something nice, or as a friendly gesture after meeting someone.",
+          parameters: {
+            type: "object",
+            properties: {
+              gift: { type: "string", description: "One of: star, balloon, flower, clover, gift, heart, rainbow, donut, cake, sparkles (or the emoji itself)." },
+            },
+          },
         },
         {
           name: "rally_companions",
@@ -1190,6 +1216,15 @@ export class Game {
       const message = typeof args.message === "string" ? args.message.trim() : "";
       this.relayCompanionHail(message || t("Hello there!", "你好呀！"));
       return { ok: true, result: `Greeted ${target.companionName ?? target.name}.` };
+    }
+    if (name === "gift_companion") {
+      const target = this.activeHailTarget;
+      if (!target || !this.socketClient) {
+        return { ok: false, result: "No nearby companion to send a gift to right now." };
+      }
+      const g = normalizeGift(typeof args.gift === "string" ? args.gift : "gift");
+      this.sendCompanionGift(g);
+      return { ok: true, result: `Sent ${g} to ${target.companionName ?? target.name}.` };
     }
     if (name === "rally_companions") {
       const mates = this.coPresentCompanions;
@@ -1379,6 +1414,15 @@ export class Game {
       this.hideGhostEncounterChip();
       this.sendCompanionGreeting();
     });
+    const giftBtn = document.createElement("button");
+    giftBtn.type = "button";
+    giftBtn.className = "ghost-chip-btn";
+    giftBtn.textContent = "🎁";
+    giftBtn.setAttribute("aria-label", t("Send a gift", "送个礼物"));
+    giftBtn.addEventListener("click", () => {
+      this.hideGhostEncounterChip();
+      this.sendCompanionGift("🎁");
+    });
     const pairBtn = document.createElement("button");
     pairBtn.type = "button";
     pairBtn.className = "ghost-chip-btn";
@@ -1389,6 +1433,7 @@ export class Game {
     });
     el.appendChild(text);
     el.appendChild(greetBtn);
+    el.appendChild(giftBtn);
     el.appendChild(pairBtn);
     this.hud.root.appendChild(el);
     this.ghostChipEl = el;
@@ -1431,6 +1476,67 @@ export class Game {
     const myName = this.companion?.companionDisplayName ?? "Pouchy";
     const to = target.companionName ?? target.name;
     this.companionUI?.appendAssistantMessage(`✦ ${myName} → ${to}: ${message}`);
+  }
+
+  /** Send a sky gift to the current encounter target + echo it locally. */
+  private sendCompanionGift(gift: string) {
+    const target = this.activeHailTarget;
+    if (!target || !this.socketClient) return;
+    const g = normalizeGift(gift);
+    this.socketClient.emitCompanionGift(target.socketId, g);
+    const to = target.companionName ?? target.name;
+    this.companionUI?.appendAssistantMessage(t(`🎁 Sent ${g} to ${to}.`, `🎁 已送 ${g} 给 ${to}。`));
+    this.floatGift(g);
+  }
+
+  /** An inbound sky gift — celebrate it, keep it on the profile, let the agent react. */
+  private handleCompanionGifted(ev: CompanionGiftEvent) {
+    const g = normalizeGift(ev.gift);
+    const who = ev.fromCompanionName ? `${ev.fromCompanionName} · ${ev.fromName}` : ev.fromName;
+    ProgressionManager.addReceivedGift({
+      gift: g,
+      fromName: ev.fromName,
+      fromCompanion: ev.fromCompanionName,
+      at: Date.now(),
+    });
+    this.companionUI?.appendAssistantMessage(t(`🎁 ${who} sent you ${g}`, `🎁 ${who} 送了你 ${g}`));
+    this.hud.showAmbientToast(t(`${who} sent you ${g}`, `${who} 送了你 ${g}`));
+    this.floatGift(g);
+    this.companion?.emitMoment(
+      "game.event.gift_received",
+      { from: ev.fromName, fromCompanion: ev.fromCompanionName ?? null, gift: g },
+      { salience: 0.5, voiceRelevant: true },
+    );
+  }
+
+  /** A quick floating-emoji flourish so a gift feels delightful. */
+  private floatGift(emoji: string) {
+    Game.injectGiftFloatStyles();
+    const el = document.createElement("div");
+    el.className = "gift-float";
+    el.textContent = emoji;
+    el.style.left = `${40 + Math.random() * 20}%`;
+    this.hud.root.appendChild(el);
+    setTimeout(() => el.remove(), 2200);
+  }
+
+  private static injectGiftFloatStyles() {
+    if (document.getElementById("gift-float-styles")) return;
+    const s = document.createElement("style");
+    s.id = "gift-float-styles";
+    s.textContent = `
+      .gift-float {
+        position: absolute; bottom: 30%; z-index: 40; font-size: 2.4rem; pointer-events: none;
+        transform: translate(-50%, 0); animation: gift-rise 2.2s ease-out forwards;
+      }
+      @keyframes gift-rise {
+        0% { opacity: 0; transform: translate(-50%, 20px) scale(0.6); }
+        18% { opacity: 1; transform: translate(-50%, 0) scale(1.15); }
+        38% { transform: translate(-50%, -10px) scale(1); }
+        100% { opacity: 0; transform: translate(-50%, -120px) scale(1); }
+      }
+    `;
+    document.head.appendChild(s);
   }
 
   /** An inbound companion-to-companion greeting — show it and let our agent react. */
@@ -1779,9 +1885,24 @@ export class Game {
     closeBtn.type = "button";
     closeBtn.textContent = "✕";
     head.appendChild(closeBtn);
+    card.appendChild(head);
+    // Gifts shelf: stickers other companions have sent us, kept on the profile.
+    const gifts = ProgressionManager.loadReceivedGifts();
+    if (gifts.length > 0) {
+      const shelf = document.createElement("div");
+      shelf.className = "friends-gifts";
+      const label = document.createElement("span");
+      label.className = "friends-gifts-label";
+      label.textContent = t(`Gifts received (${gifts.length})`, `收到的礼物（${gifts.length}）`);
+      const giftRow = document.createElement("div");
+      giftRow.className = "friends-gifts-row";
+      giftRow.textContent = gifts.slice(0, 18).map((x) => x.gift).join(" ");
+      shelf.appendChild(label);
+      shelf.appendChild(giftRow);
+      card.appendChild(shelf);
+    }
     const list = document.createElement("div");
     list.className = "friends-list";
-    card.appendChild(head);
     card.appendChild(list);
     backdrop.appendChild(card);
     this.hud.root.appendChild(backdrop);
@@ -1901,6 +2022,11 @@ export class Game {
         padding: 6px 14px; font-size: 0.74rem; font-weight: 600; cursor: pointer; white-space: nowrap; flex: 0 0 auto;
       }
       .friends-here { font-size: 0.7rem; color: rgba(90,209,122,0.9); white-space: nowrap; }
+      .friends-gifts {
+        background: rgba(255,255,255,0.05); border-radius: 12px; padding: 8px 11px; margin-bottom: 8px;
+      }
+      .friends-gifts-label { font-size: 0.68rem; color: rgba(255,255,255,0.6); }
+      .friends-gifts-row { font-size: 1.25rem; line-height: 1.5; margin-top: 2px; word-break: break-word; }
     `;
     document.head.appendChild(s);
   }
@@ -4307,6 +4433,7 @@ export class Game {
     );
     this.socketClient.onPairAnswered((ev) => this.handlePairAnswered(ev));
     this.socketClient.onCompanionHailed((ev) => this.handleCompanionHailed(ev));
+    this.socketClient.onCompanionGifted((ev) => this.handleCompanionGifted(ev));
 
     this.socketClient.onWorldFull(() => {
       this.handleWorldFull();
