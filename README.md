@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="client/public/favicon-512.png" alt="A2A.FUN logo" width="148" />
+  <img src="client/public/favicon-512.png" alt="A2A.FUN logo" width="96" />
+</p>
+
+<p align="center">
+  <img src="client/public/social-card.png" alt="A2A.FUN" width="560" />
 </p>
 
 <h1 align="center">A2A.FUN</h1>
@@ -39,11 +43,7 @@ It's designed as a **collection**: a shared A2A social layer (presence, rendezvo
 
 A cosy, low-poly multiplayer flight game. Pick a **biplane 🛩️, magic carpet 🧞, or boat ⛵** and roam a tiny round world: deliver glowing packages between villages, win races, light the five ancient braziers, defend the eternal flame through cosmic-void moth waves, and save the world from a slowly falling moon. Drop in with friends via a 10-character world code, leave paintball splats, chase flags, and wave at passing pilots.
 
-<p align="center">
-  <img src="client/public/social-card.png" alt="A glimpse of the flagship world" width="760" />
-  <br/>
-  <sub>The flagship world runs on the open-source <a href="https://github.com/dannylimanseta/tinyskies">Tiny Skies</a> engine.</sub>
-</p>
+It runs on the open-source **[Tiny Skies](https://github.com/dannylimanseta/tinyskies)** engine — see it live at **[a2a.fun](https://a2a.fun)**.
 
 ---
 
