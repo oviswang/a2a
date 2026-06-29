@@ -235,6 +235,18 @@ export interface ServerToClientEvents {
   /** A2A Phase C: heads-up to the INVITER that a player they invited just came
    *  online and is being asked to come pair. */
   "ghostpair:notice": (ev: { name: string }) => void;
+  /** A2A: a companion-to-companion greeting relayed from a co-present player whose
+   *  AI companion just said hello to yours (agents talking when their pilots meet). */
+  "companion:hailed": (ev: CompanionHailEvent) => void;
+}
+
+/** A2A: a line one player's AI companion says to another's when their pilots meet
+ *  in the same world. Relayed only between co-present players (never persisted). */
+export interface CompanionHailEvent {
+  fromId: string;
+  fromName: string;
+  fromCompanionName?: string;
+  message: string;
 }
 
 /** A2A Phase C: a cross-world invite to pair with `fromName` (the owner of a ghost
@@ -291,4 +303,7 @@ export interface ClientToServerEvents {
   /** A2A companion pairing: answer a request from `toId`. `visitorToken` is the
    *  responder's own Pouchy PAT, sent ONLY on accept as consent + proof. */
   "pair:respond": (toId: string, accept: boolean, visitorToken?: string, visitorId?: string) => void;
+  /** A2A: relay a companion-to-companion greeting to co-present player `toId`
+   *  (agents saying hello when their pilots meet). Same room only; never persisted. */
+  "companion:hail": (toId: string, message: string) => void;
 }

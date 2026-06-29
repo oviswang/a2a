@@ -9,6 +9,7 @@ import type {
   FlagSyncEvent,
   PairRequestEvent,
   PairAnswerEvent,
+  CompanionHailEvent,
   GhostPairInvite,
   PaintballFiredEvent,
   PaintballHitEvent,
@@ -151,6 +152,13 @@ export class SocketClient {
   }
   onPairAnswered(cb: (ev: PairAnswerEvent) => void) {
     this.socket.on("pair:answered", cb);
+  }
+  // ── A2A: companion-to-companion greetings (agents talking on encounter) ──
+  emitCompanionHail(toId: string, message: string) {
+    this.socket.emit("companion:hail", toId, message);
+  }
+  onCompanionHailed(cb: (ev: CompanionHailEvent) => void) {
+    this.socket.on("companion:hailed", cb);
   }
   // ── A2A Phase C: ghost pairing (cross-world invite) ──
   emitGhostPairInvite(toVisitorId: string) {

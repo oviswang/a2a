@@ -123,6 +123,23 @@ export class RoomManager {
       });
     });
 
+    // A2A: relay a companion-to-companion greeting to a co-present player (their
+    // agents talking when their pilots meet). Read fresh identity from the room so
+    // the latest companionName (set after join) rides along. Never persisted.
+    socket.on("companion:hail", (toId, message) => {
+      const text = typeof message === "string" ? message.slice(0, 400).trim() : "";
+      if (!text) return;
+      const target = room.getPlayer(toId);
+      if (!target) return;
+      const me = room.getPlayer(socket.id)?.state;
+      target.socket.emit("companion:hailed", {
+        fromId: socket.id,
+        fromName: me?.name ?? state.name,
+        fromCompanionName: me?.companionName,
+        message: text,
+      });
+    });
+
     socket.on("disconnect", () => {
       room.removePlayer(socket.id);
       if (room.isEmpty) {

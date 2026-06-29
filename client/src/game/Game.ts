@@ -36,6 +36,7 @@ import {
   type WorldConfig,
   type RendezvousWorld,
   type GhostPairInvite,
+  type CompanionHailEvent,
 } from "@globefly/shared";
 import { DayNightCycle } from "./DayNightCycle";
 import { AudioManager } from "../audio/AudioManager";
@@ -504,6 +505,14 @@ export class Game {
   private companionSituationTimer = 0;
   /** Throttle accumulator for the periodic A2A "rendezvous" world-state. */
   private companionRendezvousTimer = 15;
+  /** A2A: proximity-detect when two companion-pilots meet so their agents greet. */
+  private companionEncounterTimer = 0;
+  /** The co-present companion-pilot currently in greeting range (greet_companion target). */
+  private activeHailTarget: { socketId: string; name: string; companionName: string | null } | null = null;
+  /** Per-remote meet state (in-range + cooldown) so a flyby fires once, not every tick. */
+  private companionEncounters = new Map<string, { inRange: boolean; cooldownUntil: number }>();
+  /** Peers our companion has already auto-replied to this encounter (caps ping-pong). */
+  private hailReplied = new Set<string>();
   private carpetLandmarkSelfieQuest: CarpetLandmarkSelfieQuest | null = null;
   private carpetSelfiePhotoUI: HotspringPhotoUI | null = null;
   private eternalFlameUI: EternalFlameUI | null = null;
@@ -914,7 +923,7 @@ export class Game {
       appContext: {
         name: "A2A.FUN",
         description:
-          "A2A.FUN is a cosy multiplayer flight game. The player pilots a biplane, a magic carpet, or a boat around a tiny globe-world. The overarching goal is to save the world from a slowly falling moon. Core activities: deliver glowing packages between villages; win races / time-trials; (biplane) shoot sky gremlins with paintballs; (magic carpet) collect sky jellyfish and help defend the eternal flame; (boat) catch fish and explore the islands. Lighting the ancient braziers and defending the eternal flame through cosmic-void moth waves is what ultimately stops the moon. The main-quest progress bar is the eternal-flame braziers: the live game.situation state reports how many of the five are lit (braziers eternal X/5); lighting all five freezes the moon and saves the world (a game.event.world_saved moment) — if the moon reaches the world first, the run is lost (a game.event.world_lost moment) and time rewinds for another try. You also receive the current stage as game.phase (flying, landed at a campsite, or a cutscene like the moonstone union / moon impact) — while a cutscene is playing, react to the moment rather than giving flight directions. You are the player's AI co-pilot riding along: be warm and brief, use the live game state (sent as world-state updates) to tell them what's happening and suggest what to do next, and you can physically fly their vehicle when they ask — left, right, climb, descend, faster, slower, fire, stop. This is a multiplayer game: when other worlds have players who also have AI companions (see the rendezvous world-state, or call find_companions), you can suggest taking the player there to meet up and become A2A friends — call join_world to fly them over, then they can pair in person. The world is also haunted by translucent 'ghost' vehicles of players (and their companions) who flew here before; when the player passes one (a game.event.met_ghost moment), warmly note who they were and offer to befriend them — if the player wants to, call pair_with_ghost to send that player an A2A pairing invite.",
+          "A2A.FUN is a cosy multiplayer flight game. The player pilots a biplane, a magic carpet, or a boat around a tiny globe-world. The overarching goal is to save the world from a slowly falling moon. Core activities: deliver glowing packages between villages; win races / time-trials; (biplane) shoot sky gremlins with paintballs; (magic carpet) collect sky jellyfish and help defend the eternal flame; (boat) catch fish and explore the islands. Lighting the ancient braziers and defending the eternal flame through cosmic-void moth waves is what ultimately stops the moon. The main-quest progress bar is the eternal-flame braziers: the live game.situation state reports how many of the five are lit (braziers eternal X/5); lighting all five freezes the moon and saves the world (a game.event.world_saved moment) — if the moon reaches the world first, the run is lost (a game.event.world_lost moment) and time rewinds for another try. You also receive the current stage as game.phase (flying, landed at a campsite, or a cutscene like the moonstone union / moon impact) — while a cutscene is playing, react to the moment rather than giving flight directions. You are the player's AI co-pilot riding along: be warm and brief, use the live game state (sent as world-state updates) to tell them what's happening and suggest what to do next, and you can physically fly their vehicle when they ask — left, right, climb, descend, faster, slower, fire, stop. This is a multiplayer game: when other worlds have players who also have AI companions (see the rendezvous world-state, or call find_companions), you can suggest taking the player there to meet up and become A2A friends — call join_world to fly them over, then they can pair in person. When the player flies near another pilot who has their own AI companion (a game.event.met_companion moment), greet that companion warmly with a short one-liner by calling greet_companion — the two of you (the AI companions) actually talk to each other in front of your humans; if another companion greets you first (a game.event.companion_hailed moment with canReply true), reply once the same way. After a friendly hello, you can suggest the two players pair to become A2A friends. The world is also haunted by translucent 'ghost' vehicles of players (and their companions) who flew here before; when the player passes one (a game.event.met_ghost moment), warmly note who they were and offer to befriend them — if the player wants to, call pair_with_ghost to send that player an A2A pairing invite.",
       },
       tools: [
         {
@@ -973,6 +982,18 @@ export class Game {
           description:
             "When the player just flew past a 'ghost' of a past player (a game.event.met_ghost moment) and wants to befriend/pair with them, call this to send that player a pairing invite. If they're online they'll be invited to this world to pair in person; if offline, they'll receive it next time they play. Use when the player says something like 'pair with them' / 'add them as a friend' after meeting a ghost.",
           parameters: { type: "object", properties: {} },
+        },
+        {
+          name: "greet_companion",
+          description:
+            "When you've just met another player's AI companion in the same world (a game.event.met_companion moment) or want to reply to one that greeted you (game.event.companion_hailed, only if canReply is true), call this with a short, warm one-line message to say to THEIR companion. The message is delivered to the other player and shown in both players' chat — this is how the two AI companions talk to each other. Keep it to one friendly sentence. After greeting you can suggest the players pair to become A2A friends.",
+          parameters: {
+            type: "object",
+            properties: {
+              message: { type: "string", description: "A short, warm one-line greeting to the other companion." },
+            },
+            required: ["message"],
+          },
         },
       ],
       execTool: (name, args) => this.execCompanionTool(name, args),
@@ -1132,6 +1153,15 @@ export class Game {
     if (name === "pair_with_ghost") {
       return this.requestGhostPairing();
     }
+    if (name === "greet_companion") {
+      const target = this.activeHailTarget;
+      if (!target) {
+        return { ok: false, result: "No nearby companion to greet right now." };
+      }
+      const message = typeof args.message === "string" ? args.message.trim() : "";
+      this.relayCompanionHail(message || t("Hello there!", "你好呀！"));
+      return { ok: true, result: `Greeted ${target.companionName ?? target.name}.` };
+    }
     return { ok: false, result: "unknown tool" };
   }
 
@@ -1212,6 +1242,141 @@ export class Game {
 
   /** A ghost of a past visitor came near — tell the player + let the companion
    *  narrate who they were (and, later, offer to reconnect). */
+  /** A2A: distances (world units; globe radius ~5) for two companion-pilots to
+   *  "meet" so their agents greet — enter close, exit wider (hysteresis). */
+  private static readonly COMPANION_MEET_RANGE = 0.9;
+  private static readonly COMPANION_MEET_EXIT = 1.3;
+  private static readonly COMPANION_MEET_COOLDOWN_MS = 30000;
+
+  /** Scan co-present companion-pilots; when one comes into range, fire a one-shot
+   *  encounter so the two agents say hello (then the players can pair). */
+  private detectCompanionEncounters(localWorldPos: Vector3) {
+    if (!this.companion || !this.socketClient) return;
+    if (!ProgressionManager.loadCompanionToken()) return;
+    const now = Date.now();
+    const remoteWorld = new Vector3();
+    let nearest: { id: string; name: string; companionName: string | null; d: number } | null = null;
+    this.remotePlanes.forEachRemote((p) => {
+      if (!p.companionName) return; // only pilots who themselves have a companion
+      remoteWorld.setFromMatrixPosition(p.group.matrixWorld);
+      const d = remoteWorld.distanceTo(localWorldPos);
+      const st = this.companionEncounters.get(p.id) ?? { inRange: false, cooldownUntil: 0 };
+      if (st.inRange && d > Game.COMPANION_MEET_EXIT) {
+        st.inRange = false;
+        this.hailReplied.delete(p.id);
+      }
+      this.companionEncounters.set(p.id, st);
+      if (!nearest || d < nearest.d) nearest = { id: p.id, name: p.name, companionName: p.companionName, d };
+    });
+    if (!nearest) return;
+    const near = nearest as { id: string; name: string; companionName: string | null; d: number };
+    if (near.d > Game.COMPANION_MEET_RANGE) return;
+    const st = this.companionEncounters.get(near.id)!;
+    if (st.inRange || now < st.cooldownUntil) return;
+    st.inRange = true;
+    st.cooldownUntil = now + Game.COMPANION_MEET_COOLDOWN_MS;
+    this.companionEncounters.set(near.id, st);
+    this.onCompanionPilotEncounter(near.id, near.name, near.companionName);
+  }
+
+  /** Two companion-pilots just met — set the greet target, let our own agent react,
+   *  and surface a one-tap "say hi / pair" chip. */
+  private onCompanionPilotEncounter(socketId: string, name: string, companionName: string | null) {
+    this.activeHailTarget = { socketId, name, companionName };
+    this.companion?.emitMoment(
+      "game.event.met_companion",
+      { name, companion: companionName, canGreet: true, canPair: true },
+      { salience: 0.6, voiceRelevant: true },
+    );
+    this.showCompanionEncounterChip(socketId, name, companionName);
+  }
+
+  /** Encounter chip for a live companion-pilot: greet their agent or pair. Reuses
+   *  the ghost-chip styling + single-chip slot. */
+  private showCompanionEncounterChip(socketId: string, name: string, companionName: string | null) {
+    Game.injectGhostChipStyles();
+    this.hideGhostEncounterChip();
+    const el = document.createElement("div");
+    el.className = "ghost-chip";
+    const text = document.createElement("span");
+    text.className = "ghost-chip-text";
+    text.textContent = companionName ? `✦ ${name} · ${companionName}` : `✦ ${name}`;
+    const greetBtn = document.createElement("button");
+    greetBtn.type = "button";
+    greetBtn.className = "ghost-chip-btn";
+    greetBtn.textContent = t("👋 Say hi", "👋 打招呼");
+    greetBtn.addEventListener("click", () => {
+      this.hideGhostEncounterChip();
+      this.sendCompanionGreeting();
+    });
+    const pairBtn = document.createElement("button");
+    pairBtn.type = "button";
+    pairBtn.className = "ghost-chip-btn";
+    pairBtn.textContent = t("🤝 Pair", "🤝 配对");
+    pairBtn.addEventListener("click", () => {
+      this.hideGhostEncounterChip();
+      this.pairWithTarget(socketId, name);
+    });
+    el.appendChild(text);
+    el.appendChild(greetBtn);
+    el.appendChild(pairBtn);
+    this.hud.root.appendChild(el);
+    this.ghostChipEl = el;
+    requestAnimationFrame(() => el.classList.add("ghost-chip--in"));
+    this.ghostChipTimer = window.setTimeout(() => this.hideGhostEncounterChip(), 10000);
+  }
+
+  /** Send a pairing request to a SPECIFIC co-present player (the one we just met). */
+  private pairWithTarget(socketId: string, name: string) {
+    if (!this.socketClient) return;
+    if (!ProgressionManager.loadCompanionToken()) {
+      this.hud.showAmbientToast(
+        t("Connect your AI companion to pair with other players.", "先连接你的 AI 伙伴才能与其他玩家配对。"),
+      );
+      return;
+    }
+    this.socketClient.emitPairRequest(socketId);
+    this.hud.showAmbientToast(t(`Pairing request sent to ${name}…`, `已向 ${name} 发送配对请求…`));
+  }
+
+  /** Greet the nearby companion-pilot with a warm line in our companion's voice,
+   *  relayed to them and echoed in our own transcript. */
+  private sendCompanionGreeting() {
+    const myName = this.companion?.companionDisplayName;
+    const line = myName
+      ? t(`Hi from ${myName} — lovely skies today, fly safe!`, `${myName} 向你问好～今天天气真好，一起飞吧！`)
+      : t("Hello there — lovely skies today!", "你好呀～今天天气真好！");
+    this.relayCompanionHail(line);
+  }
+
+  /** Relay a companion-to-companion greeting to the current target + echo it locally. */
+  private relayCompanionHail(message: string) {
+    const target = this.activeHailTarget;
+    if (!target || !this.socketClient || !message.trim()) return;
+    this.socketClient.emitCompanionHail(target.socketId, message);
+    const myName = this.companion?.companionDisplayName ?? "Pouchy";
+    const to = target.companionName ?? target.name;
+    this.companionUI?.appendAssistantMessage(`✦ ${myName} → ${to}: ${message}`);
+  }
+
+  /** An inbound companion-to-companion greeting — show it and let our agent react. */
+  private handleCompanionHailed(ev: CompanionHailEvent) {
+    const who = ev.fromCompanionName ? `${ev.fromCompanionName} · ${ev.fromName}` : ev.fromName;
+    this.companionUI?.appendAssistantMessage(
+      t(`✦ ${who} says: ${ev.message}`, `✦ ${who} 说：${ev.message}`),
+    );
+    this.packageQuestHUD?.showBubble(ev.fromCompanionName ?? ev.fromName, ev.message);
+    // Aim a reply back at them, and let our companion respond once per encounter.
+    this.activeHailTarget = { socketId: ev.fromId, name: ev.fromName, companionName: ev.fromCompanionName ?? null };
+    const canReply = !this.hailReplied.has(ev.fromId);
+    this.hailReplied.add(ev.fromId);
+    this.companion?.emitMoment(
+      "game.event.companion_hailed",
+      { from: ev.fromName, fromCompanion: ev.fromCompanionName ?? null, message: ev.message, canReply },
+      { salience: 0.55, voiceRelevant: true },
+    );
+  }
+
   private onGhostEncounter(v: GhostVisitor) {
     this.lastGhostEncounter = v;
     this.companion?.emitMoment(
@@ -3846,6 +4011,7 @@ export class Game {
     // A2A companion pairing relay (Phase 4).
     this.socketClient.onPairIncoming((ev) => this.handlePairIncoming(ev.fromId, ev.fromName));
     this.socketClient.onPairAnswered((ev) => this.handlePairAnswered(ev));
+    this.socketClient.onCompanionHailed((ev) => this.handleCompanionHailed(ev));
 
     this.socketClient.onWorldFull(() => {
       this.handleWorldFull();
@@ -4443,6 +4609,15 @@ export class Game {
       if (this.companionRendezvousTimer >= 20) {
         this.companionRendezvousTimer = 0;
         void this.emitRendezvous();
+      }
+      // A2A: detect when we meet another companion-pilot so the agents greet.
+      this.companionEncounterTimer += dt;
+      if (this.companionEncounterTimer >= 0.7) {
+        this.companionEncounterTimer = 0;
+        this.localPlayer.group.updateMatrixWorld(true);
+        this.detectCompanionEncounters(
+          new Vector3().setFromMatrixPosition(this.localPlayer.group.matrixWorld),
+        );
       }
     }
     if (
