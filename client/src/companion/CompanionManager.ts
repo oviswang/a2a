@@ -139,6 +139,7 @@ export class CompanionManager {
           "game.situation",
           "game.rendezvous",
           "game.phase",
+          "game.coop",
         ],
         tools: this.opts.tools,
         appContext: this.opts.appContext,

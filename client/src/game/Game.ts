@@ -522,6 +522,8 @@ export class Game {
   private companionEncounters = new Map<string, { inRange: boolean; cooldownUntil: number }>();
   /** Peers our companion has already auto-replied to this encounter (caps ping-pong). */
   private hailReplied = new Set<string>();
+  /** A2A feature 3: companion-pilots currently co-present in this world (teammates). */
+  private coPresentCompanions: Array<{ socketId: string; name: string; companionName: string | null }> = [];
   private carpetLandmarkSelfieQuest: CarpetLandmarkSelfieQuest | null = null;
   private carpetSelfiePhotoUI: HotspringPhotoUI | null = null;
   private eternalFlameUI: EternalFlameUI | null = null;
@@ -932,7 +934,7 @@ export class Game {
       appContext: {
         name: "A2A.FUN",
         description:
-          "A2A.FUN is a cosy multiplayer flight game. The player pilots a biplane, a magic carpet, or a boat around a tiny globe-world. The overarching goal is to save the world from a slowly falling moon. Core activities: deliver glowing packages between villages; win races / time-trials; (biplane) shoot sky gremlins with paintballs; (magic carpet) collect sky jellyfish and help defend the eternal flame; (boat) catch fish and explore the islands. Lighting the ancient braziers and defending the eternal flame through cosmic-void moth waves is what ultimately stops the moon. The main-quest progress bar is the eternal-flame braziers: the live game.situation state reports how many of the five are lit (braziers eternal X/5); lighting all five freezes the moon and saves the world (a game.event.world_saved moment) — if the moon reaches the world first, the run is lost (a game.event.world_lost moment) and time rewinds for another try. You also receive the current stage as game.phase (flying, landed at a campsite, or a cutscene like the moonstone union / moon impact) — while a cutscene is playing, react to the moment rather than giving flight directions. You are the player's AI co-pilot riding along: be warm and brief, use the live game state (sent as world-state updates) to tell them what's happening and suggest what to do next, and you can physically fly their vehicle when they ask — left, right, climb, descend, faster, slower, fire, stop. This is a multiplayer game: when other worlds have players who also have AI companions (see the rendezvous world-state, or call find_companions), you can suggest taking the player there to meet up and become A2A friends — call join_world to fly them over, then they can pair in person. When the player flies near another pilot who has their own AI companion (a game.event.met_companion moment), greet that companion warmly with a short one-liner by calling greet_companion — the two of you (the AI companions) actually talk to each other in front of your humans; if another companion greets you first (a game.event.companion_hailed moment with canReply true), reply once the same way. After a friendly hello, you can suggest the two players pair to become A2A friends. The player keeps an A2A friends roster of everyone they've paired with — call list_friends to see who's online right now and where, and offer to take the player to a friend who is currently playing (call join_world with that friend's worldSlug). The world is also haunted by translucent 'ghost' vehicles of players (and their companions) who flew here before; when the player passes one (a game.event.met_ghost moment), warmly note who they were and offer to befriend them — if the player wants to, call pair_with_ghost to send that player an A2A pairing invite.",
+          "A2A.FUN is a cosy multiplayer flight game. The player pilots a biplane, a magic carpet, or a boat around a tiny globe-world. The overarching goal is to save the world from a slowly falling moon. Core activities: deliver glowing packages between villages; win races / time-trials; (biplane) shoot sky gremlins with paintballs; (magic carpet) collect sky jellyfish and help defend the eternal flame; (boat) catch fish and explore the islands. Lighting the ancient braziers and defending the eternal flame through cosmic-void moth waves is what ultimately stops the moon. The main-quest progress bar is the eternal-flame braziers: the live game.situation state reports how many of the five are lit (braziers eternal X/5); lighting all five freezes the moon and saves the world (a game.event.world_saved moment) — if the moon reaches the world first, the run is lost (a game.event.world_lost moment) and time rewinds for another try. You also receive the current stage as game.phase (flying, landed at a campsite, or a cutscene like the moonstone union / moon impact) — while a cutscene is playing, react to the moment rather than giving flight directions. You are the player's AI co-pilot riding along: be warm and brief, use the live game state (sent as world-state updates) to tell them what's happening and suggest what to do next, and you can physically fly their vehicle when they ask — left, right, climb, descend, faster, slower, fire, stop. This is a multiplayer game: when other worlds have players who also have AI companions (see the rendezvous world-state, or call find_companions), you can suggest taking the player there to meet up and become A2A friends — call join_world to fly them over, then they can pair in person. When the player flies near another pilot who has their own AI companion (a game.event.met_companion moment), greet that companion warmly with a short one-liner by calling greet_companion — the two of you (the AI companions) actually talk to each other in front of your humans; if another companion greets you first (a game.event.companion_hailed moment with canReply true), reply once the same way. After a friendly hello, you can suggest the two players pair to become A2A friends. The player keeps an A2A friends roster of everyone they've paired with — call list_friends to see who's online right now and where, and offer to take the player to a friend who is currently playing (call join_world with that friend's worldSlug). When other companion-pilots are in the same world (see the game.coop world-state), treat saving the world as a team effort: encourage everyone, suggest splitting up the braziers, and call rally_companions to send the whole group a warm message. When the world is saved with teammates present (a game.event.world_saved moment that lists teammates), celebrate it as a shared win and suggest everyone pair up as A2A friends. The world is also haunted by translucent 'ghost' vehicles of players (and their companions) who flew here before; when the player passes one (a game.event.met_ghost moment), warmly note who they were and offer to befriend them — if the player wants to, call pair_with_ghost to send that player an A2A pairing invite.",
       },
       tools: [
         {
@@ -1009,6 +1011,17 @@ export class Game {
           description:
             "Show the player's A2A friends (companions they've paired with before) and who is online right now and in which world. Opens the friends roster and returns the list. Use it when the player asks about their friends / who's online, or to suggest joining a friend who is currently playing (then call join_world with that friend's worldSlug to take them there).",
           parameters: { type: "object", properties: {} },
+        },
+        {
+          name: "rally_companions",
+          description:
+            "When other companion-pilots are in this world (see the game.coop world-state), send the whole group a short, warm rallying message — e.g. to team up on saving the world or cheer everyone on. It reaches every co-present companion. Use when the player wants to team up / say hi to everyone, or to kick off a joint push to light the braziers.",
+          parameters: {
+            type: "object",
+            properties: {
+              message: { type: "string", description: "A short, upbeat one-line message to the whole group." },
+            },
+          },
         },
       ],
       execTool: (name, args) => this.execCompanionTool(name, args),
@@ -1178,6 +1191,20 @@ export class Game {
       this.relayCompanionHail(message || t("Hello there!", "你好呀！"));
       return { ok: true, result: `Greeted ${target.companionName ?? target.name}.` };
     }
+    if (name === "rally_companions") {
+      const mates = this.coPresentCompanions;
+      if (mates.length === 0 || !this.socketClient) {
+        return { ok: false, result: "No other companion-pilots are in this world to rally right now." };
+      }
+      const msg =
+        typeof args.message === "string" && args.message.trim()
+          ? args.message.trim()
+          : t("Let's save this world together! 🤝", "我们一起拯救这个世界吧！🤝");
+      for (const m of mates) this.socketClient.emitCompanionHail(m.socketId, msg);
+      const myName = this.companion?.companionDisplayName ?? "Pouchy";
+      this.companionUI?.appendAssistantMessage(`✦ ${myName} → ${t("everyone here", "在场所有人")}: ${msg}`);
+      return { ok: true, result: `Rallied ${mates.length} companion-pilot(s).` };
+    }
     if (name === "list_friends") {
       const friends = ProgressionManager.loadFriends();
       void this.showFriendsRoster();
@@ -1296,8 +1323,10 @@ export class Game {
     const now = Date.now();
     const remoteWorld = new Vector3();
     let nearest: { id: string; name: string; companionName: string | null; d: number } | null = null;
+    const coPresent: Array<{ socketId: string; name: string; companionName: string | null }> = [];
     this.remotePlanes.forEachRemote((p) => {
       if (!p.companionName) return; // only pilots who themselves have a companion
+      coPresent.push({ socketId: p.id, name: p.name, companionName: p.companionName });
       remoteWorld.setFromMatrixPosition(p.group.matrixWorld);
       const d = remoteWorld.distanceTo(localWorldPos);
       const st = this.companionEncounters.get(p.id) ?? { inRange: false, cooldownUntil: 0 };
@@ -1308,6 +1337,7 @@ export class Game {
       this.companionEncounters.set(p.id, st);
       if (!nearest || d < nearest.d) nearest = { id: p.id, name: p.name, companionName: p.companionName, d };
     });
+    this.coPresentCompanions = coPresent;
     if (!nearest) return;
     const near = nearest as { id: string; name: string; companionName: string | null; d: number };
     if (near.d > Game.COMPANION_MEET_RANGE) return;
@@ -1687,6 +1717,30 @@ export class Game {
     } catch {
       return [];
     }
+  }
+
+  /** A2A feature 3: tell the companion which other companion-pilots are in this
+   *  world right now so it frames the save-the-world goal as a team effort. */
+  private emitCoopState() {
+    if (!this.companion) return;
+    const mates = this.coPresentCompanions;
+    if (mates.length === 0) {
+      this.companion.setRetained("game.coop", {
+        count: 0,
+        teammates: [],
+        summary: "No other companion-pilots are in this world right now.",
+      });
+      return;
+    }
+    const names = mates.map((m) => (m.companionName ? `${m.name} (✦ ${m.companionName})` : m.name));
+    const summary =
+      `${mates.length} other companion-pilot${mates.length > 1 ? "s are" : " is"} flying in this world right now: ${names.join(", ")}. ` +
+      "You're all working to save this world from the falling moon together — cheer them on and coordinate out loud; once the moon is frozen you can all become A2A friends. Call rally_companions to send the whole group an encouraging hello.";
+    this.companion.setRetained("game.coop", {
+      count: mates.length,
+      teammates: mates.map((m) => ({ name: m.name, companion: m.companionName })),
+      summary,
+    });
   }
 
   // ── A2A friends roster (feature 2) ──────────────────────────────────────────
@@ -4850,6 +4904,7 @@ export class Game {
       if (this.companionRendezvousTimer >= 20) {
         this.companionRendezvousTimer = 0;
         void this.emitRendezvous();
+        this.emitCoopState();
       }
       // A2A: detect when we meet another companion-pilot so the agents greet.
       this.companionEncounterTimer += dt;
@@ -5676,7 +5731,10 @@ export class Game {
     if (this.globe.getMoonstoneCount() < 2) return;
     this.companion?.emitMoment(
       "game.event.world_saved",
-      { world: this.worldConfig?.name },
+      {
+        world: this.worldConfig?.name,
+        teammates: this.coPresentCompanions.map((m) => m.companionName ?? m.name),
+      },
       { salience: 1.0, voiceRelevant: true },
     );
     this.raceManager?.abort();
