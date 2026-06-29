@@ -598,6 +598,7 @@ export class Room {
       // isn't wiped on the first move (which would zero out the A2A companionCount).
       hasCompanion: player.state.hasCompanion,
       companionName: state.companionName ?? player.state.companionName,
+      visitorId: state.visitorId ?? player.state.visitorId,
     };
     player.state = fullState;
 

@@ -26,6 +26,8 @@ export type StateSyncOptions = {
   /** The local player's AI companion display name (A2A identity on the name pill),
    *  known asynchronously after the companion connects — sent once available. */
   getCompanionName?: () => string | undefined;
+  /** The local player's stable non-secret visitorId (for friend recognition). */
+  getVisitorId?: () => string | undefined;
 };
 
 export class StateSync {
@@ -79,6 +81,7 @@ export class StateSync {
       carpetPortals: this.options.getCarpetPortals?.(),
       carpetPortalTeleportSeq: this.options.getCarpetPortalTeleportSeq?.(),
       companionName: this.options.getCompanionName?.() || undefined,
+      visitorId: this.options.getVisitorId?.() || undefined,
       timestamp: Date.now(),
     });
   }
