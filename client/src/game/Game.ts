@@ -133,7 +133,12 @@ import { MeteorShower } from "./MeteorShower";
 import { TransitionOverlay } from "../ui/TransitionOverlay";
 import { CAMPSITE_HOME_ENABLED } from "../config/features";
 import { LevelUpCards } from "../ui/LevelUpCards";
-import { ProgressionManager, type SavedPlayerWorldState } from "./ProgressionManager";
+import {
+  ProgressionManager,
+  friendBondLevel,
+  type SavedPlayerWorldState,
+  type CompanionFriend,
+} from "./ProgressionManager";
 import { CarpetLandmarkSelfieQuest, LANDMARK_SELFIE_XP } from "./CarpetLandmarkSelfieQuest";
 import { HotspringPhotoUI } from "../ui/HotspringPhotoUI";
 import { EternalFlameUI } from "../ui/EternalFlameUI";
@@ -594,6 +599,10 @@ export class Game {
   private friendBondFX: FriendBondFX | null = null;
   /** Cached set of paired-friend visitorIds, for recognising them in the world. */
   private friendVisitorIds = new Set<string>();
+  /** Cached friend records by visitorId (for live bond level without re-reading storage). */
+  private friendByVisitor = new Map<string, CompanionFriend>();
+  /** Per-friend "time together" accumulator → +1 bond every 12s co-present. */
+  private bondTimers = new Map<string, number>();
   private balloonInRange: boolean[] = [];
   private balloonGreetCooldown: number[] = [];
   private balloonGreetSalt = 0;
@@ -1614,6 +1623,7 @@ export class Game {
     const target = this.activeHailTarget;
     if (!target || !this.socketClient || !message.trim()) return;
     this.diag.hailsOut++;
+    this.bumpBond(this.visitorIdForSocket(target.socketId), 1);
     this.socketClient.emitCompanionHail(target.socketId, message);
     const myName = this.companion?.companionDisplayName ?? "Pouchy";
     const to = target.companionName ?? target.name;
@@ -1626,6 +1636,7 @@ export class Game {
     if (!target || !this.socketClient) return;
     const g = normalizeGift(gift);
     this.diag.giftsOut++;
+    this.bumpBond(this.visitorIdForSocket(target.socketId), 2);
     this.socketClient.emitCompanionGift(target.socketId, g);
     const to = target.companionName ?? target.name;
     this.companionUI?.appendAssistantMessage(t(`🎁 Sent ${g} to ${to}.`, `🎁 已送 ${g} 给 ${to}。`));
@@ -1635,6 +1646,7 @@ export class Game {
   /** An inbound sky gift — celebrate it, keep it on the profile, let the agent react. */
   private handleCompanionGifted(ev: CompanionGiftEvent) {
     this.diag.giftsIn++;
+    this.bumpBond(this.visitorIdForSocket(ev.fromId), 2);
     const g = normalizeGift(ev.gift);
     const who = ev.fromCompanionName ? `${ev.fromCompanionName} · ${ev.fromName}` : ev.fromName;
     ProgressionManager.addReceivedGift({
@@ -1686,6 +1698,7 @@ export class Game {
   /** An inbound companion-to-companion greeting — show it and let our agent react. */
   private handleCompanionHailed(ev: CompanionHailEvent) {
     this.diag.hailsIn++;
+    this.bumpBond(this.visitorIdForSocket(ev.fromId), 1);
     const who = ev.fromCompanionName ? `${ev.fromCompanionName} · ${ev.fromName}` : ev.fromName;
     this.companionUI?.appendAssistantMessage(
       t(`✦ ${who} says: ${ev.message}`, `✦ ${who} 说：${ev.message}`),
@@ -1998,13 +2011,36 @@ export class Game {
 
   private friendsRosterCleanup: (() => void) | null = null;
 
-  /** Refresh the cached paired-friend visitorId set (call after a successful pair). */
+  /** Refresh the cached paired-friend visitorId set + records (call after a pair). */
   private refreshFriendIds() {
-    this.friendVisitorIds = new Set(
-      ProgressionManager.loadFriends()
-        .map((f) => f.visitorId)
-        .filter((v): v is string => !!v),
-    );
+    const list = ProgressionManager.loadFriends();
+    this.friendVisitorIds = new Set(list.map((f) => f.visitorId).filter((v): v is string => !!v));
+    this.friendByVisitor = new Map(list.map((f) => [f.visitorId, f]));
+  }
+
+  /** Grow a friend's bond (persist + keep the in-memory cache current). Surfaces a
+   *  toast on a level-up so the friendship feels like it's deepening. */
+  private bumpBond(visitorId: string | null | undefined, amount: number) {
+    if (!visitorId || !this.friendVisitorIds.has(visitorId)) return;
+    const before = friendBondLevel(this.friendByVisitor.get(visitorId)?.bond);
+    ProgressionManager.addBond(visitorId, amount);
+    const f = this.friendByVisitor.get(visitorId);
+    if (f) f.bond = (f.bond ?? 0) + amount;
+    const after = friendBondLevel(f?.bond);
+    if (after > before) {
+      this.hud.showAmbientToast(
+        t(`Friendship with ${f?.name ?? "your friend"} → ❤️ Lv${after}`, `与 ${f?.name ?? "好友"} 的羁绊 → ❤️ Lv${after}`),
+      );
+    }
+  }
+
+  /** Map a co-present socket id to that player's A2A visitorId (or null). */
+  private visitorIdForSocket(socketId: string): string | null {
+    let vid: string | null = null;
+    this.remotePlanes?.forEachRemote((p) => {
+      if (p.id === socketId) vid = p.visitorId;
+    });
+    return vid;
   }
 
   /** Ask the server which of our paired A2A friends are online right now + where. */
@@ -2109,11 +2145,14 @@ export class Game {
       nm.textContent = f.companionName ? `${f.name} · ✦ ${f.companionName}` : f.name;
       const sub = document.createElement("div");
       sub.className = "friends-sub";
-      sub.textContent = online
+      const lvl = friendBondLevel(f.bond);
+      const presence = online
         ? p?.worldName
           ? t(`In ${p.worldName}`, `在「${p.worldName}」`)
           : t("Online", "在线")
         : t("Offline", "离线");
+      const bondStr = lvl > 0 ? `${"❤️".repeat(Math.min(lvl, 5))} Lv${lvl} · ` : "";
+      sub.textContent = `${bondStr}${presence}`;
       info.appendChild(nm);
       info.appendChild(sub);
       row.appendChild(dot);
@@ -4968,9 +5007,18 @@ export class Game {
         const friends: FriendInWorld[] = [];
         if (this.friendVisitorIds.size > 0) {
           this.remotePlanes.forEachRemote((p) => {
-            if (p.visitorId && this.friendVisitorIds.has(p.visitorId)) {
+            const vid = p.visitorId;
+            if (vid && this.friendVisitorIds.has(vid)) {
               p.group.updateMatrixWorld(true);
-              friends.push({ name: p.name, pos: new Vector3().setFromMatrixPosition(p.group.matrixWorld) });
+              friends.push({
+                name: p.name,
+                bondLevel: friendBondLevel(this.friendByVisitor.get(vid)?.bond),
+                pos: new Vector3().setFromMatrixPosition(p.group.matrixWorld),
+              });
+              // Bond grows from time spent together: +1 every 12s co-present.
+              const acc = (this.bondTimers.get(vid) ?? 0) + dt;
+              if (acc >= 12) { this.bumpBond(vid, 1); this.bondTimers.set(vid, acc - 12); }
+              else this.bondTimers.set(vid, acc);
             }
           });
         }
@@ -6065,6 +6113,8 @@ export class Game {
       },
       { salience: 1.0, voiceRelevant: true },
     );
+    // Saving the world together is a big bond moment.
+    for (const m of this.coPresentCompanions) this.bumpBond(this.visitorIdForSocket(m.socketId), 5);
     this.raceManager?.abort();
     this.ensureBraziersSpawned();
 

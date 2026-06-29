@@ -13,6 +13,8 @@ export interface FriendInWorld {
   name: string;
   /** World-space position of the friend's vehicle. */
   pos: Vector3;
+  /** Friendship level (0+); ≥3 shows a "BFF" tag + a golden tether. */
+  bondLevel?: number;
 }
 
 /** Straight-line world distance → a friendly "metres" number for the pointer. */
@@ -133,7 +135,8 @@ export class FriendBondFX {
       const chevron = arrow.firstElementChild as HTMLElement;
       chevron.style.transform = `rotate(${screenAng}deg)`;
       const label = arrow.lastElementChild as HTMLElement;
-      label.textContent = `${f.name} · ${Math.round((d * DIST_SCALE) / 10) * 10}m`;
+      const bff = (f.bondLevel ?? 0) >= 3 ? "❤︎ " : "";
+      label.textContent = `${bff}${f.name} · ${Math.round((d * DIST_SCALE) / 10) * 10}m`;
     }
 
     // Drop arrows for friends who left.
@@ -149,6 +152,8 @@ export class FriendBondFX {
       const pulse = 0.55 + 0.25 * Math.sin(this.time * 4);
       const fade = 1 - Math.min(1, nearestD / TETHER_RANGE);
       this.tetherMat.opacity = pulse * fade;
+      // Close friends get a warmer, golden tether.
+      this.tetherMat.color.setHex((nearest.bondLevel ?? 0) >= 3 ? 0xffe1a8 : 0xffc6dd);
 
       if (nearestD <= HEART_RANGE) {
         const last = this.heartCooldown.get(nearest.name) ?? -Infinity;
