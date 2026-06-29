@@ -6869,7 +6869,7 @@ export class Game {
 
     // ◀◀ RWD indicator — bottom-right, blinking.
     const indicator = document.createElement("div");
-    indicator.textContent = "◀◀  RWD";
+    indicator.textContent = t("◀◀  RWD", "◀◀  倒带");
     Object.assign(indicator.style, {
       position: "absolute",
       bottom: "2.5rem",
