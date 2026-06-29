@@ -791,6 +791,14 @@ export class Game {
     this.installDiag();
   }
 
+  /** Runtime opt-in for the QA test hooks (compile-time gated by __A2A_QA__). */
+  private qaRuntimeOptedIn(): boolean {
+    try {
+      return new URLSearchParams(window.location.search).has("qa") ||
+        window.localStorage.getItem("a2a_qa") === "1";
+    } catch { return false; }
+  }
+
   /** Expose a read-only diagnostics surface on `window.__a2a` so headless/QA can
    *  assert companion + A2A behaviour without a mic, visuals, or a 2nd player.
    *  Token is NEVER exposed — only counts, booleans, and display names. */
@@ -835,15 +843,15 @@ export class Game {
         },
       };
 
-      // QA-only test hooks (gated behind `?qa=1` or localStorage a2a_qa=1) so the
-      // [2P] A2A flows can be driven deterministically without flight controls /
-      // proximity / clicking the pairing card. Never present for normal users.
-      let isQa = false;
-      try {
-        isQa = new URLSearchParams(window.location.search).has("qa") ||
-          window.localStorage.getItem("a2a_qa") === "1";
-      } catch { /* ignore */ }
-      if (isQa) {
+      // QA-only test hooks — drive the [2P] A2A flows deterministically (no flight
+      // controls / proximity / clicking the consent card). Double-gated:
+      //  1) COMPILE-TIME: `__A2A_QA__` is a Vite-injected boolean literal — `false`
+      //     in the production build, so esbuild dead-code-eliminates this whole block
+      //     (incl. autoAcceptPairs); it never ships to real users.
+      //  2) RUNTIME: still requires ?qa=1 (or localStorage a2a_qa=1) to attach.
+      // NOTE: the test hooks are assigned INSIDE `if (__A2A_QA__)` (a literal in the
+      // bundle) so the production build tree-shakes the whole block away.
+      if (__A2A_QA__ && this.qaRuntimeOptedIn()) {
         // Read remote players straight from the socket layer (event-driven, so it
         // works even when the rAF game-tick — and thus coPresent — is throttled in a
         // background/headless tab). This is the fix for "coPresent=[] → greet/gift
