@@ -11,6 +11,7 @@
  * what to show. All strings are localized via t(). No SDK or Three.js imports.
  */
 import { t } from "../i18n";
+import { emotifyCompanionText } from "./emoteText";
 import type { CompanionStatus } from "./CompanionManager";
 
 export interface CompanionUIOptions {
@@ -196,7 +197,7 @@ export class CompanionUI {
   }
 
   appendAssistantMessage(text: string) {
-    this.appendRow("assistant", text);
+    this.appendRow("assistant", emotifyCompanionText(text));
   }
   appendUserMessage(text: string) {
     this.appendRow("user", text);
