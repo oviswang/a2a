@@ -294,7 +294,15 @@ export class ProgressionManager {
   // (token + visitorId + friends + gifts) — making 2P A2A untestable in one
   // browser profile. In QA mode (?qa=1) we keep the per-player identity in
   // sessionStorage instead, which is per-tab, so two tabs act as two visitors.
+  /** QA tooling (the sessionStorage per-tab isolation AND window.__a2a.test) is
+   *  compiled in only for local dev (`npm run dev`) and preview builds
+   *  (`VITE_QA_HOOKS=1`) — NEVER the public production build, so consent-bypassing
+   *  test hooks never ship to real users. */
+  static qaHooksAllowed(): boolean {
+    return __A2A_QA__;
+  }
   private static qaMode(): boolean {
+    if (!__A2A_QA__) return false;
     try {
       return new URLSearchParams(window.location.search).has("qa") ||
         localStorage.getItem("a2a_qa") === "1";
