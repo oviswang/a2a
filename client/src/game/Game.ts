@@ -806,6 +806,15 @@ export class Game {
         get worldSlug() { return g.worldSlug ?? null; },
         /** This tab's A2A visitorId — distinct per tab in QA mode (sessionStorage). */
         get visitorId() { return ProgressionManager.loadOrCreateVisitorId(); },
+        /** Socket-layer multiplayer state (event-driven; unaffected by rAF throttle). */
+        get socketConnected() { return g.socketClient?.connected ?? false; },
+        get remoteCount() { return g.remotePlanes?.count ?? 0; },
+        /** Remote players seen at the socket layer + whether each carries a companion. */
+        get remotes() {
+          const out: Array<{ name: string; companion: string | null }> = [];
+          g.remotePlanes?.forEachRemote((p) => out.push({ name: p.name, companion: p.companionName }));
+          return out;
+        },
         counts: g.diag,
         /** Co-present companion-pilots (A2A feature 1/3). */
         get coPresent() {
@@ -835,29 +844,54 @@ export class Game {
           window.localStorage.getItem("a2a_qa") === "1";
       } catch { /* ignore */ }
       if (isQa) {
+        // Read remote players straight from the socket layer (event-driven, so it
+        // works even when the rAF game-tick — and thus coPresent — is throttled in a
+        // background/headless tab). This is the fix for "coPresent=[] → greet/gift
+        // no-op" in headless: the relay only needs the target's socket id.
+        const scanRemotes = (): Array<{ socketId: string; name: string; companionName: string | null }> => {
+          const list: Array<{ socketId: string; name: string; companionName: string | null }> = [];
+          g.remotePlanes?.forEachRemote((p) =>
+            list.push({ socketId: p.id, name: p.name, companionName: p.companionName }),
+          );
+          // Prefer pilots that advertise a companion, but fall back to any remote.
+          list.sort((a, b) => Number(!!b.companionName) - Number(!!a.companionName));
+          return list;
+        };
         api.test = {
-          /** Send a pairing request to a co-present player (first remote). */
-          pair: () => g.initiateCompanionPairing(),
+          /** Force-recompute co-present from the socket layer (bypasses the tick). */
+          syncPresence: () => {
+            const list = scanRemotes();
+            g.coPresentCompanions = list;
+            return { count: list.length, remotes: list.map((r) => ({ name: r.name, companion: r.companionName })) };
+          },
+          /** Send a pairing request to the first remote player. */
+          pair: () => { g.initiateCompanionPairing(); return "pair-requested"; },
           /** Auto-accept incoming pairing requests (skips the consent card). */
-          autoAcceptPairs: (on = true) => { g.qaAutoAcceptPairs = on; },
-          /** Greet the first co-present companion-pilot (bypasses proximity). */
+          autoAcceptPairs: (on = true) => { g.qaAutoAcceptPairs = on; return `autoAcceptPairs=${on}`; },
+          /** Greet the first remote pilot (socket-layer target; bypasses proximity). */
           greet: (msg = "Hello from QA!") => {
-            const m = g.coPresentCompanions[0];
-            if (!m) return false;
+            const m = scanRemotes()[0];
+            if (!m) return "no-remote: open both tabs into the same world (same worldSlug) and click Play";
             g.activeHailTarget = m;
             g.relayCompanionHail(msg);
-            return true;
+            return `greet-sent to ${m.name}`;
           },
-          /** Send a gift to the first co-present companion-pilot. */
+          /** Send a gift to the first remote pilot. */
           gift: (emoji = "🎁") => {
-            const m = g.coPresentCompanions[0];
-            if (!m) return false;
+            const m = scanRemotes()[0];
+            if (!m) return "no-remote";
             g.activeHailTarget = m;
             g.sendCompanionGift(emoji);
-            return true;
+            return `gift-sent (${emoji}) to ${m.name}`;
           },
-          /** Rally all co-present companion-pilots. */
-          rally: (msg = "Let's team up!") => g.execCompanionTool("rally_companions", { message: msg }),
+          /** Rally every remote pilot in the world. */
+          rally: (msg = "Let's team up!") => {
+            const list = scanRemotes();
+            if (!list.length) return "no-remote";
+            g.coPresentCompanions = list;
+            void g.execCompanionTool("rally_companions", { message: msg });
+            return `rallied ${list.length} pilot(s)`;
+          },
         };
       }
 
