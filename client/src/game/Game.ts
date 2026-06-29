@@ -547,6 +547,8 @@ export class Game {
     hailsIn: 0, hailsOut: 0, giftsIn: 0, giftsOut: 0, encounters: 0,
     lastError: null as string | null,
   };
+  /** QA-only: auto-accept incoming pairing requests (set via window.__a2a.test). */
+  private qaAutoAcceptPairs = false;
   private carpetLandmarkSelfieQuest: CarpetLandmarkSelfieQuest | null = null;
   private carpetSelfiePhotoUI: HotspringPhotoUI | null = null;
   private eternalFlameUI: EternalFlameUI | null = null;
@@ -795,7 +797,7 @@ export class Game {
   private installDiag() {
     const g = this;
     try {
-      (window as unknown as { __a2a?: unknown }).__a2a = {
+      const api: Record<string, unknown> = {
         version: "diag1",
         get hasToken() { return !!ProgressionManager.loadCompanionToken(); },
         get companionReady() { return g.companion?.isReady ?? false; },
@@ -821,6 +823,43 @@ export class Game {
           }));
         },
       };
+
+      // QA-only test hooks (gated behind `?qa=1` or localStorage a2a_qa=1) so the
+      // [2P] A2A flows can be driven deterministically without flight controls /
+      // proximity / clicking the pairing card. Never present for normal users.
+      let isQa = false;
+      try {
+        isQa = new URLSearchParams(window.location.search).has("qa") ||
+          window.localStorage.getItem("a2a_qa") === "1";
+      } catch { /* ignore */ }
+      if (isQa) {
+        api.test = {
+          /** Send a pairing request to a co-present player (first remote). */
+          pair: () => g.initiateCompanionPairing(),
+          /** Auto-accept incoming pairing requests (skips the consent card). */
+          autoAcceptPairs: (on = true) => { g.qaAutoAcceptPairs = on; },
+          /** Greet the first co-present companion-pilot (bypasses proximity). */
+          greet: (msg = "Hello from QA!") => {
+            const m = g.coPresentCompanions[0];
+            if (!m) return false;
+            g.activeHailTarget = m;
+            g.relayCompanionHail(msg);
+            return true;
+          },
+          /** Send a gift to the first co-present companion-pilot. */
+          gift: (emoji = "🎁") => {
+            const m = g.coPresentCompanions[0];
+            if (!m) return false;
+            g.activeHailTarget = m;
+            g.sendCompanionGift(emoji);
+            return true;
+          },
+          /** Rally all co-present companion-pilots. */
+          rally: (msg = "Let's team up!") => g.execCompanionTool("rally_companions", { message: msg }),
+        };
+      }
+
+      (window as unknown as { __a2a?: unknown }).__a2a = api;
     } catch {
       /* window not available (non-browser) — ignore */
     }
@@ -2419,6 +2458,22 @@ export class Game {
     const myToken = ProgressionManager.loadCompanionToken();
     if (!myToken) {
       this.socketClient.emitPairRespond(fromId, false);
+      return;
+    }
+    // QA fast-path: accept without showing the consent card.
+    if (this.qaAutoAcceptPairs) {
+      this.socketClient.emitPairRespond(
+        fromId, true, myToken,
+        ProgressionManager.loadOrCreateVisitorId(),
+        this.companion?.companionDisplayName ?? undefined,
+      );
+      if (fromVisitorId) {
+        ProgressionManager.addFriend({
+          visitorId: fromVisitorId, name: fromName,
+          companionName: fromCompanionName, pairedAt: Date.now(),
+        });
+      }
+      this.hud.showAmbientToast(t("Pairing accepted.", "已接受配对。"));
       return;
     }
     const ok = await this.showPairingCard({
