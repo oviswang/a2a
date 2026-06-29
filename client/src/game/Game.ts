@@ -300,7 +300,6 @@ const FLAME_JELLY_DIALOGUE_SFX_VOLUME = 0.46;
 const LEVELUP_SFX_IDS = ["levelup_1", "levelup_2", "levelup_3"] as const;
 const LEVELUP_SFX_VOLUME = 0.42;
 
-const GONG_SFX_VOLUME = 0.55;
 /** Gremlin King eternal-flame reward sting. */
 const CHOIR_1_SFX_VOLUME = 0.58;
 const KING_ETERNAL_FLAME_REWARD_DELAY_MS = 1000;
@@ -3275,10 +3274,6 @@ export class Game {
     window.removeEventListener("resize", this.onResize);
   }
 
-  private static readonly MOON_CREDITS_FADE_IN_MS = 4000;
-  private static readonly MOON_CREDITS_HOLD_MS = 2500;
-  private static readonly MOON_CREDITS_FADE_OUT_MS = 4000;
-
   private static readonly MOON_EPITAPH_LINES = [
     t("You tried. You flew. It wasn't enough.", "你尽力了，你飞翔了，但还不够。"),
     t("No one could stop it. Not even you.", "没人能阻止它，连你也不能。"),
@@ -3350,80 +3345,6 @@ export class Game {
     });
 
     el.remove();
-  }
-
-  /** Full-screen credits on black after moon ending, before teardown and lobby. */
-  private async showMoonCreditsOverlay(): Promise<void> {
-    const wrap = document.createElement("div");
-    wrap.setAttribute("aria-hidden", "true");
-    Object.assign(wrap.style, {
-      position: "fixed",
-      inset: "0",
-      zIndex: "10000",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
-      pointerEvents: "none",
-      opacity: "0",
-      transition: `opacity ${Game.MOON_CREDITS_FADE_IN_MS}ms ease`,
-    });
-
-    const title = document.createElement("h1");
-    title.textContent = "Tiny Skies";
-    Object.assign(title.style, {
-      fontFamily: "'Darumadrop One', 'Domine', Georgia, serif",
-      fontSize: "clamp(3.5rem, 14vw, 8.4rem)",
-      fontWeight: "800",
-      margin: "0",
-      color: "#ffffff",
-    });
-
-    const byline = document.createElement("p");
-    byline.textContent = "By Danny Limanseta";
-    Object.assign(byline.style, {
-      fontFamily: "'Domine', Georgia, serif",
-      fontSize: "clamp(0.95rem, 2.5vw, 1.2rem)",
-      fontWeight: "500",
-      margin: "1.25rem 0 0",
-      color: "rgba(255, 255, 255, 0.9)",
-      letterSpacing: "0.04em",
-    });
-
-    wrap.appendChild(title);
-    wrap.appendChild(byline);
-    this.container.appendChild(wrap);
-
-    if (!this.audioManager.muted) {
-      if (!this.audioManager.hasSFX("gong")) {
-        await this.audioManager.loadSFX("gong", "/audio/sfx/gong.mp3");
-      }
-      this.audioManager.resumeContextIfNeeded();
-    }
-
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    wrap.style.opacity = "1";
-    if (!this.audioManager.muted) {
-      this.audioManager.playSFX("gong", GONG_SFX_VOLUME);
-    }
-
-    await new Promise<void>((resolve) => {
-      const done = () => resolve();
-      wrap.addEventListener("transitionend", done, { once: true });
-      setTimeout(done, Game.MOON_CREDITS_FADE_IN_MS + 200);
-    });
-
-    await new Promise<void>((r) => setTimeout(r, Game.MOON_CREDITS_HOLD_MS));
-
-    wrap.style.transition = `opacity ${Game.MOON_CREDITS_FADE_OUT_MS}ms ease`;
-    wrap.style.opacity = "0";
-    await new Promise<void>((resolve) => {
-      const done = () => resolve();
-      wrap.addEventListener("transitionend", done, { once: true });
-      setTimeout(done, Game.MOON_CREDITS_FADE_OUT_MS + 200);
-    });
-
-    wrap.remove();
   }
 
   /** Self-contained rewind render loop — runs independently of this.tick. */
@@ -3516,7 +3437,6 @@ export class Game {
     this.running = false;
 
     await this.showMoonEpitaphOverlay();
-    await this.showMoonCreditsOverlay();
     await this.showMoonRewindSequence();
 
     {
