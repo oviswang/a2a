@@ -89,7 +89,10 @@ function playerWorldPos(state: PlayerState, globeRadius: number, out: Vector3): 
   return out.copy(cartesianFromSpherical(_qFlag, state.altitude, globeRadius));
 }
 
-export const MAX_PLAYERS = 15;
+// Soft per-room cap. The relay broadcasts each player's full state to every other
+// player ~20x/s, so traffic grows ~O(N²); 30 keeps it reasonable while raising A2A
+// density. Going much higher (50+) would want area-of-interest culling first.
+export const MAX_PLAYERS = 30;
 
 export class Room {
   readonly slug: string;
