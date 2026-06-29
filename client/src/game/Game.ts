@@ -27,8 +27,6 @@ import { t, IS_ZH } from "../i18n";
 import { localizeWorldName } from "../i18nNames";
 import { CompanionManager } from "../companion/CompanionManager";
 import { CompanionUI } from "../companion/CompanionUI";
-import { VoiceCommander } from "../companion/VoiceCommander";
-import { CompanionVoice } from "../companion/CompanionVoice";
 import { WaypointBeacon } from "./WaypointBeacon";
 import {
   BRAZIER_MOON_PAUSE_MS,
@@ -495,15 +493,8 @@ export class Game {
   } | null = null;
   /** One-shot fire request from the companion (consumed next frame). */
   private voiceFireQueued = false;
-  /** Browser-native voice loop: an always-listening speech recognizer that owns the
-   *  mic (so commands are reliable) + device TTS for the companion's spoken replies. */
-  private voiceCommander: VoiceCommander | null = null;
-  private companionVoice: CompanionVoice | null = null;
-  /** True while the companion's TTS is talking — gates the recognizer to avoid
-   *  feeding the companion's own voice back in as a command/chat. */
-  private companionTtsSpeaking = false;
-  /** Whether the browser voice loop is on (TTS and/or recognition). */
-  private companionVoiceActive = false;
+  /** Throttle accumulator for injecting situation context into a live voice call. */
+  private companionCallContextTimer = 0;
   /** Dedup guard so a single spoken utterance (re-emitted as interim results)
    *  doesn't trigger the same command many times. */
   private lastVoiceCmdAction: string | null = null;
@@ -975,8 +966,6 @@ export class Game {
       onMessage: (text) => {
         this.companionUI?.appendAssistantMessage(text);
         this.packageQuestHUD?.showBubble("Pouchy", text);
-        // Speak replies aloud when the browser voice loop is active.
-        this.companionVoice?.speak(text);
       },
       onSocialMessage: (msg, slug) => this.companionUI?.showSkyLetter(msg.fromName, msg.content, slug),
       onConfirmRequest: (p) =>
@@ -1025,75 +1014,37 @@ export class Game {
       if (this.worldConfig) manager.setRetained("game.world", { name: this.worldConfig.name, slug: this.worldSlug });
       manager.setRetained("game.player.vehicle", { vehicle });
       if (ProgressionManager.loadCompanionAutoVoice()) {
-        this.startCompanionVoiceLoop();
+        void this.startCompanionVoice();
       }
     });
   }
 
-  private toggleCompanionVoice() {
+  private async toggleCompanionVoice() {
     if (!this.companion) return;
-    if (this.companionVoiceActive) this.stopCompanionVoiceLoop();
-    else this.startCompanionVoiceLoop();
+    if (this.companion.inCall) {
+      this.companion.stopVoice();
+      this.companionUI?.setVoiceActive(false);
+    } else {
+      const ok = await this.startCompanionVoice();
+      // Only surface failure on an explicit tap (auto-start may just be waiting
+      // for a mic-permission gesture).
+      if (!ok) this.hud.showAmbientToast(t("Couldn't start the voice companion.", "语音伙伴启动失败。"));
+    }
   }
 
-  /** Start the BROWSER-NATIVE voice loop. The OUTPUT (companion speaks via device
-   *  TTS) and INPUT (speech-recognition for commands) are INDEPENDENT — a browser
-   *  may support one but not the other (e.g. iOS Safari / in-app webviews have
-   *  speechSynthesis but no webkitSpeechRecognition). The companion must still
-   *  speak even where recognition is unavailable. We deliberately don't open the
-   *  provider voice call (it would seize/mute the mic and can't see game state). */
-  private startCompanionVoiceLoop() {
-    if (this.companionVoiceActive) {
-      this.companionUI?.setVoiceActive(true);
-      return;
+  /** Open the live voice co-pilot — the real ElevenLabs/Pouchy Agent voice (its own
+   *  timbre), which reacts out loud to dramatic beats and answers questions. We keep
+   *  it situationally aware by injecting a state summary into the call (retained
+   *  world-state alone doesn't reach the voice agent). Returns whether it started. */
+  private async startCompanionVoice(): Promise<boolean> {
+    if (!this.companion || this.companion.inCall) return false;
+    const ok = await this.companion.startVoiceCopilot();
+    this.companionUI?.setVoiceActive(ok);
+    if (ok) {
+      // Prime the agent with the current situation so its first words fit the moment.
+      this.companion.injectCallContext(this.composeSituationSummary(this.buildSituationSnapshot()));
     }
-    const ttsOk = CompanionVoice.supported;
-    const asrOk = VoiceCommander.supported;
-    if (!ttsOk && !asrOk) {
-      this.hud.showAmbientToast(
-        t("Voice isn't supported in this browser.", "此浏览器不支持语音功能。"),
-      );
-      return;
-    }
-    if (ttsOk) {
-      this.companionVoice = new CompanionVoice(IS_ZH ? "zh-CN" : "en-US", (speaking) => {
-        this.companionTtsSpeaking = speaking;
-      });
-      this.companionVoice.enable();
-      // Immediate audible confirmation that the companion's voice is live.
-      this.companionVoice.speak(t("I'm here — ready to fly with you!", "我在，准备好陪你一起飞了！"));
-    }
-    if (asrOk) {
-      this.voiceCommander = new VoiceCommander(IS_ZH ? "zh-CN" : "en-US", (text, isFinal) =>
-        this.onVoicePhrase(text, isFinal),
-      );
-      this.voiceCommander.start();
-    }
-    this.companionVoiceActive = true;
-    this.companionUI?.setVoiceActive(true);
-  }
-
-  private stopCompanionVoiceLoop() {
-    this.companionVoiceActive = false;
-    this.voiceCommander?.stop();
-    this.voiceCommander = null;
-    this.companionVoice?.stop();
-    this.companionVoice = null;
-    this.companionTtsSpeaking = false;
-    this.companionUI?.setVoiceActive(false);
-  }
-
-  /** Route a recognized utterance: flight command (act instantly, even on interim
-   *  results) or, if not a command, a final utterance becomes a chat message to the
-   *  state-aware companion. Ignored while the companion's own TTS is playing so its
-   *  voice isn't fed back in. */
-  private onVoicePhrase(text: string, isFinal: boolean) {
-    if (this.companionTtsSpeaking) return;
-    if (this.handleVoiceCommand(text)) return;
-    if (isFinal && text.trim().length >= 2) {
-      this.emitCompanionSituation();
-      void this.companion?.sendText(text.trim());
-    }
+    return ok;
   }
 
   /** Execute a tool the companion asked for (Phase 2). Best-effort + defensive. */
@@ -1624,6 +1575,11 @@ export class Game {
    *  manager; call freely from the tick. */
   private emitCompanionSituation() {
     if (!this.companion) return;
+    this.companion.setRetained("game.situation", this.buildSituationSnapshot());
+  }
+
+  /** Build the compact live-state snapshot (also carries a prose `summary`). */
+  private buildSituationSnapshot(): Record<string, unknown> {
     const snap: Record<string, unknown> = {
       vehicle: this.playerVehicle,
       level: this.progression.getLevel(),
@@ -1659,7 +1615,7 @@ export class Game {
     }
     snap.suggestion = this.computeNextStepHint();
     snap.summary = this.composeSituationSummary(snap);
-    this.companion.setRetained("game.situation", snap);
+    return snap;
   }
 
   /** A plain-language one-liner of the current state — LLMs ground far better on
@@ -3114,7 +3070,6 @@ export class Game {
     this.companion = null;
     this.companionUI?.dispose();
     this.companionUI = null;
-    this.stopCompanionVoiceLoop();
     this.voiceControl = null;
     this.voiceFireQueued = false;
     this.stateSync?.stop();
@@ -4478,6 +4433,15 @@ export class Game {
       if (this.companionSituationTimer >= 3) {
         this.companionSituationTimer = 0;
         this.emitCompanionSituation();
+        // During a live voice call, retained state doesn't reach the voice agent —
+        // inject a fresh situation summary (silently) every ~30s so it stays aware.
+        if (this.companion.inCall) {
+          this.companionCallContextTimer += 3;
+          if (this.companionCallContextTimer >= 30) {
+            this.companionCallContextTimer = 0;
+            this.companion.injectCallContext(this.composeSituationSummary(this.buildSituationSnapshot()));
+          }
+        }
       }
       // Less often, refresh "where are other agents" so the companion can suggest
       // meeting up. Only meaningful when this player has a companion themselves.

@@ -253,22 +253,21 @@ export class CompanionManager {
         },
         onError: () => this.stopVoice(),
       });
-      // The provider mutes the player's mic while the companion is speaking, which
-      // swallows rapid follow-up flight commands. Ask the agent to stay silent for
-      // movement commands so the mic stays open and commands keep registering.
-      try {
-        this.call.injectEvent(
-          this.opts.locale === "zh"
-            ? "（系统）玩家正在飞行，会用短指令操控载具：向左、向右、上升、下降、加速、减速、发射、停。这些指令由游戏直接处理——请不要用语音复述或确认这些操控指令，保持安静，只有当玩家真正向你提问或闲聊时才开口，这样玩家才能连续下达指令。"
-            : "(System) The player is flying and will issue short vehicle commands: left, right, climb, descend, faster, slower, fire, stop. The game handles these directly — do NOT speak, narrate, or confirm movement commands; stay quiet so the player can give rapid commands. Only speak when the player actually asks you a question or chats.",
-          false,
-        );
-      } catch {
-        /* best-effort: injection failures must not break the call */
-      }
       return true;
     } catch {
       return false;
+    }
+  }
+
+  /** Push a line of live context into the active voice call WITHOUT making the
+   *  companion speak (staged for its next turn) — used to keep the voice agent
+   *  aware of the current game state, since retained world-state doesn't reach it. */
+  injectCallContext(text: string): void {
+    if (!this.call || !text) return;
+    try {
+      this.call.injectEvent(text, false);
+    } catch {
+      /* best-effort */
     }
   }
 
