@@ -388,7 +388,7 @@ const BALLOON_GREETINGS = [
   t("Lovely day for a wander, isn't it? The clouds are extra fluffy today.", "很适合闲游的好日子，对吧？今天的云格外蓬松。"),
   t("Mind the breeze — and the tea in the basket is still warm!", "当心微风——篮子里的茶还热着呢！"),
   t("Hullo! We waved from the basket but you were a bit too fast!", "你好！我们从篮子里招手了，可你飞得太快啦！"),
-  t("Tiny skies, big dreams — safe travels, friend!", "小小天空，大大梦想——一路平安，朋友！"),
+  t("A2A.FUN, big dreams — safe travels, friend!", "A2A.FUN，大大梦想——一路平安，朋友！"),
   t("A little wave from the balloon basket! Isn't the view darling?", "从气球篮里向你轻轻挥手！这景色不是很可爱吗？"),
   t("Slow down if you can — we'd love a proper chat!", "能慢下来的话就慢点——我们很想好好聊聊！"),
   t("The wind is gentle and the mood is cosy. Come say hi again sometime!", "风很温柔，心情也惬意。有空再来打个招呼吧！"),
