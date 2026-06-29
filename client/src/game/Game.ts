@@ -403,6 +403,8 @@ const UI_CLICK_SELECTOR = [
   "label",
 ].join(", ");
 
+type GamePhase = "flying" | "campsite" | "transitioning" | "moonImpact" | "moonstoneUnion";
+
 export class Game {
   private container: HTMLElement;
   private renderer!: WebGLRenderer;
@@ -573,7 +575,19 @@ export class Game {
   private voidFlameArrowEl: HTMLDivElement | null = null;
   private voidEnemyArrowEls: HTMLDivElement[] = [];
 
-  private gamePhase: "flying" | "campsite" | "transitioning" | "moonImpact" | "moonstoneUnion" = "flying";
+  private _gamePhase: GamePhase = "flying";
+  /** Reading is unchanged; assigning also tells the companion what stage the game
+   *  is in (flying vs landed vs a cutscene) so it doesn't give flight advice over a
+   *  scene transition, and reacts in the right register during cinematics. */
+  private get gamePhase(): GamePhase {
+    return this._gamePhase;
+  }
+  private set gamePhase(p: GamePhase) {
+    if (this._gamePhase === p) return;
+    this._gamePhase = p;
+    const summary = Game.GAME_PHASE_SUMMARY[p];
+    this.companion?.setRetained("game.phase", { phase: p, summary });
+  }
   private moonCinematicStep: "fadeOut1" | "wideShot" | "fadeOut2" | "done" = "done";
   private moonCinematicTimer = 0;
 
@@ -900,7 +914,7 @@ export class Game {
       appContext: {
         name: "A2A.FUN",
         description:
-          "A2A.FUN is a cosy multiplayer flight game. The player pilots a biplane, a magic carpet, or a boat around a tiny globe-world. The overarching goal is to save the world from a slowly falling moon. Core activities: deliver glowing packages between villages; win races / time-trials; (biplane) shoot sky gremlins with paintballs; (magic carpet) collect sky jellyfish and help defend the eternal flame; (boat) catch fish and explore the islands. Lighting the ancient braziers and defending the eternal flame through cosmic-void moth waves is what ultimately stops the moon. You are the player's AI co-pilot riding along: be warm and brief, use the live game state (sent as world-state updates) to tell them what's happening and suggest what to do next, and you can physically fly their vehicle when they ask — left, right, climb, descend, faster, slower, fire, stop. This is a multiplayer game: when other worlds have players who also have AI companions (see the rendezvous world-state, or call find_companions), you can suggest taking the player there to meet up and become A2A friends — call join_world to fly them over, then they can pair in person. The world is also haunted by translucent 'ghost' vehicles of players (and their companions) who flew here before; when the player passes one (a game.event.met_ghost moment), warmly note who they were and offer to befriend them — if the player wants to, call pair_with_ghost to send that player an A2A pairing invite.",
+          "A2A.FUN is a cosy multiplayer flight game. The player pilots a biplane, a magic carpet, or a boat around a tiny globe-world. The overarching goal is to save the world from a slowly falling moon. Core activities: deliver glowing packages between villages; win races / time-trials; (biplane) shoot sky gremlins with paintballs; (magic carpet) collect sky jellyfish and help defend the eternal flame; (boat) catch fish and explore the islands. Lighting the ancient braziers and defending the eternal flame through cosmic-void moth waves is what ultimately stops the moon. The main-quest progress bar is the eternal-flame braziers: the live game.situation state reports how many of the five are lit (braziers eternal X/5); lighting all five freezes the moon and saves the world (a game.event.world_saved moment) — if the moon reaches the world first, the run is lost (a game.event.world_lost moment) and time rewinds for another try. You also receive the current stage as game.phase (flying, landed at a campsite, or a cutscene like the moonstone union / moon impact) — while a cutscene is playing, react to the moment rather than giving flight directions. You are the player's AI co-pilot riding along: be warm and brief, use the live game state (sent as world-state updates) to tell them what's happening and suggest what to do next, and you can physically fly their vehicle when they ask — left, right, climb, descend, faster, slower, fire, stop. This is a multiplayer game: when other worlds have players who also have AI companions (see the rendezvous world-state, or call find_companions), you can suggest taking the player there to meet up and become A2A friends — call join_world to fly them over, then they can pair in person. The world is also haunted by translucent 'ghost' vehicles of players (and their companions) who flew here before; when the player passes one (a game.event.met_ghost moment), warmly note who they were and offer to befriend them — if the player wants to, call pair_with_ghost to send that player an A2A pairing invite.",
       },
       tools: [
         {
@@ -1622,6 +1636,14 @@ export class Game {
       danger: Math.round((this.moonThreat?.progress ?? 0) * 100) / 100,
       frozen: this.moonThreat?.isPermanentlyFrozen ?? false,
     };
+    // The main-quest progress bar: eternal-flame braziers toward freezing the moon.
+    if (this.braziers && this.braziers.placedCount > 0) {
+      snap.braziers = {
+        eternal: this.braziers.eternalFlameCount,
+        lit: this.braziers.litCount,
+        total: BRAZIER_COUNT,
+      };
+    }
     if (this.inCosmicVoid) {
       snap.void = {
         active: true,
@@ -1672,6 +1694,14 @@ export class Game {
           : `Moon danger ${Math.round(moon.danger * 100)}% (it falls slowly toward the world).`,
       );
     }
+    const braz = snap.braziers as { eternal: number; lit: number; total: number } | undefined;
+    if (braz && !(snap.moon as { frozen: boolean }).frozen) {
+      parts.push(
+        braz.eternal >= braz.total
+          ? "All ancient braziers now hold the Eternal Flame — the moon can be frozen."
+          : `Eternal-flame braziers lit ${braz.eternal}/${braz.total} (lighting all of them with eternal flame is what stops the falling moon).`,
+      );
+    }
     parts.push(`Suggested next step: ${snap.suggestion as string}`);
     return parts.join(" ");
   }
@@ -1684,7 +1714,14 @@ export class Game {
       const dest = this.packageQuest.destinationName;
       return dest ? `Deliver the package to ${dest}.` : "Deliver the package to its destination village.";
     }
-    if ((this.moonThreat?.progress ?? 0) > 0.6 && !(this.moonThreat?.isPermanentlyFrozen ?? false)) {
+    const moonClose =
+      (this.moonThreat?.progress ?? 0) > 0.6 && !(this.moonThreat?.isPermanentlyFrozen ?? false);
+    if (this.braziers && this.braziers.placedCount > 0 && !this.braziers.allFiveEternalAndLit()) {
+      const eternal = this.braziers.eternalFlameCount;
+      const lead = moonClose ? "The moon is getting dangerously close. " : "";
+      return `${lead}Light the ancient braziers with eternal flame (${eternal}/${BRAZIER_COUNT} so far) — defend the eternal flame through the cosmic-void waves to claim each one; lighting all of them freezes the moon.`;
+    }
+    if (moonClose) {
       return "The moon is getting dangerously close — work toward lighting the braziers to stop it.";
     }
     if (this.playerVehicle === "plane") return "Pick up a glowing package to deliver, shoot sky gremlins, or find a race.";
@@ -3274,6 +3311,18 @@ export class Game {
     window.removeEventListener("resize", this.onResize);
   }
 
+  /** Plain-language label for each game stage, streamed to the companion so it
+   *  knows whether the player is flying, landed, or watching a cutscene. */
+  private static readonly GAME_PHASE_SUMMARY: Record<GamePhase, string | null> = {
+    flying: null, // the normal state — the situation snapshot already covers it
+    campsite: "The player has landed at a campsite and is not flying right now.",
+    transitioning: "A short scene transition is playing — hold any flight guidance.",
+    moonImpact:
+      "Cutscene: the moon has struck the world. This run was lost; time is about to rewind so the player can try again.",
+    moonstoneUnion:
+      "Cutscene: the two moonstones are uniting to freeze the falling moon — the world is being saved.",
+  };
+
   private static readonly MOON_EPITAPH_LINES = [
     t("You tried. You flew. It wasn't enough.", "你尽力了，你飞翔了，但还不够。"),
     t("No one could stop it. Not even you.", "没人能阻止它，连你也不能。"),
@@ -4687,7 +4736,15 @@ export class Game {
         } else {
           this.hud.showBrazierLit();
         }
-        this.companion?.emitMoment("game.event.brazier_lit", {}, { salience: 0.6 });
+        this.companion?.emitMoment(
+          "game.event.brazier_lit",
+          {
+            eternal: this.braziers?.eternalFlameCount ?? 0,
+            total: BRAZIER_COUNT,
+            allEternal: allFiveEternalNow,
+          },
+          { salience: allFiveEternalNow ? 0.8 : 0.6, voiceRelevant: allFiveEternalNow },
+        );
         this.savePlayerWorldState();
       }
       const firstFlameFizzled =
@@ -5014,6 +5071,13 @@ export class Game {
     this.raceManager?.abort();
     this.meteorShower?.reset();
     this.skyJellyfish?.reset();
+    // The most dramatic beat — tell the companion the world was lost (mirrors the
+    // world_saved moment), so the failure ending isn't silent to it.
+    this.companion?.emitMoment(
+      "game.event.world_lost",
+      { world: this.worldConfig?.name },
+      { salience: 1.0, voiceRelevant: true },
+    );
     this.gamePhase = "moonImpact";
     this.moonCinematicStep = "fadeOut1";
     this.moonCinematicTimer = 0;

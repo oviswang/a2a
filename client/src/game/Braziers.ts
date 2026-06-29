@@ -896,6 +896,22 @@ export class Braziers {
     return this.states.every((s) => s.lit && s.eternal);
   }
 
+  /** How many braziers currently hold an ETERNAL flame — the real save-the-world
+   *  progress: lighting all of them is what freezes the falling moon. */
+  get eternalFlameCount(): number {
+    return this.states.reduce((n, s) => n + (s.lit && s.eternal ? 1 : 0), 0);
+  }
+
+  /** How many braziers are lit right now (eternal OR a temporary burn). */
+  get litCount(): number {
+    return this.states.reduce((n, s) => n + (s.lit ? 1 : 0), 0);
+  }
+
+  /** How many brazier slots have spawned in this world (0 before they reveal). */
+  get placedCount(): number {
+    return this.states.length;
+  }
+
   update(
     dt: number,
     playerWorldPos: Vector3,

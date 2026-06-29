@@ -131,7 +131,15 @@ export class CompanionManager {
         token: this.opts.token,
         surface: SURFACE,
         modalities: ["text", "call"],
-        contextKinds: ["game.world", "game.player.*", "game.quest.*", "game.event.*"],
+        contextKinds: [
+          "game.world",
+          "game.player.*",
+          "game.quest.*",
+          "game.event.*",
+          "game.situation",
+          "game.rendezvous",
+          "game.phase",
+        ],
         tools: this.opts.tools,
         appContext: this.opts.appContext,
       });
