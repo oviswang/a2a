@@ -111,8 +111,11 @@ export class CompanionUI {
         <button type="button" class="cmp-pair-btn"></button>
       </div>
       <div class="cmp-transcript" aria-live="polite"></div>
-      <form class="cmp-input-row">
-        <input class="cmp-input" type="text" autocomplete="off"
+      <form class="cmp-input-row" autocomplete="off">
+        <input class="cmp-input" type="text" name="a2a-companion-chat"
+          autocomplete="off" autocapitalize="sentences" autocorrect="off" spellcheck="false"
+          enterkeyhint="send" aria-autocomplete="none"
+          data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other"
           placeholder="${t("Say something to your companion…", "和你的伙伴说点什么…")}" />
         <button type="submit" class="cmp-send-btn" aria-label="${t("Send", "发送")}">➤</button>
       </form>
