@@ -161,6 +161,25 @@ export class RoomManager {
       });
     });
 
+    // A2A duo challenge ("fly together") — invite / answer / completion, room-scoped.
+    socket.on("duo:invite", (toId) => {
+      const target = room.getPlayer(toId);
+      if (!target) return;
+      const me = room.getPlayer(socket.id)?.state;
+      target.socket.emit("duo:incoming", { fromId: socket.id, fromName: me?.name ?? state.name });
+    });
+    socket.on("duo:respond", (toId, accept) => {
+      const target = room.getPlayer(toId);
+      if (!target) return;
+      const me = room.getPlayer(socket.id)?.state;
+      target.socket.emit("duo:answered", { fromId: socket.id, fromName: me?.name ?? state.name, accept });
+    });
+    socket.on("duo:done", (toId) => {
+      const target = room.getPlayer(toId);
+      if (!target) return;
+      target.socket.emit("duo:completed", { fromId: socket.id });
+    });
+
     socket.on("disconnect", () => {
       room.removePlayer(socket.id);
       if (room.isEmpty) {

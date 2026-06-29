@@ -11,6 +11,8 @@ import type {
   PairAnswerEvent,
   CompanionHailEvent,
   CompanionGiftEvent,
+  DuoPeerEvent,
+  DuoAnswerEvent,
   GhostPairInvite,
   PaintballFiredEvent,
   PaintballHitEvent,
@@ -172,6 +174,25 @@ export class SocketClient {
   }
   onCompanionGifted(cb: (ev: CompanionGiftEvent) => void) {
     this.socket.on("companion:gifted", cb);
+  }
+  // ── A2A duo challenge ("fly together") ──
+  emitDuoInvite(toId: string) {
+    this.socket.emit("duo:invite", toId);
+  }
+  emitDuoRespond(toId: string, accept: boolean) {
+    this.socket.emit("duo:respond", toId, accept);
+  }
+  emitDuoDone(toId: string) {
+    this.socket.emit("duo:done", toId);
+  }
+  onDuoIncoming(cb: (ev: DuoPeerEvent) => void) {
+    this.socket.on("duo:incoming", cb);
+  }
+  onDuoAnswered(cb: (ev: DuoAnswerEvent) => void) {
+    this.socket.on("duo:answered", cb);
+  }
+  onDuoCompleted(cb: (ev: { fromId: string }) => void) {
+    this.socket.on("duo:completed", cb);
   }
   // ── A2A Phase C: ghost pairing (cross-world invite) ──
   emitGhostPairInvite(toVisitorId: string) {
