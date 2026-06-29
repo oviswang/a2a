@@ -19,6 +19,15 @@ export interface CompanionFriend {
   name: string;
   companionName?: string;
   pairedAt: number;
+  /** Friendship bond points, grown by playing together (time, gifts, duos). */
+  bond?: number;
+}
+
+/** Bond points → friendship level (1 ❤️ at 10, then a gentle curve). Lv0 = new. */
+export function friendBondLevel(bond: number | undefined): number {
+  const b = bond ?? 0;
+  if (b < 10) return 0;
+  return Math.floor(Math.sqrt(b / 10)); // 10→1, 40→2, 90→3, 160→4, 250→5 …
 }
 
 /** A2A sky gifts received from other companions (kept on the player's profile). */
@@ -385,6 +394,24 @@ export class ProgressionManager {
       all.unshift(friend);
       ProgressionManager.idStore().setItem(FRIENDS_KEY, JSON.stringify(all.slice(0, 100)));
     } catch {}
+  }
+
+  /** Grow the friendship bond with a paired friend. Returns the new level (or -1
+   *  if the friend isn't in the roster). */
+  static addBond(visitorId: string, amount: number): number {
+    if (!visitorId || amount <= 0) return -1;
+    try {
+      const all = ProgressionManager.loadFriends();
+      const f = all.find((x) => x.visitorId === visitorId);
+      if (!f) return -1;
+      const before = friendBondLevel(f.bond);
+      f.bond = (f.bond ?? 0) + amount;
+      ProgressionManager.idStore().setItem(FRIENDS_KEY, JSON.stringify(all.slice(0, 100)));
+      const after = friendBondLevel(f.bond);
+      return after > before ? after : friendBondLevel(f.bond);
+    } catch {
+      return -1;
+    }
   }
 
   /** Sky gifts other companions have sent us (most recent first). */

@@ -243,6 +243,21 @@ export interface ServerToClientEvents {
   "companion:hailed": (ev: CompanionHailEvent) => void;
   /** A2A: a small sky gift / sticker one companion sent to another. */
   "companion:gifted": (ev: CompanionGiftEvent) => void;
+  /** A2A duo challenge ("fly together"): a friend invited you / answered / finished. */
+  "duo:incoming": (ev: DuoPeerEvent) => void;
+  "duo:answered": (ev: DuoAnswerEvent) => void;
+  "duo:completed": (ev: { fromId: string }) => void;
+}
+
+/** A2A duo challenge handshake between two co-present friends. */
+export interface DuoPeerEvent {
+  fromId: string;
+  fromName: string;
+}
+export interface DuoAnswerEvent {
+  fromId: string;
+  fromName: string;
+  accept: boolean;
 }
 
 /** A2A: a little sky gift (emoji sticker) from one companion to another. Relayed
@@ -335,4 +350,8 @@ export interface ClientToServerEvents {
   "companion:hail": (toId: string, message: string) => void;
   /** A2A: send a small sky gift (emoji sticker) to co-present player `toId`. */
   "companion:gift": (toId: string, gift: string) => void;
+  /** A2A duo challenge ("fly together"): invite / answer / report completion. */
+  "duo:invite": (toId: string) => void;
+  "duo:respond": (toId: string, accept: boolean) => void;
+  "duo:done": (toId: string) => void;
 }

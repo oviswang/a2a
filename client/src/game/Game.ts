@@ -133,7 +133,12 @@ import { MeteorShower } from "./MeteorShower";
 import { TransitionOverlay } from "../ui/TransitionOverlay";
 import { CAMPSITE_HOME_ENABLED } from "../config/features";
 import { LevelUpCards } from "../ui/LevelUpCards";
-import { ProgressionManager, type SavedPlayerWorldState } from "./ProgressionManager";
+import {
+  ProgressionManager,
+  friendBondLevel,
+  type SavedPlayerWorldState,
+  type CompanionFriend,
+} from "./ProgressionManager";
 import { CarpetLandmarkSelfieQuest, LANDMARK_SELFIE_XP } from "./CarpetLandmarkSelfieQuest";
 import { HotspringPhotoUI } from "../ui/HotspringPhotoUI";
 import { EternalFlameUI } from "../ui/EternalFlameUI";
@@ -594,6 +599,19 @@ export class Game {
   private friendBondFX: FriendBondFX | null = null;
   /** Cached set of paired-friend visitorIds, for recognising them in the world. */
   private friendVisitorIds = new Set<string>();
+  /** Cached friend records by visitorId (for live bond level without re-reading storage). */
+  private friendByVisitor = new Map<string, CompanionFriend>();
+  /** Per-friend "time together" accumulator → +1 bond every 12s co-present. */
+  private bondTimers = new Map<string, number>();
+  /** A2A feature 4: the active "fly together" duo challenge, or null. */
+  private duo: { peerSocketId: string; peerName: string; peerVisitorId: string | null; progress: number; missing: number } | null = null;
+  /** Friends we've already offered a duo to this session (offer once per friend). */
+  private duoChipOffered = new Set<string>();
+  private duoBarEl: HTMLDivElement | null = null;
+  private duoBarFill: HTMLDivElement | null = null;
+  /** Seconds of staying linked to complete the duo; link range (world units). */
+  private static readonly DUO_DURATION = 18;
+  private static readonly DUO_LINK_RANGE = 2.0;
   private balloonInRange: boolean[] = [];
   private balloonGreetCooldown: number[] = [];
   private balloonGreetSalt = 0;
@@ -1614,6 +1632,7 @@ export class Game {
     const target = this.activeHailTarget;
     if (!target || !this.socketClient || !message.trim()) return;
     this.diag.hailsOut++;
+    this.bumpBond(this.visitorIdForSocket(target.socketId), 1);
     this.socketClient.emitCompanionHail(target.socketId, message);
     const myName = this.companion?.companionDisplayName ?? "Pouchy";
     const to = target.companionName ?? target.name;
@@ -1626,6 +1645,7 @@ export class Game {
     if (!target || !this.socketClient) return;
     const g = normalizeGift(gift);
     this.diag.giftsOut++;
+    this.bumpBond(this.visitorIdForSocket(target.socketId), 2);
     this.socketClient.emitCompanionGift(target.socketId, g);
     const to = target.companionName ?? target.name;
     this.companionUI?.appendAssistantMessage(t(`🎁 Sent ${g} to ${to}.`, `🎁 已送 ${g} 给 ${to}。`));
@@ -1635,6 +1655,7 @@ export class Game {
   /** An inbound sky gift — celebrate it, keep it on the profile, let the agent react. */
   private handleCompanionGifted(ev: CompanionGiftEvent) {
     this.diag.giftsIn++;
+    this.bumpBond(this.visitorIdForSocket(ev.fromId), 2);
     const g = normalizeGift(ev.gift);
     const who = ev.fromCompanionName ? `${ev.fromCompanionName} · ${ev.fromName}` : ev.fromName;
     ProgressionManager.addReceivedGift({
@@ -1686,6 +1707,7 @@ export class Game {
   /** An inbound companion-to-companion greeting — show it and let our agent react. */
   private handleCompanionHailed(ev: CompanionHailEvent) {
     this.diag.hailsIn++;
+    this.bumpBond(this.visitorIdForSocket(ev.fromId), 1);
     const who = ev.fromCompanionName ? `${ev.fromCompanionName} · ${ev.fromName}` : ev.fromName;
     this.companionUI?.appendAssistantMessage(
       t(`✦ ${who} says: ${ev.message}`, `✦ ${who} 说：${ev.message}`),
@@ -1998,13 +2020,211 @@ export class Game {
 
   private friendsRosterCleanup: (() => void) | null = null;
 
-  /** Refresh the cached paired-friend visitorId set (call after a successful pair). */
+  /** Refresh the cached paired-friend visitorId set + records (call after a pair). */
   private refreshFriendIds() {
-    this.friendVisitorIds = new Set(
-      ProgressionManager.loadFriends()
-        .map((f) => f.visitorId)
-        .filter((v): v is string => !!v),
+    const list = ProgressionManager.loadFriends();
+    this.friendVisitorIds = new Set(list.map((f) => f.visitorId).filter((v): v is string => !!v));
+    this.friendByVisitor = new Map(list.map((f) => [f.visitorId, f]));
+  }
+
+  /** Grow a friend's bond (persist + keep the in-memory cache current). Surfaces a
+   *  toast on a level-up so the friendship feels like it's deepening. */
+  private bumpBond(visitorId: string | null | undefined, amount: number) {
+    if (!visitorId || !this.friendVisitorIds.has(visitorId)) return;
+    const before = friendBondLevel(this.friendByVisitor.get(visitorId)?.bond);
+    ProgressionManager.addBond(visitorId, amount);
+    const f = this.friendByVisitor.get(visitorId);
+    if (f) f.bond = (f.bond ?? 0) + amount;
+    const after = friendBondLevel(f?.bond);
+    if (after > before) {
+      this.hud.showAmbientToast(
+        t(`Friendship with ${f?.name ?? "your friend"} → ❤️ Lv${after}`, `与 ${f?.name ?? "好友"} 的羁绊 → ❤️ Lv${after}`),
+      );
+    }
+  }
+
+  /** Map a co-present socket id to that player's A2A visitorId (or null). */
+  private visitorIdForSocket(socketId: string): string | null {
+    let vid: string | null = null;
+    this.remotePlanes?.forEachRemote((p) => {
+      if (p.id === socketId) vid = p.visitorId;
+    });
+    return vid;
+  }
+
+  // ── A2A feature 4: "fly together" duo challenge ─────────────────────────────
+
+  /** A one-tap chip offering a duo challenge to a co-present friend (reuses the
+   *  single chip slot). */
+  private showDuoChip(socketId: string, name: string, visitorId: string) {
+    Game.injectGhostChipStyles();
+    this.hideGhostEncounterChip();
+    const el = document.createElement("div");
+    el.className = "ghost-chip";
+    const text = document.createElement("span");
+    text.className = "ghost-chip-text";
+    text.textContent = t(`✨ Fly together with ${name}?`, `✨ 和 ${name} 默契同飞？`);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ghost-chip-btn";
+    btn.textContent = t("Invite", "邀请");
+    btn.addEventListener("click", () => {
+      this.hideGhostEncounterChip();
+      if (!this.socketClient) return;
+      this.socketClient.emitDuoInvite(socketId);
+      this.hud.showAmbientToast(t(`Invited ${name} to fly together…`, `已邀请 ${name} 默契同飞…`));
+    });
+    el.appendChild(text);
+    el.appendChild(btn);
+    this.hud.root.appendChild(el);
+    this.ghostChipEl = el;
+    requestAnimationFrame(() => el.classList.add("ghost-chip--in"));
+    this.ghostChipTimer = window.setTimeout(() => this.hideGhostEncounterChip(), 12000);
+    // Remember the visitorId for bond on completion.
+    this.duoPendingVisitorBySocket.set(socketId, visitorId);
+  }
+  private duoPendingVisitorBySocket = new Map<string, string>();
+
+  private async handleDuoIncoming(fromId: string, fromName: string) {
+    if (!this.socketClient) return;
+    if (this.duo) { this.socketClient.emitDuoRespond(fromId, false); return; }
+    const ok = await this.showPairingCard({
+      title: t("Fly together ✨", "默契同飞 ✨"),
+      message: t(
+        `${fromName} invites you to fly together — stay close and keep your tether linked to complete it as a duo!`,
+        `${fromName} 邀你一起默契同飞——飞近彼此、保持光带相连,一起达成挑战!`,
+      ),
+      acceptLabel: t("Fly together ✨", "一起飞 ✨"),
+      declineLabel: t("Maybe later", "以后吧"),
+    });
+    if (!ok || !this.socketClient) { this.socketClient?.emitDuoRespond(fromId, false); return; }
+    this.socketClient.emitDuoRespond(fromId, true);
+    this.startDuo(fromId, fromName, this.visitorIdForSocket(fromId));
+  }
+
+  private handleDuoAnswered(fromId: string, fromName: string, accept: boolean) {
+    if (!accept) {
+      this.hud.showAmbientToast(t(`${fromName} isn't up for it right now.`, `${fromName} 暂时不方便。`));
+      return;
+    }
+    if (this.duo) return;
+    const vid = this.duoPendingVisitorBySocket.get(fromId) ?? this.visitorIdForSocket(fromId);
+    this.startDuo(fromId, fromName, vid);
+  }
+
+  private startDuo(peerSocketId: string, peerName: string, peerVisitorId: string | null) {
+    this.duo = { peerSocketId, peerName, peerVisitorId, progress: 0, missing: 0 };
+    this.showDuoBar();
+    this.hud.showAmbientToast(t("Fly together — stay close! ✨", "默契同飞——飞近保持连接!✨"));
+  }
+
+  /** Advance the duo while both stay linked; drain when apart; complete at 100%. */
+  private updateDuo(dt: number) {
+    if (!this.duo) return;
+    let peerPos: Vector3 | null = null;
+    this.remotePlanes?.forEachRemote((p) => {
+      if (p.id === this.duo!.peerSocketId) {
+        p.group.updateMatrixWorld(true);
+        peerPos = new Vector3().setFromMatrixPosition(p.group.matrixWorld);
+      }
+    });
+    if (!peerPos) {
+      this.duo.missing += dt;
+      if (this.duo.missing > 6) this.cancelDuo(t("Your duo partner left.", "搭档离开了。"));
+      return;
+    }
+    this.duo.missing = 0;
+    const localPos = new Vector3().setFromMatrixPosition(this.localPlayer.group.matrixWorld);
+    const linked = localPos.distanceTo(peerPos) <= Game.DUO_LINK_RANGE;
+    this.duo.progress = Math.max(
+      0,
+      Math.min(Game.DUO_DURATION, this.duo.progress + (linked ? dt : -dt * 0.6)),
     );
+    this.updateDuoBar(linked);
+    if (this.duo.progress >= Game.DUO_DURATION) this.completeDuo(true);
+  }
+
+  private completeDuo(relay: boolean) {
+    const d = this.duo;
+    if (!d) return;
+    this.duo = null;
+    this.removeDuoBar();
+    if (relay) this.socketClient?.emitDuoDone(d.peerSocketId);
+    this.bumpBond(d.peerVisitorId, 20);
+    this.hud.showAmbientToast(t(`In sync with ${d.peerName}! ✨ +bond`, `与 ${d.peerName} 默契达成!✨ 羁绊+`));
+    this.floatGift("✨");
+    this.floatGift("❤️");
+    this.packageQuestHUD?.showBubble("✨", t("We did it together!", "我们一起做到了!"));
+  }
+
+  private cancelDuo(reason: string) {
+    if (!this.duo) return;
+    this.duo = null;
+    this.removeDuoBar();
+    this.hud.showAmbientToast(reason);
+  }
+
+  private showDuoBar() {
+    this.removeDuoBar();
+    Game.injectDuoBarStyles();
+    const wrap = document.createElement("div");
+    wrap.className = "duo-bar";
+    const label = document.createElement("div");
+    label.className = "duo-bar-label";
+    label.textContent = t("✨ Fly together", "✨ 默契同飞");
+    const track = document.createElement("div");
+    track.className = "duo-bar-track";
+    const fill = document.createElement("div");
+    fill.className = "duo-bar-fill";
+    track.appendChild(fill);
+    wrap.appendChild(label);
+    wrap.appendChild(track);
+    this.hud.root.appendChild(wrap);
+    this.duoBarEl = wrap;
+    this.duoBarFill = fill;
+  }
+
+  private updateDuoBar(linked: boolean) {
+    if (!this.duo || !this.duoBarFill || !this.duoBarEl) return;
+    const pct = Math.round((this.duo.progress / Game.DUO_DURATION) * 100);
+    this.duoBarFill.style.width = `${pct}%`;
+    this.duoBarEl.classList.toggle("duo-bar--drift", !linked);
+    const label = this.duoBarEl.querySelector(".duo-bar-label") as HTMLElement | null;
+    if (label) {
+      label.textContent = linked
+        ? t(`✨ Fly together · ${pct}%`, `✨ 默契同飞 · ${pct}%`)
+        : t("✨ Get closer!", "✨ 靠近一点!");
+    }
+  }
+
+  private removeDuoBar() {
+    this.duoBarEl?.remove();
+    this.duoBarEl = null;
+    this.duoBarFill = null;
+  }
+
+  private static injectDuoBarStyles() {
+    if (document.getElementById("duo-bar-styles")) return;
+    const s = document.createElement("style");
+    s.id = "duo-bar-styles";
+    s.textContent = `
+      .duo-bar {
+        position: absolute; top: max(70px, calc(58px + env(safe-area-inset-top)));
+        left: 50%; transform: translateX(-50%); z-index: 7; pointer-events: none;
+        display: flex; flex-direction: column; align-items: center; gap: 4px;
+        font-family: 'Domine', Georgia, serif;
+      }
+      .duo-bar-label { font-size: 0.7rem; font-weight: 700; color: #ffe1f0;
+        text-shadow: 0 1px 4px rgba(0,0,0,0.6); letter-spacing: 0.04em; }
+      .duo-bar-track { width: min(220px, 60vw); height: 8px; border-radius: 999px;
+        background: rgba(20,10,18,0.55); overflow: hidden;
+        box-shadow: inset 0 0 0 1px rgba(255,200,225,0.3); }
+      .duo-bar-fill { height: 100%; width: 0%; border-radius: 999px;
+        background: linear-gradient(90deg, #ff9ec4, #ffd2a8);
+        transition: width 0.12s linear; }
+      .duo-bar--drift .duo-bar-fill { background: rgba(255,255,255,0.35); }
+    `;
+    document.head.appendChild(s);
   }
 
   /** Ask the server which of our paired A2A friends are online right now + where. */
@@ -2109,11 +2329,14 @@ export class Game {
       nm.textContent = f.companionName ? `${f.name} · ✦ ${f.companionName}` : f.name;
       const sub = document.createElement("div");
       sub.className = "friends-sub";
-      sub.textContent = online
+      const lvl = friendBondLevel(f.bond);
+      const presence = online
         ? p?.worldName
           ? t(`In ${p.worldName}`, `在「${p.worldName}」`)
           : t("Online", "在线")
         : t("Offline", "离线");
+      const bondStr = lvl > 0 ? `${"❤️".repeat(Math.min(lvl, 5))} Lv${lvl} · ` : "";
+      sub.textContent = `${bondStr}${presence}`;
       info.appendChild(nm);
       info.appendChild(sub);
       row.appendChild(dot);
@@ -4016,6 +4239,8 @@ export class Game {
     this.remotePlayerNameLabels.dispose();
     this.friendBondFX?.dispose();
     this.friendBondFX = null;
+    this.duo = null;
+    this.removeDuoBar();
     this.hud.dispose();
 
     if (this.playerLight) {
@@ -4610,6 +4835,11 @@ export class Game {
     this.socketClient.onPairAnswered((ev) => this.handlePairAnswered(ev));
     this.socketClient.onCompanionHailed((ev) => this.handleCompanionHailed(ev));
     this.socketClient.onCompanionGifted((ev) => this.handleCompanionGifted(ev));
+    this.socketClient.onDuoIncoming((ev) => void this.handleDuoIncoming(ev.fromId, ev.fromName));
+    this.socketClient.onDuoAnswered((ev) => this.handleDuoAnswered(ev.fromId, ev.fromName, ev.accept));
+    this.socketClient.onDuoCompleted((ev) => {
+      if (this.duo && this.duo.peerSocketId === ev.fromId) this.completeDuo(false);
+    });
 
     this.socketClient.onWorldFull(() => {
       this.handleWorldFull();
@@ -4968,9 +5198,23 @@ export class Game {
         const friends: FriendInWorld[] = [];
         if (this.friendVisitorIds.size > 0) {
           this.remotePlanes.forEachRemote((p) => {
-            if (p.visitorId && this.friendVisitorIds.has(p.visitorId)) {
+            const vid = p.visitorId;
+            if (vid && this.friendVisitorIds.has(vid)) {
               p.group.updateMatrixWorld(true);
-              friends.push({ name: p.name, pos: new Vector3().setFromMatrixPosition(p.group.matrixWorld) });
+              friends.push({
+                name: p.name,
+                bondLevel: friendBondLevel(this.friendByVisitor.get(vid)?.bond),
+                pos: new Vector3().setFromMatrixPosition(p.group.matrixWorld),
+              });
+              // Bond grows from time spent together: +1 every 12s co-present.
+              const acc = (this.bondTimers.get(vid) ?? 0) + dt;
+              if (acc >= 12) { this.bumpBond(vid, 1); this.bondTimers.set(vid, acc - 12); }
+              else this.bondTimers.set(vid, acc);
+              // Offer a "fly together" duo once per friend per session.
+              if (!this.duo && !this.duoChipOffered.has(vid)) {
+                this.duoChipOffered.add(vid);
+                this.showDuoChip(p.id, p.name, vid);
+              }
             }
           });
         }
@@ -4986,6 +5230,7 @@ export class Game {
           this.friendBondFX.clear();
         }
       }
+      this.updateDuo(dt);
 
       // Focus shadow camera on the player for high-resolution local shadows.
       // Covers ±5 world units around the player (2048/10 = 205 texels/unit vs 47 at globe-wide).
@@ -6065,6 +6310,8 @@ export class Game {
       },
       { salience: 1.0, voiceRelevant: true },
     );
+    // Saving the world together is a big bond moment.
+    for (const m of this.coPresentCompanions) this.bumpBond(this.visitorIdForSocket(m.socketId), 5);
     this.raceManager?.abort();
     this.ensureBraziersSpawned();
 
@@ -8964,6 +9211,8 @@ export class Game {
     this.remotePlayerNameLabels.dispose();
     this.friendBondFX?.dispose();
     this.friendBondFX = null;
+    this.duo = null;
+    this.removeDuoBar();
     this.flagSystem?.dispose();
     this.flagSystem = null;
     this.stateSync?.stop();
