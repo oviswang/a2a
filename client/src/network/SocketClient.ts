@@ -9,6 +9,8 @@ import type {
   FlagSyncEvent,
   PairRequestEvent,
   PairAnswerEvent,
+  CompanionHailEvent,
+  CompanionGiftEvent,
   GhostPairInvite,
   PaintballFiredEvent,
   PaintballHitEvent,
@@ -140,17 +142,36 @@ export class SocketClient {
   }
 
   // ── A2A companion pairing ──
-  emitPairRequest(toId: string) {
-    this.socket.emit("pair:request", toId);
+  emitPairRequest(toId: string, fromVisitorId?: string, fromCompanionName?: string) {
+    this.socket.emit("pair:request", toId, fromVisitorId, fromCompanionName);
   }
-  emitPairRespond(toId: string, accept: boolean, visitorToken?: string, visitorId?: string) {
-    this.socket.emit("pair:respond", toId, accept, visitorToken, visitorId);
+  emitPairRespond(
+    toId: string,
+    accept: boolean,
+    visitorToken?: string,
+    visitorId?: string,
+    companionName?: string,
+  ) {
+    this.socket.emit("pair:respond", toId, accept, visitorToken, visitorId, companionName);
   }
   onPairIncoming(cb: (ev: PairRequestEvent) => void) {
     this.socket.on("pair:incoming", cb);
   }
   onPairAnswered(cb: (ev: PairAnswerEvent) => void) {
     this.socket.on("pair:answered", cb);
+  }
+  // ── A2A: companion-to-companion greetings (agents talking on encounter) ──
+  emitCompanionHail(toId: string, message: string) {
+    this.socket.emit("companion:hail", toId, message);
+  }
+  onCompanionHailed(cb: (ev: CompanionHailEvent) => void) {
+    this.socket.on("companion:hailed", cb);
+  }
+  emitCompanionGift(toId: string, gift: string) {
+    this.socket.emit("companion:gift", toId, gift);
+  }
+  onCompanionGifted(cb: (ev: CompanionGiftEvent) => void) {
+    this.socket.on("companion:gifted", cb);
   }
   // ── A2A Phase C: ghost pairing (cross-world invite) ──
   emitGhostPairInvite(toVisitorId: string) {

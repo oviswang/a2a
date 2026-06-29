@@ -103,7 +103,11 @@ export class RemotePlayerNameLabels {
         this.container.appendChild(el);
         this.labels.set(player.id, el);
       }
-      el.textContent = player.name;
+      // Show the player's AI companion alongside their name (A2A identity), matching
+      // the ghost pills' "Name · ✦ Companion" format.
+      el.textContent = player.companionName
+        ? `${player.name} · ✦ ${player.companionName}`
+        : player.name;
 
       player.group.updateMatrixWorld(true);
       this.remoteWorld.setFromMatrixPosition(player.group.matrixWorld);

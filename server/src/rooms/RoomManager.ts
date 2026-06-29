@@ -106,12 +106,17 @@ export class RoomManager {
     // A2A companion pairing relay — only between players in THIS room. The
     // responder's token rides through on accept (their consent + proof); it is
     // forwarded in-memory to the requester only and never stored or logged.
-    socket.on("pair:request", (toId) => {
+    socket.on("pair:request", (toId, fromVisitorId, fromCompanionName) => {
       const target = room.getPlayer(toId);
       if (!target) return;
-      target.socket.emit("pair:incoming", { fromId: socket.id, fromName: state.name });
+      target.socket.emit("pair:incoming", {
+        fromId: socket.id,
+        fromName: state.name,
+        fromVisitorId,
+        fromCompanionName,
+      });
     });
-    socket.on("pair:respond", (toId, accept, visitorToken, visitorId) => {
+    socket.on("pair:respond", (toId, accept, visitorToken, visitorId, companionName) => {
       const target = room.getPlayer(toId);
       if (!target) return;
       target.socket.emit("pair:answered", {
@@ -120,6 +125,39 @@ export class RoomManager {
         accept,
         visitorToken: accept ? visitorToken : undefined,
         visitorId: accept ? visitorId : undefined,
+        companionName: accept ? companionName : undefined,
+      });
+    });
+
+    // A2A: relay a companion-to-companion greeting to a co-present player (their
+    // agents talking when their pilots meet). Read fresh identity from the room so
+    // the latest companionName (set after join) rides along. Never persisted.
+    socket.on("companion:hail", (toId, message) => {
+      const text = typeof message === "string" ? message.slice(0, 400).trim() : "";
+      if (!text) return;
+      const target = room.getPlayer(toId);
+      if (!target) return;
+      const me = room.getPlayer(socket.id)?.state;
+      target.socket.emit("companion:hailed", {
+        fromId: socket.id,
+        fromName: me?.name ?? state.name,
+        fromCompanionName: me?.companionName,
+        message: text,
+      });
+    });
+
+    // A2A: relay a small sky gift (emoji sticker) to a co-present player.
+    socket.on("companion:gift", (toId, gift) => {
+      const g = typeof gift === "string" ? gift.slice(0, 16).trim() : "";
+      if (!g) return;
+      const target = room.getPlayer(toId);
+      if (!target) return;
+      const me = room.getPlayer(socket.id)?.state;
+      target.socket.emit("companion:gifted", {
+        fromId: socket.id,
+        fromName: me?.name ?? state.name,
+        fromCompanionName: me?.companionName,
+        gift: g,
       });
     });
 

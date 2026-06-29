@@ -74,6 +74,10 @@ export interface RaceManagerDeps {
   getQPosition: () => Quaternion;
   getHeading: () => number;
   onWin: () => void;
+  /** Fired when a trial actually begins (countdown done, course built). */
+  onRaceStart?: () => void;
+  /** Fired when the trial timer runs out — a real loss, not a cutscene/teardown abort. */
+  onRaceLost?: () => void;
   /** Same VFX/SFX/boost as a plane world diamond (when that ring holds a bonus gem). */
   onBonusDiamondCollected: (worldPos: Vector3) => void;
   /** Holo shard burst when a checkpoint ring or finish banner is collected. */
@@ -277,6 +281,7 @@ export class RaceManager {
       this.deps.audioManager.playSFX("celebrate_1", 0.34);
     }
     this.deps.hud.showRaceGoToast();
+    this.deps.onRaceStart?.();
   }
 
   private buildTrack(banner: { normal: Vector3; baseAlt: number; index: number }) {
@@ -496,6 +501,7 @@ export class RaceManager {
   }
 
   private cleanupLose() {
+    this.deps.onRaceLost?.();
     this.cleanupAfterRace();
   }
 

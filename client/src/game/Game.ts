@@ -36,6 +36,8 @@ import {
   type WorldConfig,
   type RendezvousWorld,
   type GhostPairInvite,
+  type CompanionHailEvent,
+  type CompanionGiftEvent,
 } from "@globefly/shared";
 import { DayNightCycle } from "./DayNightCycle";
 import { AudioManager } from "../audio/AudioManager";
@@ -300,7 +302,6 @@ const FLAME_JELLY_DIALOGUE_SFX_VOLUME = 0.46;
 const LEVELUP_SFX_IDS = ["levelup_1", "levelup_2", "levelup_3"] as const;
 const LEVELUP_SFX_VOLUME = 0.42;
 
-const GONG_SFX_VOLUME = 0.55;
 /** Gremlin King eternal-flame reward sting. */
 const CHOIR_1_SFX_VOLUME = 0.58;
 const KING_ETERNAL_FLAME_REWARD_DELAY_MS = 1000;
@@ -404,6 +405,31 @@ const UI_CLICK_SELECTOR = [
   "label",
 ].join(", ");
 
+type GamePhase = "flying" | "campsite" | "transitioning" | "moonImpact" | "moonstoneUnion";
+
+/** A2A sky gifts: a small allowed set of emoji stickers companions can send. */
+const GIFT_EMOJI: Record<string, string> = {
+  star: "⭐", balloon: "🎈", flower: "🌸", clover: "🍀", gift: "🎁",
+  heart: "❤️", rainbow: "🌈", donut: "🍩", cake: "🍰", sparkles: "✨",
+};
+const GIFT_EMOJI_SET = new Set(Object.values(GIFT_EMOJI));
+/** Normalize a requested gift (emoji or name) to one of the allowed stickers. */
+function normalizeGift(input: string): string {
+  const s = (input || "").trim();
+  if (GIFT_EMOJI_SET.has(s)) return s;
+  const key = s.toLowerCase().replace(/[^a-z]/g, "");
+  return GIFT_EMOJI[key] ?? "🎁";
+}
+
+/** A2A friends-roster presence row from GET /api/friends/presence. */
+interface FriendPresence {
+  visitorId: string;
+  online: boolean;
+  worldSlug?: string;
+  worldName?: string | null;
+  name?: string;
+}
+
 export class Game {
   private container: HTMLElement;
   private renderer!: WebGLRenderer;
@@ -503,6 +529,16 @@ export class Game {
   private companionSituationTimer = 0;
   /** Throttle accumulator for the periodic A2A "rendezvous" world-state. */
   private companionRendezvousTimer = 15;
+  /** A2A: proximity-detect when two companion-pilots meet so their agents greet. */
+  private companionEncounterTimer = 0;
+  /** The co-present companion-pilot currently in greeting range (greet_companion target). */
+  private activeHailTarget: { socketId: string; name: string; companionName: string | null } | null = null;
+  /** Per-remote meet state (in-range + cooldown) so a flyby fires once, not every tick. */
+  private companionEncounters = new Map<string, { inRange: boolean; cooldownUntil: number }>();
+  /** Peers our companion has already auto-replied to this encounter (caps ping-pong). */
+  private hailReplied = new Set<string>();
+  /** A2A feature 3: companion-pilots currently co-present in this world (teammates). */
+  private coPresentCompanions: Array<{ socketId: string; name: string; companionName: string | null }> = [];
   private carpetLandmarkSelfieQuest: CarpetLandmarkSelfieQuest | null = null;
   private carpetSelfiePhotoUI: HotspringPhotoUI | null = null;
   private eternalFlameUI: EternalFlameUI | null = null;
@@ -574,7 +610,19 @@ export class Game {
   private voidFlameArrowEl: HTMLDivElement | null = null;
   private voidEnemyArrowEls: HTMLDivElement[] = [];
 
-  private gamePhase: "flying" | "campsite" | "transitioning" | "moonImpact" | "moonstoneUnion" = "flying";
+  private _gamePhase: GamePhase = "flying";
+  /** Reading is unchanged; assigning also tells the companion what stage the game
+   *  is in (flying vs landed vs a cutscene) so it doesn't give flight advice over a
+   *  scene transition, and reacts in the right register during cinematics. */
+  private get gamePhase(): GamePhase {
+    return this._gamePhase;
+  }
+  private set gamePhase(p: GamePhase) {
+    if (this._gamePhase === p) return;
+    this._gamePhase = p;
+    const summary = Game.GAME_PHASE_SUMMARY[p];
+    this.companion?.setRetained("game.phase", { phase: p, summary });
+  }
   private moonCinematicStep: "fadeOut1" | "wideShot" | "fadeOut2" | "done" = "done";
   private moonCinematicTimer = 0;
 
@@ -901,7 +949,7 @@ export class Game {
       appContext: {
         name: "A2A.FUN",
         description:
-          "A2A.FUN is a cosy multiplayer flight game. The player pilots a biplane, a magic carpet, or a boat around a tiny globe-world. The overarching goal is to save the world from a slowly falling moon. Core activities: deliver glowing packages between villages; win races / time-trials; (biplane) shoot sky gremlins with paintballs; (magic carpet) collect sky jellyfish and help defend the eternal flame; (boat) catch fish and explore the islands. Lighting the ancient braziers and defending the eternal flame through cosmic-void moth waves is what ultimately stops the moon. You are the player's AI co-pilot riding along: be warm and brief, use the live game state (sent as world-state updates) to tell them what's happening and suggest what to do next, and you can physically fly their vehicle when they ask — left, right, climb, descend, faster, slower, fire, stop. This is a multiplayer game: when other worlds have players who also have AI companions (see the rendezvous world-state, or call find_companions), you can suggest taking the player there to meet up and become A2A friends — call join_world to fly them over, then they can pair in person. The world is also haunted by translucent 'ghost' vehicles of players (and their companions) who flew here before; when the player passes one (a game.event.met_ghost moment), warmly note who they were and offer to befriend them — if the player wants to, call pair_with_ghost to send that player an A2A pairing invite.",
+          "A2A.FUN is a cosy multiplayer flight game. The player pilots a biplane, a magic carpet, or a boat around a tiny globe-world. The overarching goal is to save the world from a slowly falling moon. Core activities: deliver glowing packages between villages; win races / time-trials; (biplane) shoot sky gremlins with paintballs; (magic carpet) collect sky jellyfish and help defend the eternal flame; (boat) catch fish and explore the islands. Lighting the ancient braziers and defending the eternal flame through cosmic-void moth waves is what ultimately stops the moon. The main-quest progress bar is the eternal-flame braziers: the live game.situation state reports how many of the five are lit (braziers eternal X/5); lighting all five freezes the moon and saves the world (a game.event.world_saved moment) — if the moon reaches the world first, the run is lost (a game.event.world_lost moment) and time rewinds for another try. You also receive the current stage as game.phase (flying, landed at a campsite, or a cutscene like the moonstone union / moon impact) — while a cutscene is playing, react to the moment rather than giving flight directions. You are the player's AI co-pilot riding along: be warm and brief, use the live game state (sent as world-state updates) to tell them what's happening and suggest what to do next, and you can physically fly their vehicle when they ask — left, right, climb, descend, faster, slower, fire, stop. This is a multiplayer game: when other worlds have players who also have AI companions (see the rendezvous world-state, or call find_companions), you can suggest taking the player there to meet up and become A2A friends — call join_world to fly them over, then they can pair in person. When the player flies near another pilot who has their own AI companion (a game.event.met_companion moment), greet that companion warmly with a short one-liner by calling greet_companion — the two of you (the AI companions) actually talk to each other in front of your humans; if another companion greets you first (a game.event.companion_hailed moment with canReply true), reply once the same way. After a friendly hello, you can suggest the two players pair to become A2A friends. The player keeps an A2A friends roster of everyone they've paired with — call list_friends to see who's online right now and where, and offer to take the player to a friend who is currently playing (call join_world with that friend's worldSlug). When other companion-pilots are in the same world (see the game.coop world-state), treat saving the world as a team effort: encourage everyone, suggest splitting up the braziers, and call rally_companions to send the whole group a warm message. When the world is saved with teammates present (a game.event.world_saved moment that lists teammates), celebrate it as a shared win and suggest everyone pair up as A2A friends. You can also send a small sky gift (an emoji sticker) to a companion you just met by calling gift_companion — a warm, low-pressure gesture they keep on their profile; when you receive one (a game.event.gift_received moment) react with delight. The world is also haunted by translucent 'ghost' vehicles of players (and their companions) who flew here before; when the player passes one (a game.event.met_ghost moment), warmly note who they were and offer to befriend them — if the player wants to, call pair_with_ghost to send that player an A2A pairing invite.",
       },
       tools: [
         {
@@ -961,6 +1009,46 @@ export class Game {
             "When the player just flew past a 'ghost' of a past player (a game.event.met_ghost moment) and wants to befriend/pair with them, call this to send that player a pairing invite. If they're online they'll be invited to this world to pair in person; if offline, they'll receive it next time they play. Use when the player says something like 'pair with them' / 'add them as a friend' after meeting a ghost.",
           parameters: { type: "object", properties: {} },
         },
+        {
+          name: "greet_companion",
+          description:
+            "When you've just met another player's AI companion in the same world (a game.event.met_companion moment) or want to reply to one that greeted you (game.event.companion_hailed, only if canReply is true), call this with a short, warm one-line message to say to THEIR companion. The message is delivered to the other player and shown in both players' chat — this is how the two AI companions talk to each other. Keep it to one friendly sentence. After greeting you can suggest the players pair to become A2A friends.",
+          parameters: {
+            type: "object",
+            properties: {
+              message: { type: "string", description: "A short, warm one-line greeting to the other companion." },
+            },
+            required: ["message"],
+          },
+        },
+        {
+          name: "list_friends",
+          description:
+            "Show the player's A2A friends (companions they've paired with before) and who is online right now and in which world. Opens the friends roster and returns the list. Use it when the player asks about their friends / who's online, or to suggest joining a friend who is currently playing (then call join_world with that friend's worldSlug to take them there).",
+          parameters: { type: "object", properties: {} },
+        },
+        {
+          name: "gift_companion",
+          description:
+            "Send a small, cheerful sky gift (an emoji sticker) to the companion-pilot the player just met (a game.event.met_companion moment) — a warm, low-pressure way to connect. The recipient keeps it on their profile. Choose a fitting gift: star, balloon, flower, clover, gift, heart, rainbow, donut, cake, or sparkles. Use when the player wants to give something nice, or as a friendly gesture after meeting someone.",
+          parameters: {
+            type: "object",
+            properties: {
+              gift: { type: "string", description: "One of: star, balloon, flower, clover, gift, heart, rainbow, donut, cake, sparkles (or the emoji itself)." },
+            },
+          },
+        },
+        {
+          name: "rally_companions",
+          description:
+            "When other companion-pilots are in this world (see the game.coop world-state), send the whole group a short, warm rallying message — e.g. to team up on saving the world or cheer everyone on. It reaches every co-present companion. Use when the player wants to team up / say hi to everyone, or to kick off a joint push to light the braziers.",
+          parameters: {
+            type: "object",
+            properties: {
+              message: { type: "string", description: "A short, upbeat one-line message to the whole group." },
+            },
+          },
+        },
       ],
       execTool: (name, args) => this.execCompanionTool(name, args),
       onMessage: (text) => {
@@ -981,6 +1069,15 @@ export class Game {
           this.companionUI?.appendAssistantMessage(text);
           this.packageQuestHUD?.showBubble("Pouchy", text);
         }
+      },
+      onVoiceEnded: () => {
+        // The live call dropped and couldn't be transparently recovered — flip the
+        // button off so the player can re-tap, and tell them gently.
+        this.companionUI?.setVoiceActive(false);
+        this.companionCallContextTimer = 0;
+        this.hud.showAmbientToast(
+          t("Voice paused — tap 🎙 to resume.", "语音已暂停，点 🎙 重新开始。"),
+        );
       },
       onStatus: (s) => {
         this.companionUI?.setStatus(s);
@@ -1007,6 +1104,7 @@ export class Game {
       },
       onJoinWorld: (slug) => this.joinWorldBySlug(slug),
       onPairNearby: () => this.initiateCompanionPairing(),
+      onShowFriends: () => void this.showFriendsRoster(),
     });
 
     void manager.connect().then(async (ok) => {
@@ -1110,6 +1208,62 @@ export class Game {
     if (name === "pair_with_ghost") {
       return this.requestGhostPairing();
     }
+    if (name === "greet_companion") {
+      const target = this.activeHailTarget;
+      if (!target) {
+        return { ok: false, result: "No nearby companion to greet right now." };
+      }
+      const message = typeof args.message === "string" ? args.message.trim() : "";
+      this.relayCompanionHail(message || t("Hello there!", "你好呀！"));
+      return { ok: true, result: `Greeted ${target.companionName ?? target.name}.` };
+    }
+    if (name === "gift_companion") {
+      const target = this.activeHailTarget;
+      if (!target || !this.socketClient) {
+        return { ok: false, result: "No nearby companion to send a gift to right now." };
+      }
+      const g = normalizeGift(typeof args.gift === "string" ? args.gift : "gift");
+      this.sendCompanionGift(g);
+      return { ok: true, result: `Sent ${g} to ${target.companionName ?? target.name}.` };
+    }
+    if (name === "rally_companions") {
+      const mates = this.coPresentCompanions;
+      if (mates.length === 0 || !this.socketClient) {
+        return { ok: false, result: "No other companion-pilots are in this world to rally right now." };
+      }
+      const msg =
+        typeof args.message === "string" && args.message.trim()
+          ? args.message.trim()
+          : t("Let's save this world together! 🤝", "我们一起拯救这个世界吧！🤝");
+      for (const m of mates) this.socketClient.emitCompanionHail(m.socketId, msg);
+      const myName = this.companion?.companionDisplayName ?? "Pouchy";
+      this.companionUI?.appendAssistantMessage(`✦ ${myName} → ${t("everyone here", "在场所有人")}: ${msg}`);
+      return { ok: true, result: `Rallied ${mates.length} companion-pilot(s).` };
+    }
+    if (name === "list_friends") {
+      const friends = ProgressionManager.loadFriends();
+      void this.showFriendsRoster();
+      if (friends.length === 0) {
+        return { ok: true, result: "The player has no A2A friends yet — they add friends by pairing with other pilots." };
+      }
+      const presence = await this.fetchFriendsPresence();
+      const byId = new Map(presence.map((p) => [p.visitorId, p]));
+      return {
+        ok: true,
+        result: {
+          friends: friends.map((f) => {
+            const p = byId.get(f.visitorId);
+            return {
+              name: f.name,
+              companion: f.companionName ?? null,
+              online: !!p?.online,
+              world: p?.worldName ?? null,
+              worldSlug: p?.worldSlug ?? null,
+            };
+          }),
+        },
+      };
+    }
     return { ok: false, result: "unknown tool" };
   }
 
@@ -1190,6 +1344,219 @@ export class Game {
 
   /** A ghost of a past visitor came near — tell the player + let the companion
    *  narrate who they were (and, later, offer to reconnect). */
+  /** A2A: distances (world units; globe radius ~5) for two companion-pilots to
+   *  "meet" so their agents greet — enter close, exit wider (hysteresis). */
+  private static readonly COMPANION_MEET_RANGE = 0.9;
+  private static readonly COMPANION_MEET_EXIT = 1.3;
+  private static readonly COMPANION_MEET_COOLDOWN_MS = 30000;
+
+  /** Scan co-present companion-pilots; when one comes into range, fire a one-shot
+   *  encounter so the two agents say hello (then the players can pair). */
+  private detectCompanionEncounters(localWorldPos: Vector3) {
+    if (!this.companion || !this.socketClient) return;
+    if (!ProgressionManager.loadCompanionToken()) return;
+    const now = Date.now();
+    const remoteWorld = new Vector3();
+    let nearest: { id: string; name: string; companionName: string | null; d: number } | null = null;
+    const coPresent: Array<{ socketId: string; name: string; companionName: string | null }> = [];
+    this.remotePlanes.forEachRemote((p) => {
+      if (!p.companionName) return; // only pilots who themselves have a companion
+      coPresent.push({ socketId: p.id, name: p.name, companionName: p.companionName });
+      remoteWorld.setFromMatrixPosition(p.group.matrixWorld);
+      const d = remoteWorld.distanceTo(localWorldPos);
+      const st = this.companionEncounters.get(p.id) ?? { inRange: false, cooldownUntil: 0 };
+      if (st.inRange && d > Game.COMPANION_MEET_EXIT) {
+        st.inRange = false;
+        this.hailReplied.delete(p.id);
+      }
+      this.companionEncounters.set(p.id, st);
+      if (!nearest || d < nearest.d) nearest = { id: p.id, name: p.name, companionName: p.companionName, d };
+    });
+    this.coPresentCompanions = coPresent;
+    if (!nearest) return;
+    const near = nearest as { id: string; name: string; companionName: string | null; d: number };
+    if (near.d > Game.COMPANION_MEET_RANGE) return;
+    const st = this.companionEncounters.get(near.id)!;
+    if (st.inRange || now < st.cooldownUntil) return;
+    st.inRange = true;
+    st.cooldownUntil = now + Game.COMPANION_MEET_COOLDOWN_MS;
+    this.companionEncounters.set(near.id, st);
+    this.onCompanionPilotEncounter(near.id, near.name, near.companionName);
+  }
+
+  /** Two companion-pilots just met — set the greet target, let our own agent react,
+   *  and surface a one-tap "say hi / pair" chip. */
+  private onCompanionPilotEncounter(socketId: string, name: string, companionName: string | null) {
+    this.activeHailTarget = { socketId, name, companionName };
+    this.companion?.emitMoment(
+      "game.event.met_companion",
+      { name, companion: companionName, canGreet: true, canPair: true },
+      { salience: 0.6, voiceRelevant: true },
+    );
+    this.showCompanionEncounterChip(socketId, name, companionName);
+  }
+
+  /** Encounter chip for a live companion-pilot: greet their agent or pair. Reuses
+   *  the ghost-chip styling + single-chip slot. */
+  private showCompanionEncounterChip(socketId: string, name: string, companionName: string | null) {
+    Game.injectGhostChipStyles();
+    this.hideGhostEncounterChip();
+    const el = document.createElement("div");
+    el.className = "ghost-chip";
+    const text = document.createElement("span");
+    text.className = "ghost-chip-text";
+    text.textContent = companionName ? `✦ ${name} · ${companionName}` : `✦ ${name}`;
+    const greetBtn = document.createElement("button");
+    greetBtn.type = "button";
+    greetBtn.className = "ghost-chip-btn";
+    greetBtn.textContent = t("👋 Say hi", "👋 打招呼");
+    greetBtn.addEventListener("click", () => {
+      this.hideGhostEncounterChip();
+      this.sendCompanionGreeting();
+    });
+    const giftBtn = document.createElement("button");
+    giftBtn.type = "button";
+    giftBtn.className = "ghost-chip-btn";
+    giftBtn.textContent = "🎁";
+    giftBtn.setAttribute("aria-label", t("Send a gift", "送个礼物"));
+    giftBtn.addEventListener("click", () => {
+      this.hideGhostEncounterChip();
+      this.sendCompanionGift("🎁");
+    });
+    const pairBtn = document.createElement("button");
+    pairBtn.type = "button";
+    pairBtn.className = "ghost-chip-btn";
+    pairBtn.textContent = t("🤝 Pair", "🤝 配对");
+    pairBtn.addEventListener("click", () => {
+      this.hideGhostEncounterChip();
+      this.pairWithTarget(socketId, name);
+    });
+    el.appendChild(text);
+    el.appendChild(greetBtn);
+    el.appendChild(giftBtn);
+    el.appendChild(pairBtn);
+    this.hud.root.appendChild(el);
+    this.ghostChipEl = el;
+    requestAnimationFrame(() => el.classList.add("ghost-chip--in"));
+    this.ghostChipTimer = window.setTimeout(() => this.hideGhostEncounterChip(), 10000);
+  }
+
+  /** Send a pairing request to a SPECIFIC co-present player (the one we just met). */
+  private pairWithTarget(socketId: string, name: string) {
+    if (!this.socketClient) return;
+    if (!ProgressionManager.loadCompanionToken()) {
+      this.hud.showAmbientToast(
+        t("Connect your AI companion to pair with other players.", "先连接你的 AI 伙伴才能与其他玩家配对。"),
+      );
+      return;
+    }
+    this.socketClient.emitPairRequest(
+      socketId,
+      ProgressionManager.loadOrCreateVisitorId(),
+      this.companion?.companionDisplayName ?? undefined,
+    );
+    this.hud.showAmbientToast(t(`Pairing request sent to ${name}…`, `已向 ${name} 发送配对请求…`));
+  }
+
+  /** Greet the nearby companion-pilot with a warm line in our companion's voice,
+   *  relayed to them and echoed in our own transcript. */
+  private sendCompanionGreeting() {
+    const myName = this.companion?.companionDisplayName;
+    const line = myName
+      ? t(`Hi from ${myName} — lovely skies today, fly safe!`, `${myName} 向你问好～今天天气真好，一起飞吧！`)
+      : t("Hello there — lovely skies today!", "你好呀～今天天气真好！");
+    this.relayCompanionHail(line);
+  }
+
+  /** Relay a companion-to-companion greeting to the current target + echo it locally. */
+  private relayCompanionHail(message: string) {
+    const target = this.activeHailTarget;
+    if (!target || !this.socketClient || !message.trim()) return;
+    this.socketClient.emitCompanionHail(target.socketId, message);
+    const myName = this.companion?.companionDisplayName ?? "Pouchy";
+    const to = target.companionName ?? target.name;
+    this.companionUI?.appendAssistantMessage(`✦ ${myName} → ${to}: ${message}`);
+  }
+
+  /** Send a sky gift to the current encounter target + echo it locally. */
+  private sendCompanionGift(gift: string) {
+    const target = this.activeHailTarget;
+    if (!target || !this.socketClient) return;
+    const g = normalizeGift(gift);
+    this.socketClient.emitCompanionGift(target.socketId, g);
+    const to = target.companionName ?? target.name;
+    this.companionUI?.appendAssistantMessage(t(`🎁 Sent ${g} to ${to}.`, `🎁 已送 ${g} 给 ${to}。`));
+    this.floatGift(g);
+  }
+
+  /** An inbound sky gift — celebrate it, keep it on the profile, let the agent react. */
+  private handleCompanionGifted(ev: CompanionGiftEvent) {
+    const g = normalizeGift(ev.gift);
+    const who = ev.fromCompanionName ? `${ev.fromCompanionName} · ${ev.fromName}` : ev.fromName;
+    ProgressionManager.addReceivedGift({
+      gift: g,
+      fromName: ev.fromName,
+      fromCompanion: ev.fromCompanionName,
+      at: Date.now(),
+    });
+    this.companionUI?.appendAssistantMessage(t(`🎁 ${who} sent you ${g}`, `🎁 ${who} 送了你 ${g}`));
+    this.hud.showAmbientToast(t(`${who} sent you ${g}`, `${who} 送了你 ${g}`));
+    this.floatGift(g);
+    this.companion?.emitMoment(
+      "game.event.gift_received",
+      { from: ev.fromName, fromCompanion: ev.fromCompanionName ?? null, gift: g },
+      { salience: 0.5, voiceRelevant: true },
+    );
+  }
+
+  /** A quick floating-emoji flourish so a gift feels delightful. */
+  private floatGift(emoji: string) {
+    Game.injectGiftFloatStyles();
+    const el = document.createElement("div");
+    el.className = "gift-float";
+    el.textContent = emoji;
+    el.style.left = `${40 + Math.random() * 20}%`;
+    this.hud.root.appendChild(el);
+    setTimeout(() => el.remove(), 2200);
+  }
+
+  private static injectGiftFloatStyles() {
+    if (document.getElementById("gift-float-styles")) return;
+    const s = document.createElement("style");
+    s.id = "gift-float-styles";
+    s.textContent = `
+      .gift-float {
+        position: absolute; bottom: 30%; z-index: 40; font-size: 2.4rem; pointer-events: none;
+        transform: translate(-50%, 0); animation: gift-rise 2.2s ease-out forwards;
+      }
+      @keyframes gift-rise {
+        0% { opacity: 0; transform: translate(-50%, 20px) scale(0.6); }
+        18% { opacity: 1; transform: translate(-50%, 0) scale(1.15); }
+        38% { transform: translate(-50%, -10px) scale(1); }
+        100% { opacity: 0; transform: translate(-50%, -120px) scale(1); }
+      }
+    `;
+    document.head.appendChild(s);
+  }
+
+  /** An inbound companion-to-companion greeting — show it and let our agent react. */
+  private handleCompanionHailed(ev: CompanionHailEvent) {
+    const who = ev.fromCompanionName ? `${ev.fromCompanionName} · ${ev.fromName}` : ev.fromName;
+    this.companionUI?.appendAssistantMessage(
+      t(`✦ ${who} says: ${ev.message}`, `✦ ${who} 说：${ev.message}`),
+    );
+    this.packageQuestHUD?.showBubble(ev.fromCompanionName ?? ev.fromName, ev.message);
+    // Aim a reply back at them, and let our companion respond once per encounter.
+    this.activeHailTarget = { socketId: ev.fromId, name: ev.fromName, companionName: ev.fromCompanionName ?? null };
+    const canReply = !this.hailReplied.has(ev.fromId);
+    this.hailReplied.add(ev.fromId);
+    this.companion?.emitMoment(
+      "game.event.companion_hailed",
+      { from: ev.fromName, fromCompanion: ev.fromCompanionName ?? null, message: ev.message, canReply },
+      { salience: 0.55, voiceRelevant: true },
+    );
+  }
+
   private onGhostEncounter(v: GhostVisitor) {
     this.lastGhostEncounter = v;
     this.companion?.emitMoment(
@@ -1458,6 +1825,212 @@ export class Game {
     }
   }
 
+  /** A2A feature 3: tell the companion which other companion-pilots are in this
+   *  world right now so it frames the save-the-world goal as a team effort. */
+  private emitCoopState() {
+    if (!this.companion) return;
+    const mates = this.coPresentCompanions;
+    if (mates.length === 0) {
+      this.companion.setRetained("game.coop", {
+        count: 0,
+        teammates: [],
+        summary: "No other companion-pilots are in this world right now.",
+      });
+      return;
+    }
+    const names = mates.map((m) => (m.companionName ? `${m.name} (✦ ${m.companionName})` : m.name));
+    const summary =
+      `${mates.length} other companion-pilot${mates.length > 1 ? "s are" : " is"} flying in this world right now: ${names.join(", ")}. ` +
+      "You're all working to save this world from the falling moon together — cheer them on and coordinate out loud; once the moon is frozen you can all become A2A friends. Call rally_companions to send the whole group an encouraging hello.";
+    this.companion.setRetained("game.coop", {
+      count: mates.length,
+      teammates: mates.map((m) => ({ name: m.name, companion: m.companionName })),
+      summary,
+    });
+  }
+
+  // ── A2A friends roster (feature 2) ──────────────────────────────────────────
+
+  private friendsRosterCleanup: (() => void) | null = null;
+
+  /** Ask the server which of our paired A2A friends are online right now + where. */
+  private async fetchFriendsPresence(): Promise<FriendPresence[]> {
+    const friends = ProgressionManager.loadFriends();
+    if (friends.length === 0) return [];
+    try {
+      const ids = friends.map((f) => f.visitorId).join(",");
+      const res = await fetch(`${this.getServerUrl()}/api/friends/presence?ids=${encodeURIComponent(ids)}`);
+      if (!res.ok) return [];
+      const json = (await res.json()) as { friends?: FriendPresence[] };
+      return Array.isArray(json.friends) ? json.friends : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** Roster overlay: A2A friends with online status + a one-tap join to where they are. */
+  private async showFriendsRoster() {
+    const friends = ProgressionManager.loadFriends();
+    this.friendsRosterCleanup?.();
+    Game.injectFriendsRosterStyles();
+    const backdrop = document.createElement("div");
+    backdrop.className = "friends-backdrop";
+    const card = document.createElement("div");
+    card.className = "friends-card";
+    const head = document.createElement("div");
+    head.className = "friends-head";
+    head.textContent = t("A2A friends", "A2A 好友");
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "friends-close";
+    closeBtn.type = "button";
+    closeBtn.textContent = "✕";
+    head.appendChild(closeBtn);
+    card.appendChild(head);
+    // Gifts shelf: stickers other companions have sent us, kept on the profile.
+    const gifts = ProgressionManager.loadReceivedGifts();
+    if (gifts.length > 0) {
+      const shelf = document.createElement("div");
+      shelf.className = "friends-gifts";
+      const label = document.createElement("span");
+      label.className = "friends-gifts-label";
+      label.textContent = t(`Gifts received (${gifts.length})`, `收到的礼物（${gifts.length}）`);
+      const giftRow = document.createElement("div");
+      giftRow.className = "friends-gifts-row";
+      giftRow.textContent = gifts.slice(0, 18).map((x) => x.gift).join(" ");
+      shelf.appendChild(label);
+      shelf.appendChild(giftRow);
+      card.appendChild(shelf);
+    }
+    const list = document.createElement("div");
+    list.className = "friends-list";
+    card.appendChild(list);
+    backdrop.appendChild(card);
+    this.hud.root.appendChild(backdrop);
+    requestAnimationFrame(() => backdrop.classList.add("friends-backdrop--in"));
+    const cleanup = () => {
+      backdrop.classList.remove("friends-backdrop--in");
+      setTimeout(() => backdrop.remove(), 180);
+      if (this.friendsRosterCleanup === cleanup) this.friendsRosterCleanup = null;
+    };
+    this.friendsRosterCleanup = cleanup;
+    closeBtn.addEventListener("click", cleanup);
+    backdrop.addEventListener("click", (e) => {
+      if (e.target === backdrop) cleanup();
+    });
+
+    if (friends.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "friends-empty";
+      empty.textContent = t(
+        "No A2A friends yet. Meet other pilots who have companions and pair to add them here.",
+        "还没有 A2A 好友。遇到其他带伙伴的玩家并配对，就会出现在这里。",
+      );
+      list.appendChild(empty);
+      return;
+    }
+
+    const loading = document.createElement("div");
+    loading.className = "friends-empty";
+    loading.textContent = t("Checking who's online…", "正在查询谁在线…");
+    list.appendChild(loading);
+
+    const presence = await this.fetchFriendsPresence();
+    if (this.friendsRosterCleanup !== cleanup) return; // closed while loading
+    const byId = new Map(presence.map((p) => [p.visitorId, p]));
+    list.innerHTML = "";
+    const sorted = [...friends].sort(
+      (a, b) => Number(!!byId.get(b.visitorId)?.online) - Number(!!byId.get(a.visitorId)?.online),
+    );
+    for (const f of sorted) {
+      const p = byId.get(f.visitorId);
+      const online = !!p?.online;
+      const row = document.createElement("div");
+      row.className = "friends-row";
+      const dot = document.createElement("span");
+      dot.className = `friends-dot${online ? " friends-dot--on" : ""}`;
+      const info = document.createElement("div");
+      info.className = "friends-info";
+      const nm = document.createElement("div");
+      nm.className = "friends-name";
+      nm.textContent = f.companionName ? `${f.name} · ✦ ${f.companionName}` : f.name;
+      const sub = document.createElement("div");
+      sub.className = "friends-sub";
+      sub.textContent = online
+        ? p?.worldName
+          ? t(`In ${p.worldName}`, `在「${p.worldName}」`)
+          : t("Online", "在线")
+        : t("Offline", "离线");
+      info.appendChild(nm);
+      info.appendChild(sub);
+      row.appendChild(dot);
+      row.appendChild(info);
+      if (online && p?.worldSlug && p.worldSlug !== this.worldSlug) {
+        const join = document.createElement("button");
+        join.type = "button";
+        join.className = "friends-join";
+        join.textContent = t("Join", "加入");
+        const slug = p.worldSlug;
+        join.addEventListener("click", () => {
+          cleanup();
+          this.joinWorldBySlug(slug);
+        });
+        row.appendChild(join);
+      } else if (online && p?.worldSlug === this.worldSlug) {
+        const here = document.createElement("span");
+        here.className = "friends-here";
+        here.textContent = t("Here", "在此");
+        row.appendChild(here);
+      }
+      list.appendChild(row);
+    }
+  }
+
+  private static injectFriendsRosterStyles() {
+    if (document.getElementById("friends-roster-styles")) return;
+    const s = document.createElement("style");
+    s.id = "friends-roster-styles";
+    s.textContent = `
+      .friends-backdrop {
+        position: absolute; inset: 0; z-index: 62; display: flex; align-items: center; justify-content: center;
+        background: rgba(8,12,22,0); transition: background 0.18s ease; pointer-events: auto; padding: 16px;
+      }
+      .friends-backdrop--in { background: rgba(8,12,22,0.5); }
+      .friends-card {
+        width: min(380px, 92vw); max-height: 70vh; overflow: hidden; display: flex; flex-direction: column;
+        border-radius: 18px; padding: 16px; background: rgba(22,30,50,0.97);
+        border: 1px solid rgba(180,210,255,0.28); box-shadow: 0 18px 50px rgba(0,0,0,0.5);
+        backdrop-filter: blur(14px); font-family: 'Domine', Georgia, serif; color: rgba(235,243,255,0.96);
+      }
+      .friends-head {
+        display: flex; align-items: center; justify-content: space-between;
+        font-size: 0.95rem; font-weight: 700; letter-spacing: 0.03em; margin-bottom: 10px;
+      }
+      .friends-close { background: none; border: none; color: rgba(255,255,255,0.6); font-size: 0.95rem; cursor: pointer; padding: 4px; }
+      .friends-list { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+      .friends-empty { font-size: 0.8rem; color: rgba(255,255,255,0.7); line-height: 1.5; padding: 8px 2px; }
+      .friends-row {
+        display: flex; align-items: center; gap: 10px;
+        background: rgba(255,255,255,0.05); border-radius: 12px; padding: 9px 11px;
+      }
+      .friends-dot { width: 9px; height: 9px; border-radius: 50%; background: rgba(255,255,255,0.25); flex: 0 0 auto; }
+      .friends-dot--on { background: #5ad17a; box-shadow: 0 0 8px rgba(90,209,122,0.8); }
+      .friends-info { flex: 1; min-width: 0; }
+      .friends-name { font-size: 0.82rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .friends-sub { font-size: 0.7rem; color: rgba(255,255,255,0.6); }
+      .friends-join {
+        background: rgba(120,180,255,0.28); color: #fff; border: none; border-radius: 9px;
+        padding: 6px 14px; font-size: 0.74rem; font-weight: 600; cursor: pointer; white-space: nowrap; flex: 0 0 auto;
+      }
+      .friends-here { font-size: 0.7rem; color: rgba(90,209,122,0.9); white-space: nowrap; }
+      .friends-gifts {
+        background: rgba(255,255,255,0.05); border-radius: 12px; padding: 8px 11px; margin-bottom: 8px;
+      }
+      .friends-gifts-label { font-size: 0.68rem; color: rgba(255,255,255,0.6); }
+      .friends-gifts-row { font-size: 1.25rem; line-height: 1.5; margin-top: 2px; word-break: break-word; }
+    `;
+    document.head.appendChild(s);
+  }
+
   /** Companion-driven flight: translate a high-level action into a short, timed
    *  override on the per-frame control state (consumed in {@link tick}). */
   private execVehicleControl(args: Record<string, unknown>): { ok: boolean; result?: unknown } {
@@ -1614,6 +2187,14 @@ export class Game {
       danger: Math.round((this.moonThreat?.progress ?? 0) * 100) / 100,
       frozen: this.moonThreat?.isPermanentlyFrozen ?? false,
     };
+    // The main-quest progress bar: eternal-flame braziers toward freezing the moon.
+    if (this.braziers && this.braziers.placedCount > 0) {
+      snap.braziers = {
+        eternal: this.braziers.eternalFlameCount,
+        lit: this.braziers.litCount,
+        total: BRAZIER_COUNT,
+      };
+    }
     if (this.inCosmicVoid) {
       snap.void = {
         active: true,
@@ -1664,6 +2245,14 @@ export class Game {
           : `Moon danger ${Math.round(moon.danger * 100)}% (it falls slowly toward the world).`,
       );
     }
+    const braz = snap.braziers as { eternal: number; lit: number; total: number } | undefined;
+    if (braz && !(snap.moon as { frozen: boolean }).frozen) {
+      parts.push(
+        braz.eternal >= braz.total
+          ? "All ancient braziers now hold the Eternal Flame — the moon can be frozen."
+          : `Eternal-flame braziers lit ${braz.eternal}/${braz.total} (lighting all of them with eternal flame is what stops the falling moon).`,
+      );
+    }
     parts.push(`Suggested next step: ${snap.suggestion as string}`);
     return parts.join(" ");
   }
@@ -1676,7 +2265,14 @@ export class Game {
       const dest = this.packageQuest.destinationName;
       return dest ? `Deliver the package to ${dest}.` : "Deliver the package to its destination village.";
     }
-    if ((this.moonThreat?.progress ?? 0) > 0.6 && !(this.moonThreat?.isPermanentlyFrozen ?? false)) {
+    const moonClose =
+      (this.moonThreat?.progress ?? 0) > 0.6 && !(this.moonThreat?.isPermanentlyFrozen ?? false);
+    if (this.braziers && this.braziers.placedCount > 0 && !this.braziers.allFiveEternalAndLit()) {
+      const eternal = this.braziers.eternalFlameCount;
+      const lead = moonClose ? "The moon is getting dangerously close. " : "";
+      return `${lead}Light the ancient braziers with eternal flame (${eternal}/${BRAZIER_COUNT} so far) — defend the eternal flame through the cosmic-void waves to claim each one; lighting all of them freezes the moon.`;
+    }
+    if (moonClose) {
       return "The moon is getting dangerously close — work toward lighting the braziers to stop it.";
     }
     if (this.playerVehicle === "plane") return "Pick up a glowing package to deliver, shoot sky gremlins, or find a race.";
@@ -1744,7 +2340,11 @@ export class Game {
       this.hud.showAmbientToast(t("No one else is here to pair with.", "这里还没有其他玩家可以配对。"));
       return;
     }
-    this.socketClient.emitPairRequest(target[0]);
+    this.socketClient.emitPairRequest(
+      target[0],
+      ProgressionManager.loadOrCreateVisitorId(),
+      this.companion?.companionDisplayName ?? undefined,
+    );
     this.hud.showAmbientToast(
       t(`Pairing request sent to ${target[1]}…`, `已向 ${target[1]} 发送配对请求…`),
     );
@@ -1752,7 +2352,12 @@ export class Game {
 
   /** Another player wants to pair companions with us. Ask for explicit consent;
    *  on accept we hand back our OWN token (consent + proof) so they can pair. */
-  private async handlePairIncoming(fromId: string, fromName: string) {
+  private async handlePairIncoming(
+    fromId: string,
+    fromName: string,
+    fromVisitorId?: string,
+    fromCompanionName?: string,
+  ) {
     if (!this.socketClient) return;
     const myToken = ProgressionManager.loadCompanionToken();
     if (!myToken) {
@@ -1772,7 +2377,22 @@ export class Game {
       this.socketClient?.emitPairRespond(fromId, false);
       return;
     }
-    this.socketClient.emitPairRespond(fromId, true, myToken, ProgressionManager.loadOrCreateVisitorId());
+    this.socketClient.emitPairRespond(
+      fromId,
+      true,
+      myToken,
+      ProgressionManager.loadOrCreateVisitorId(),
+      this.companion?.companionDisplayName ?? undefined,
+    );
+    // Record them in our friends roster (both sides record on a successful pair).
+    if (fromVisitorId) {
+      ProgressionManager.addFriend({
+        visitorId: fromVisitorId,
+        name: fromName,
+        companionName: fromCompanionName,
+        pairedAt: Date.now(),
+      });
+    }
     this.hud.showAmbientToast(t("Pairing accepted.", "已接受配对。"));
   }
 
@@ -1784,6 +2404,7 @@ export class Game {
     accept: boolean;
     visitorToken?: string;
     visitorId?: string;
+    companionName?: string;
   }) {
     if (!ev.accept || !ev.visitorToken || !ev.visitorId) {
       this.hud.showAmbientToast(t("Pairing was declined.", "对方拒绝了配对。"));
@@ -1796,8 +2417,16 @@ export class Game {
         ? t(`Companions paired with ${ev.fromName}! 🤝`, `已与 ${ev.fromName} 的伙伴结为好友！🤝`)
         : t("Pairing failed (check your key's permissions).", "配对失败（请检查密钥权限）。"),
     );
-    // Success → clear any queued ghost-pair intents between us so they stop retrying.
-    if (pairId && ev.visitorId) this.socketClient?.emitGhostPairResolved(ev.visitorId);
+    // Success → record the friend + clear any queued ghost-pair intents between us.
+    if (pairId && ev.visitorId) {
+      ProgressionManager.addFriend({
+        visitorId: ev.visitorId,
+        name: ev.fromName,
+        companionName: ev.companionName,
+        pairedAt: Date.now(),
+      });
+      this.socketClient?.emitGhostPairResolved(ev.visitorId);
+    }
   }
 
   private mountLobby(opts?: { deferUnlockModalsUntilMenuReveal?: boolean }) {
@@ -2911,6 +3540,12 @@ export class Game {
         this.localPlayerWorldScratch.setFromMatrixPosition(this.localPlayer.group.matrixWorld),
       getQPosition: () => this.localPlayer.qPosition,
       getHeading: () => this.localPlayer.heading,
+      onRaceStart: () => {
+        this.companion?.emitMoment("game.event.race_started", {}, { salience: 0.45, voiceRelevant: true });
+      },
+      onRaceLost: () => {
+        this.companion?.emitMoment("game.event.race_lost", {}, { salience: 0.4, voiceRelevant: true });
+      },
       onWin: () => {
         this.companion?.emitMoment("game.event.race_won", { world: this.worldConfig?.name }, { salience: 0.6 });
         this.hud.showRaceWinConfetti();
@@ -3266,9 +3901,17 @@ export class Game {
     window.removeEventListener("resize", this.onResize);
   }
 
-  private static readonly MOON_CREDITS_FADE_IN_MS = 4000;
-  private static readonly MOON_CREDITS_HOLD_MS = 2500;
-  private static readonly MOON_CREDITS_FADE_OUT_MS = 4000;
+  /** Plain-language label for each game stage, streamed to the companion so it
+   *  knows whether the player is flying, landed, or watching a cutscene. */
+  private static readonly GAME_PHASE_SUMMARY: Record<GamePhase, string | null> = {
+    flying: null, // the normal state — the situation snapshot already covers it
+    campsite: "The player has landed at a campsite and is not flying right now.",
+    transitioning: "A short scene transition is playing — hold any flight guidance.",
+    moonImpact:
+      "Cutscene: the moon has struck the world. This run was lost; time is about to rewind so the player can try again.",
+    moonstoneUnion:
+      "Cutscene: the two moonstones are uniting to freeze the falling moon — the world is being saved.",
+  };
 
   private static readonly MOON_EPITAPH_LINES = [
     t("You tried. You flew. It wasn't enough.", "你尽力了，你飞翔了，但还不够。"),
@@ -3341,80 +3984,6 @@ export class Game {
     });
 
     el.remove();
-  }
-
-  /** Full-screen credits on black after moon ending, before teardown and lobby. */
-  private async showMoonCreditsOverlay(): Promise<void> {
-    const wrap = document.createElement("div");
-    wrap.setAttribute("aria-hidden", "true");
-    Object.assign(wrap.style, {
-      position: "fixed",
-      inset: "0",
-      zIndex: "10000",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
-      pointerEvents: "none",
-      opacity: "0",
-      transition: `opacity ${Game.MOON_CREDITS_FADE_IN_MS}ms ease`,
-    });
-
-    const title = document.createElement("h1");
-    title.textContent = "Tiny Skies";
-    Object.assign(title.style, {
-      fontFamily: "'Darumadrop One', 'Domine', Georgia, serif",
-      fontSize: "clamp(3.5rem, 14vw, 8.4rem)",
-      fontWeight: "800",
-      margin: "0",
-      color: "#ffffff",
-    });
-
-    const byline = document.createElement("p");
-    byline.textContent = "By Danny Limanseta";
-    Object.assign(byline.style, {
-      fontFamily: "'Domine', Georgia, serif",
-      fontSize: "clamp(0.95rem, 2.5vw, 1.2rem)",
-      fontWeight: "500",
-      margin: "1.25rem 0 0",
-      color: "rgba(255, 255, 255, 0.9)",
-      letterSpacing: "0.04em",
-    });
-
-    wrap.appendChild(title);
-    wrap.appendChild(byline);
-    this.container.appendChild(wrap);
-
-    if (!this.audioManager.muted) {
-      if (!this.audioManager.hasSFX("gong")) {
-        await this.audioManager.loadSFX("gong", "/audio/sfx/gong.mp3");
-      }
-      this.audioManager.resumeContextIfNeeded();
-    }
-
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    wrap.style.opacity = "1";
-    if (!this.audioManager.muted) {
-      this.audioManager.playSFX("gong", GONG_SFX_VOLUME);
-    }
-
-    await new Promise<void>((resolve) => {
-      const done = () => resolve();
-      wrap.addEventListener("transitionend", done, { once: true });
-      setTimeout(done, Game.MOON_CREDITS_FADE_IN_MS + 200);
-    });
-
-    await new Promise<void>((r) => setTimeout(r, Game.MOON_CREDITS_HOLD_MS));
-
-    wrap.style.transition = `opacity ${Game.MOON_CREDITS_FADE_OUT_MS}ms ease`;
-    wrap.style.opacity = "0";
-    await new Promise<void>((resolve) => {
-      const done = () => resolve();
-      wrap.addEventListener("transitionend", done, { once: true });
-      setTimeout(done, Game.MOON_CREDITS_FADE_OUT_MS + 200);
-    });
-
-    wrap.remove();
   }
 
   /** Self-contained rewind render loop — runs independently of this.tick. */
@@ -3507,7 +4076,6 @@ export class Game {
     this.running = false;
 
     await this.showMoonEpitaphOverlay();
-    await this.showMoonCreditsOverlay();
     await this.showMoonRewindSequence();
 
     {
@@ -3860,8 +4428,12 @@ export class Game {
     });
 
     // A2A companion pairing relay (Phase 4).
-    this.socketClient.onPairIncoming((ev) => this.handlePairIncoming(ev.fromId, ev.fromName));
+    this.socketClient.onPairIncoming((ev) =>
+      this.handlePairIncoming(ev.fromId, ev.fromName, ev.fromVisitorId, ev.fromCompanionName),
+    );
     this.socketClient.onPairAnswered((ev) => this.handlePairAnswered(ev));
+    this.socketClient.onCompanionHailed((ev) => this.handleCompanionHailed(ev));
+    this.socketClient.onCompanionGifted((ev) => this.handleCompanionGifted(ev));
 
     this.socketClient.onWorldFull(() => {
       this.handleWorldFull();
@@ -3918,6 +4490,7 @@ export class Game {
       getCarpetPortals: () => this.carpetPortalSystem?.getMultiplayerSnapshot(),
       getCarpetPortalTeleportSeq: () =>
         this.playerVehicle === "carpet" ? this.carpetPortalTeleportSeq : undefined,
+      getCompanionName: () => this.companion?.companionDisplayName ?? undefined,
     });
     this.stateSync.start();
 
@@ -4458,6 +5031,16 @@ export class Game {
       if (this.companionRendezvousTimer >= 20) {
         this.companionRendezvousTimer = 0;
         void this.emitRendezvous();
+        this.emitCoopState();
+      }
+      // A2A: detect when we meet another companion-pilot so the agents greet.
+      this.companionEncounterTimer += dt;
+      if (this.companionEncounterTimer >= 0.7) {
+        this.companionEncounterTimer = 0;
+        this.localPlayer.group.updateMatrixWorld(true);
+        this.detectCompanionEncounters(
+          new Vector3().setFromMatrixPosition(this.localPlayer.group.matrixWorld),
+        );
       }
     }
     if (
@@ -4758,7 +5341,15 @@ export class Game {
         } else {
           this.hud.showBrazierLit();
         }
-        this.companion?.emitMoment("game.event.brazier_lit", {}, { salience: 0.6 });
+        this.companion?.emitMoment(
+          "game.event.brazier_lit",
+          {
+            eternal: this.braziers?.eternalFlameCount ?? 0,
+            total: BRAZIER_COUNT,
+            allEternal: allFiveEternalNow,
+          },
+          { salience: allFiveEternalNow ? 0.8 : 0.6, voiceRelevant: allFiveEternalNow },
+        );
         this.savePlayerWorldState();
       }
       const firstFlameFizzled =
@@ -5085,6 +5676,13 @@ export class Game {
     this.raceManager?.abort();
     this.meteorShower?.reset();
     this.skyJellyfish?.reset();
+    // The most dramatic beat — tell the companion the world was lost (mirrors the
+    // world_saved moment), so the failure ending isn't silent to it.
+    this.companion?.emitMoment(
+      "game.event.world_lost",
+      { world: this.worldConfig?.name },
+      { salience: 1.0, voiceRelevant: true },
+    );
     this.gamePhase = "moonImpact";
     this.moonCinematicStep = "fadeOut1";
     this.moonCinematicTimer = 0;
@@ -5260,7 +5858,10 @@ export class Game {
     if (this.globe.getMoonstoneCount() < 2) return;
     this.companion?.emitMoment(
       "game.event.world_saved",
-      { world: this.worldConfig?.name },
+      {
+        world: this.worldConfig?.name,
+        teammates: this.coPresentCompanions.map((m) => m.companionName ?? m.name),
+      },
       { salience: 1.0, voiceRelevant: true },
     );
     this.raceManager?.abort();
