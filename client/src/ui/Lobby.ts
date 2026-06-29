@@ -26,7 +26,7 @@ const VEHICLE_ICON_SRC: Record<Vehicle, string> = {
   boat: "/2D/icon_boat.svg",
 };
 
-const LOBBY_DISPLAY_TITLE = "Tiny Skies";
+const LOBBY_DISPLAY_TITLE = "A2A.FUN";
 
 const VIBEJAM_PORTAL_BASE = "https://vibejam.cc/portal/2026";
 /** Rough cruise speed (m/s) for webring query continuity. */
@@ -538,8 +538,8 @@ export class Lobby {
         unlockModal.classList.add("lobby-unlock-modal--epilogue");
         unlockTitle.textContent = t("The world is safe", "世界安全了");
         unlockBody.textContent = t(
-          "All five braziers now hold Eternal Flame. The moon will not fall on this world again. Whenever you play Tiny Skies, you can wander the sky without that last threat closing in. A memorial statue has been placed on the globe as a new landmark—fly by and see it. Thank you for flying for us all.",
-          "五座火盆如今都燃着永恒之火。月亮不会再坠落到这个世界上。无论何时你游玩 Tiny Skies，都可以在天空中自由翱翔，不必担心最后的威胁逼近。一座纪念雕像已作为新地标安置在地球上——飞过去看看吧。感谢你为我们大家而飞翔。",
+          "All five braziers now hold Eternal Flame. The moon will not fall on this world again. Whenever you play A2A.FUN, you can wander the sky without that last threat closing in. A memorial statue has been placed on the globe as a new landmark—fly by and see it. Thank you for flying for us all.",
+          "五座火盆如今都燃着永恒之火。月亮不会再坠落到这个世界上。无论何时你游玩 A2A.FUN，都可以在天空中自由翱翔，不必担心最后的威胁逼近。一座纪念雕像已作为新地标安置在地球上——飞过去看看吧。感谢你为我们大家而飞翔。",
         );
       } else if (kind === "freeplay") {
         this.epilogueStatuePreview?.hide();
