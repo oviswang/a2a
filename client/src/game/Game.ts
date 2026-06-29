@@ -540,6 +540,13 @@ export class Game {
   private hailReplied = new Set<string>();
   /** A2A feature 3: companion-pilots currently co-present in this world (teammates). */
   private coPresentCompanions: Array<{ socketId: string; name: string; companionName: string | null }> = [];
+  /** Headless/QA diagnostics counters, surfaced read-only on `window.__a2a`. Never
+   *  exposes the token — only counts + booleans + display names. */
+  private readonly diag = {
+    messagesIn: 0, messagesOut: 0, voiceStarts: 0,
+    hailsIn: 0, hailsOut: 0, giftsIn: 0, giftsOut: 0, encounters: 0,
+    lastError: null as string | null,
+  };
   private carpetLandmarkSelfieQuest: CarpetLandmarkSelfieQuest | null = null;
   private carpetSelfiePhotoUI: HotspringPhotoUI | null = null;
   private eternalFlameUI: EternalFlameUI | null = null;
@@ -779,6 +786,44 @@ export class Game {
 
   constructor(container: HTMLElement) {
     this.container = container;
+    this.installDiag();
+  }
+
+  /** Expose a read-only diagnostics surface on `window.__a2a` so headless/QA can
+   *  assert companion + A2A behaviour without a mic, visuals, or a 2nd player.
+   *  Token is NEVER exposed — only counts, booleans, and display names. */
+  private installDiag() {
+    const g = this;
+    try {
+      (window as unknown as { __a2a?: unknown }).__a2a = {
+        version: "diag1",
+        get hasToken() { return !!ProgressionManager.loadCompanionToken(); },
+        get companionReady() { return g.companion?.isReady ?? false; },
+        get inCall() { return g.companion?.inCall ?? false; },
+        get companionName() { return g.companion?.companionDisplayName ?? null; },
+        get worldSlug() { return g.worldSlug ?? null; },
+        counts: g.diag,
+        /** Co-present companion-pilots (A2A feature 1/3). */
+        get coPresent() {
+          return g.coPresentCompanions.map((m) => ({ name: m.name, companion: m.companionName }));
+        },
+        /** Paired A2A friends (names only). */
+        get friends() {
+          return ProgressionManager.loadFriends().map((f) => ({ name: f.name, companion: f.companionName ?? null }));
+        },
+        get giftsReceived() { return ProgressionManager.loadReceivedGifts().length; },
+        /** The visible chat transcript rows — for asserting replies arrived. */
+        transcript() {
+          return Array.from(document.querySelectorAll(".cmp-msg")).map((e) => ({
+            kind: e.className.includes("--assistant") ? "assistant"
+              : e.className.includes("--user") ? "user" : "system",
+            text: e.textContent ?? "",
+          }));
+        },
+      };
+    } catch {
+      /* window not available (non-browser) — ignore */
+    }
   }
 
   /* ── Public entry point ──────────────────────────────────────────── */
@@ -1053,6 +1098,7 @@ export class Game {
       ],
       execTool: (name, args) => this.execCompanionTool(name, args),
       onMessage: (text) => {
+        this.diag.messagesIn++;
         this.companionUI?.appendAssistantMessage(text);
         this.packageQuestHUD?.showBubble("Pouchy", emotifyCompanionText(text));
       },
@@ -1081,6 +1127,7 @@ export class Game {
         );
       },
       onStatus: (s) => {
+        if (s.state === "disabled") this.diag.lastError = s.reason;
         this.companionUI?.setStatus(s);
         if (s.state === "ready" && this.worldSlug) {
           this.companionUI?.setWorldInvite(
@@ -1097,7 +1144,10 @@ export class Game {
       brandIconUrl: manager.brandIconUrl(),
       onSendText: (text) => {
         // A recognized control phrase steers directly; otherwise it's chat.
-        if (!this.handleVoiceCommand(text)) void this.companion?.sendText(text);
+        if (!this.handleVoiceCommand(text)) {
+          this.diag.messagesOut++;
+          void this.companion?.sendText(text);
+        }
       },
       onToggleVoice: () => void this.toggleCompanionVoice(),
       onInviteFriends: () => {
@@ -1147,6 +1197,7 @@ export class Game {
   private async startCompanionVoice(): Promise<boolean> {
     if (!this.companion || this.companion.inCall) return false;
     const ok = await this.companion.startVoiceCopilot();
+    if (ok) this.diag.voiceStarts++;
     this.companionUI?.setVoiceActive(ok);
     if (ok) {
       // Prime the agent with the current situation so its first words fit the moment.
@@ -1388,6 +1439,7 @@ export class Game {
   /** Two companion-pilots just met — set the greet target, let our own agent react,
    *  and surface a one-tap "say hi / pair" chip. */
   private onCompanionPilotEncounter(socketId: string, name: string, companionName: string | null) {
+    this.diag.encounters++;
     this.activeHailTarget = { socketId, name, companionName };
     this.companion?.emitMoment(
       "game.event.met_companion",
@@ -1473,6 +1525,7 @@ export class Game {
   private relayCompanionHail(message: string) {
     const target = this.activeHailTarget;
     if (!target || !this.socketClient || !message.trim()) return;
+    this.diag.hailsOut++;
     this.socketClient.emitCompanionHail(target.socketId, message);
     const myName = this.companion?.companionDisplayName ?? "Pouchy";
     const to = target.companionName ?? target.name;
@@ -1484,6 +1537,7 @@ export class Game {
     const target = this.activeHailTarget;
     if (!target || !this.socketClient) return;
     const g = normalizeGift(gift);
+    this.diag.giftsOut++;
     this.socketClient.emitCompanionGift(target.socketId, g);
     const to = target.companionName ?? target.name;
     this.companionUI?.appendAssistantMessage(t(`🎁 Sent ${g} to ${to}.`, `🎁 已送 ${g} 给 ${to}。`));
@@ -1492,6 +1546,7 @@ export class Game {
 
   /** An inbound sky gift — celebrate it, keep it on the profile, let the agent react. */
   private handleCompanionGifted(ev: CompanionGiftEvent) {
+    this.diag.giftsIn++;
     const g = normalizeGift(ev.gift);
     const who = ev.fromCompanionName ? `${ev.fromCompanionName} · ${ev.fromName}` : ev.fromName;
     ProgressionManager.addReceivedGift({
@@ -1542,6 +1597,7 @@ export class Game {
 
   /** An inbound companion-to-companion greeting — show it and let our agent react. */
   private handleCompanionHailed(ev: CompanionHailEvent) {
+    this.diag.hailsIn++;
     const who = ev.fromCompanionName ? `${ev.fromCompanionName} · ${ev.fromName}` : ev.fromName;
     this.companionUI?.appendAssistantMessage(
       t(`✦ ${who} says: ${ev.message}`, `✦ ${who} 说：${ev.message}`),
