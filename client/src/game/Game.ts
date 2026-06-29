@@ -27,6 +27,7 @@ import { t, IS_ZH } from "../i18n";
 import { localizeWorldName } from "../i18nNames";
 import { CompanionManager } from "../companion/CompanionManager";
 import { CompanionUI } from "../companion/CompanionUI";
+import { emotifyCompanionText } from "../companion/emoteText";
 import { WaypointBeacon } from "./WaypointBeacon";
 import {
   BRAZIER_MOON_PAUSE_MS,
@@ -1053,7 +1054,7 @@ export class Game {
       execTool: (name, args) => this.execCompanionTool(name, args),
       onMessage: (text) => {
         this.companionUI?.appendAssistantMessage(text);
-        this.packageQuestHUD?.showBubble("Pouchy", text);
+        this.packageQuestHUD?.showBubble("Pouchy", emotifyCompanionText(text));
       },
       onSocialMessage: (msg, slug) => this.companionUI?.showSkyLetter(msg.fromName, msg.content, slug),
       onConfirmRequest: (p) =>
@@ -1067,7 +1068,7 @@ export class Game {
           this.handleVoiceCommand(text);
         } else {
           this.companionUI?.appendAssistantMessage(text);
-          this.packageQuestHUD?.showBubble("Pouchy", text);
+          this.packageQuestHUD?.showBubble("Pouchy", emotifyCompanionText(text));
         }
       },
       onVoiceEnded: () => {
