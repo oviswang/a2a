@@ -804,6 +804,8 @@ export class Game {
         get inCall() { return g.companion?.inCall ?? false; },
         get companionName() { return g.companion?.companionDisplayName ?? null; },
         get worldSlug() { return g.worldSlug ?? null; },
+        /** This tab's A2A visitorId — distinct per tab in QA mode (sessionStorage). */
+        get visitorId() { return ProgressionManager.loadOrCreateVisitorId(); },
         counts: g.diag,
         /** Co-present companion-pilots (A2A feature 1/3). */
         get coPresent() {

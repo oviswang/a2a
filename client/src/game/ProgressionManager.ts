@@ -289,21 +289,38 @@ export class ProgressionManager {
     try { localStorage.setItem(NAME_KEY, name); } catch {}
   }
 
+  // ── QA per-tab isolation ──
+  // Same-origin tabs SHARE localStorage, so two tabs would share one identity
+  // (token + visitorId + friends + gifts) — making 2P A2A untestable in one
+  // browser profile. In QA mode (?qa=1) we keep the per-player identity in
+  // sessionStorage instead, which is per-tab, so two tabs act as two visitors.
+  private static qaMode(): boolean {
+    try {
+      return new URLSearchParams(window.location.search).has("qa") ||
+        localStorage.getItem("a2a_qa") === "1";
+    } catch { return false; }
+  }
+  /** Storage for per-player identity: sessionStorage in QA mode, else localStorage. */
+  private static idStore(): Storage {
+    try { return ProgressionManager.qaMode() ? window.sessionStorage : window.localStorage; }
+    catch { return window.localStorage; }
+  }
+
   // ── Pouchy companion token persistence (opt-in; local only) ──
 
   static loadCompanionToken(): string | null {
     try {
-      const t = localStorage.getItem(COMPANION_TOKEN_KEY);
+      const t = ProgressionManager.idStore().getItem(COMPANION_TOKEN_KEY);
       return t && t.trim() ? t.trim() : null;
     } catch { return null; }
   }
 
   static saveCompanionToken(token: string) {
-    try { localStorage.setItem(COMPANION_TOKEN_KEY, token.trim()); } catch {}
+    try { ProgressionManager.idStore().setItem(COMPANION_TOKEN_KEY, token.trim()); } catch {}
   }
 
   static clearCompanionToken() {
-    try { localStorage.removeItem(COMPANION_TOKEN_KEY); } catch {}
+    try { ProgressionManager.idStore().removeItem(COMPANION_TOKEN_KEY); } catch {}
   }
 
   static loadCompanionAutoVoice(): boolean {
@@ -325,10 +342,16 @@ export class ProgressionManager {
    *  (never the secret token). Created on first use. */
   static loadOrCreateVisitorId(): string {
     try {
-      let id = localStorage.getItem("globefly_visitor_id");
+      const store = ProgressionManager.idStore();
+      // QA: allow a deterministic per-tab id via ?vid=… so two tabs are two visitors.
+      if (ProgressionManager.qaMode()) {
+        const vid = new URLSearchParams(window.location.search).get("vid");
+        if (vid) { store.setItem("globefly_visitor_id", vid); return vid; }
+      }
+      let id = store.getItem("globefly_visitor_id");
       if (!id) {
         id = "v_" + Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 8);
-        localStorage.setItem("globefly_visitor_id", id);
+        store.setItem("globefly_visitor_id", id);
       }
       return id;
     } catch {
@@ -340,7 +363,7 @@ export class ProgressionManager {
    *  can show a roster with online status. Tokens are NEVER stored here. */
   static loadFriends(): CompanionFriend[] {
     try {
-      const raw = localStorage.getItem(FRIENDS_KEY);
+      const raw = ProgressionManager.idStore().getItem(FRIENDS_KEY);
       if (raw) return JSON.parse(raw) as CompanionFriend[];
     } catch {}
     return [];
@@ -352,14 +375,14 @@ export class ProgressionManager {
     try {
       const all = ProgressionManager.loadFriends().filter((f) => f.visitorId !== friend.visitorId);
       all.unshift(friend);
-      localStorage.setItem(FRIENDS_KEY, JSON.stringify(all.slice(0, 100)));
+      ProgressionManager.idStore().setItem(FRIENDS_KEY, JSON.stringify(all.slice(0, 100)));
     } catch {}
   }
 
   /** Sky gifts other companions have sent us (most recent first). */
   static loadReceivedGifts(): ReceivedGift[] {
     try {
-      const raw = localStorage.getItem(GIFTS_KEY);
+      const raw = ProgressionManager.idStore().getItem(GIFTS_KEY);
       if (raw) return JSON.parse(raw) as ReceivedGift[];
     } catch {}
     return [];
@@ -369,7 +392,7 @@ export class ProgressionManager {
     try {
       const all = ProgressionManager.loadReceivedGifts();
       all.unshift(g);
-      localStorage.setItem(GIFTS_KEY, JSON.stringify(all.slice(0, 200)));
+      ProgressionManager.idStore().setItem(GIFTS_KEY, JSON.stringify(all.slice(0, 200)));
     } catch {}
   }
 
