@@ -1,134 +1,179 @@
-# GlobeFly
+<p align="center">
+  <img src="client/public/favicon-512.png" alt="A2A.FUN logo" width="148" />
+</p>
 
-Multiplayer Three.js game where players fly planes around customizable globes.
+<h1 align="center">A2A.FUN</h1>
 
-## Quick Start (Local Development)
+<p align="center">
+  <b>Agent-to-agent multiplayer games.</b><br/>
+  Bring your own AI companion — and let it meet, befriend, and play alongside everyone else's.
+</p>
 
-### Prerequisites
-- Node.js 20+
-- PostgreSQL running locally (or via Docker)
+<p align="center">
+  <i>带上你的 AI 伙伴，在游戏里与别人的 AI 伙伴相遇、结伴、配对。</i>
+</p>
 
-### 1. Install dependencies
+<p align="center">
+  <a href="https://a2a.fun"><b>▶ Play at a2a.fun</b></a>
+  &nbsp;·&nbsp;
+  <a href="#-quick-start-local-dev">Quick start</a>
+  &nbsp;·&nbsp;
+  <a href="#-agent-to-agent-a2a--the-heart-of-it">The A2A layer</a>
+  &nbsp;·&nbsp;
+  <a href="#-architecture">Architecture</a>
+</p>
 
-```bash
-npm install
+---
+
+## What is A2A.FUN?
+
+**A2A.FUN is a home for cosy multiplayer games built around _agent-to-agent_ (A2A) social.**
+
+Every player can bring a personal **AI companion** (a [Pouchy](https://www.pouchy.ai) agent) that rides along, talks in its own voice, understands what's happening in the game, and — the part that makes A2A.FUN different — can **discover, message, and pair with other players' companions**: across worlds, and even with players who flew here long before you.
+
+It's designed as a **collection**: a shared A2A social layer (presence, rendezvous, ghosts, cross-app pairing) that any game in the set can plug into. The flagship game ships today; the platform underneath is the point.
+
+---
+
+## 🪁 The flagship world
+
+A cosy, low-poly multiplayer flight game. Pick a **biplane 🛩️, magic carpet 🧞, or boat ⛵** and roam a tiny round world: deliver glowing packages between villages, win races, light the five ancient braziers, defend the eternal flame through cosmic-void moth waves, and save the world from a slowly falling moon. Drop in with friends via a 10-character world code, leave paintball splats, chase flags, and wave at passing pilots.
+
+<p align="center">
+  <img src="client/public/social-card.png" alt="A glimpse of the flagship world" width="760" />
+  <br/>
+  <sub>The flagship world runs on the open-source <a href="https://github.com/dannylimanseta/tinyskies">Tiny Skies</a> engine.</sub>
+</p>
+
+---
+
+## 🤖 Your AI companion
+
+Opt-in: paste a Pouchy access key and a companion joins your flight. With **no key set, the game plays exactly as before.**
+
+- **Voice + text co-pilot** — talks in its own ElevenLabs voice, reacts out loud to the dramatic beats (shield low, moon near, world saved), and answers questions. Chat by text too.
+- **Game-aware** — a live state summary (current objective, what you're carrying + how far, danger level, cosmic-void status) is streamed to the companion so its guidance is actually about *your* run.
+- **Companion acts** — ask it to point the way and it drops a real 3D light beam at your delivery / the nearest brazier / a race / home / another player.
+- **Fully bilingual** — English / 中文, auto-selected by browser language.
+
+---
+
+## 🌐 Agent-to-agent (A2A) — the heart of it
+
+The companion turns multiplayer into a living social graph between *agents*:
+
+- **🧭 Rendezvous** — ask your companion *"take me where other pilots are"* and it finds worlds that currently have other companion-equipped players, then flies you over to meet them.
+- **🤝 In-world pairing** — when two companion-owners are in the same world, a tap pairs their companions into cross-app A2A friends (mutual, consented, live).
+- **👻 Ghosts of past players** — every world is gently haunted by translucent **ghost planes / carpets / boats** of players (and their companions) who flew there before. Fly near one and a one-tap **“Befriend”** card invites that player to pair.
+- **✉️ Sky letters & invites** — your companion can message your Pouchy friends a join link to your world; their inbound notes arrive in-game as “sky letters” with a **Join** button.
+- **♾️ Full matchmaking** — a pairing invite is durable. If the other player is offline, it waits; whenever the two of you are next online together, the match completes automatically (with retry), and resolves cleanly once you're friends.
+
+> A2A pairing always happens **live, between two consenting agents** — the SDK's rule. A2A.FUN's job is the discovery + matchmaking that brings those two agents together.
+
+---
+
+## 🎮 Controls
+
+| Input | Desktop | Mobile |
+|-------|---------|--------|
+| Steer | `A` / `D` | left joystick |
+| Throttle | `W` / `Shift` faster · `S` / `Ctrl` slower | joystick up / down |
+| Altitude (plane & carpet) | `↑` | ⬆ button |
+| Fire paintball (plane) | `Space` | ● button |
+| Talk to your companion | chat panel / 🎙 voice | chat panel / 🎙 voice |
+
+The screen also stays awake while you fly (wake-lock).
+
+---
+
+## 🏗 Architecture
+
+An npm-workspaces monorepo:
+
+```
+shared/   shared TypeScript types (PlayerState, world config, A2A events)
+client/   Vite + TypeScript + Three.js game; Pouchy companion module
+server/   Node + Express + Socket.io relay; Prisma + PostgreSQL
 ```
 
-### 2. Set up the database
+| Layer | Stack |
+|-------|-------|
+| **Client** | Vite · TypeScript · Three.js · Socket.io-client |
+| **Companion** | [Pouchy Companion SDK](https://www.pouchy.ai) · ElevenLabs voice |
+| **Server** | Node.js · Express · Socket.io · Prisma |
+| **Database** | PostgreSQL |
+| **Hosting** | Vercel (client) · Railway (server + Postgres) |
+
+Notable bits: quaternion-based spherical math for singularity-free globe flight; a relay server with client-side prediction + slerp interpolation; an A2A layer that tracks live presence by a stable non-secret `visitorId`, persists past visitors (for ghosts) and pending pairing intents, and relays consented companion pairing between co-present players.
+
+---
+
+## 🚀 Quick start (local dev)
+
+**Prerequisites:** Node.js 20+, PostgreSQL (local or Docker).
 
 ```bash
-# Start Postgres (if using Docker)
-docker run -d --name globefly-db -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=globefly -p 5432:5432 postgres:16
+# 1. Install
+npm install
 
-# Generate Prisma client and run migrations
+# 2. Database (Docker example)
+docker run -d --name a2a-db -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=globefly -p 5432:5432 postgres:16
+
 cd server
 npx prisma generate
-npx prisma migrate dev --name init
+npx prisma migrate dev      # apply migrations
 cd ..
-```
 
-### 3. Run both client and server
-
-```bash
+# 3. Run client + server together
 npm run dev
 ```
 
-- Client: http://localhost:5173
-- Server: http://localhost:3001
+- Client → http://localhost:5173
+- Server → http://localhost:3001
 
-### 4. Play
+Then open the client, create a world, copy its code, open a second tab, and join with a different name to fly together. The AI companion is **optional** — paste a Pouchy key in the lobby to enable it.
 
-1. Open the client in your browser
-2. Create a world (give it a name and pick a texture)
-3. Copy the world code
-4. Open another tab, paste the code, and join with a different name
-5. Fly around together!
+**Environment**
 
-## Controls
+| Where | Variable | Purpose |
+|-------|----------|---------|
+| server | `DATABASE_URL` | PostgreSQL connection string |
+| server | `CLIENT_URL` | allowed CORS origin(s), comma-separated |
+| server | `PORT` | defaults to `3001` |
+| client | `VITE_SERVER_URL` | game server base URL (see `client/.env.example`) |
 
-| Key | Action |
-|-----|--------|
-| W / S | Pitch down / up |
-| A / D | Turn left / right |
-| Shift | Speed up |
-| Ctrl | Slow down |
-| Arrow Up | Fly upwards (altitude) |
-| Space | Fire paintball |
+The player's Pouchy access key is **never** stored server-side — it lives only in the player's own browser.
 
-## Deployment
+---
 
-Production URLs:
-- **Client**: https://tinyskies.vercel.app (Vercel)
-- **Server API**: Railway (or any Docker host)
+## ☁ Deployment
 
-### One-command deploy (recommended)
-
-Deploy **both** server (Railway) and client (Vercel) in one shot:
+Client on **Vercel**, server + Postgres on **Railway**.
 
 ```bash
-npm run deploy
-```
-
-This runs `railway up` then `vercel deploy --prod` sequentially so the API is live before the new frontend goes out.
-
-Deploy individually when you only changed one side:
-
-```bash
+npm run deploy          # server (Railway) then client (Vercel)
 npm run deploy:server   # Railway only
 npm run deploy:client   # Vercel only
-npm run deploy:preview  # Vercel preview (non-production)
 ```
 
-### First-time setup (once per machine)
+Set `VITE_SERVER_URL` in `client/.env.production` (committed) to your public API URL, and the server env vars above on Railway. Database migrations are applied automatically on deploy (`prisma migrate deploy` in the server Dockerfile).
 
-**1. Railway CLI**
+---
 
-```bash
-npm i -g @railway/cli
-railway login
-railway link    # select the globefly-server project
-```
+## 🗺 Roadmap
 
-**2. Vercel CLI**
+- **More games in the collection** — new cosy multiplayer games sharing the same A2A social layer.
+- **Richer A2A** — clickable/named ghosts, a friends roster in-world, and (pending a Pouchy review) a server-to-server pairing handshake so two agents can befriend without any token ever transiting a browser.
+- **Companion abilities** — more in-world acts the agent can perform on your behalf.
 
-```bash
-npx vercel login
-npx vercel link   # select the tinyskies project
-```
+---
 
-**3. Server URL for the client**
+## 🙏 Credits
 
-Edit `client/.env.production` and set `VITE_SERVER_URL` to your Railway API URL:
+- Flagship game built on the open-source **[Tiny Skies](https://github.com/dannylimanseta/tinyskies)** engine.
+- AI companions powered by the **[Pouchy Companion SDK](https://www.pouchy.ai)**; in-browser voice via **ElevenLabs**.
+- Logo & world art for A2A.FUN.
 
-```
-VITE_SERVER_URL=https://globefly-api-production.up.railway.app
-```
+---
 
-Commit the file. Vite reads it on every production build so Vercel picks it up automatically -- no Vercel dashboard env setup needed for the API URL.
-
-Alternatively, set `SERVER_URL` in Vercel environment variables -- the client fetches it at runtime via `/api/server-url` (no rebuild needed when the URL changes).
-
-### Environment variables
-
-**Server (Railway dashboard or `railway variables`)**
-
-| Variable | Value |
-|----------|--------|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `CLIENT_URL` | `https://tinyskies.vercel.app` (for CORS; comma-separated for extras) |
-| `PORT` | `3001` (or Railway's assigned port) |
-
-**Client (committed in repo -- no dashboard needed)**
-
-| File | Variable | Purpose |
-|------|----------|---------|
-| `client/.env.production` | `VITE_SERVER_URL` | Baked into the bundle at build time |
-
-Local dev keeps defaults: client `http://localhost:5173`, server `http://localhost:3001`.
-
-## Tech Stack
-
-- **Client**: Vite, TypeScript, Three.js, Socket.io
-- **Server**: Node.js, Express, Socket.io, Prisma
-- **Database**: PostgreSQL
-- **Architecture**: Quaternion-based spherical math for singularity-free globe flight, relay server with client-side prediction and slerp interpolation
+<p align="center"><sub>Made for agents and the humans who fly with them. ✦</sub></p>
