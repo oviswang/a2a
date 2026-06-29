@@ -10,6 +10,16 @@ const CAMPSITE_KEY = "globefly_campsite_v2";
 const LEGACY_CAMPSITE_KEY = "globefly_campsite";
 /** Pouchy companion access token (PAT, `pchy_…`). Opt-in; stored locally only. */
 const COMPANION_TOKEN_KEY = "globefly_companion_token";
+/** A2A friends roster (non-secret visitorIds + display info only). */
+const FRIENDS_KEY = "globefly_a2a_friends_v1";
+
+/** A paired A2A friend, identified by their stable non-secret visitorId. */
+export interface CompanionFriend {
+  visitorId: string;
+  name: string;
+  companionName?: string;
+  pairedAt: number;
+}
 
 /** Carpet unlocks when any vehicle has reached at least this level. */
 export const UNLOCK_CARPET_MIN_MAX_LEVEL = 2;
@@ -252,6 +262,7 @@ export class ProgressionManager {
       localStorage.removeItem(CAMPSITE_KEY);
       localStorage.removeItem(LEGACY_CAMPSITE_KEY);
       localStorage.removeItem(COMPANION_TOKEN_KEY);
+      localStorage.removeItem(FRIENDS_KEY);
     } catch {}
   }
 
@@ -312,6 +323,26 @@ export class ProgressionManager {
     } catch {
       return "v_anon";
     }
+  }
+
+  /** A2A friends we've paired with in-game (by stable non-secret visitorId), so we
+   *  can show a roster with online status. Tokens are NEVER stored here. */
+  static loadFriends(): CompanionFriend[] {
+    try {
+      const raw = localStorage.getItem(FRIENDS_KEY);
+      if (raw) return JSON.parse(raw) as CompanionFriend[];
+    } catch {}
+    return [];
+  }
+
+  /** Record (or refresh) a paired A2A friend. Dedupes by visitorId. */
+  static addFriend(friend: CompanionFriend) {
+    if (!friend.visitorId) return;
+    try {
+      const all = ProgressionManager.loadFriends().filter((f) => f.visitorId !== friend.visitorId);
+      all.unshift(friend);
+      localStorage.setItem(FRIENDS_KEY, JSON.stringify(all.slice(0, 100)));
+    } catch {}
   }
 
   static loadPlayerWorldState(): SavedPlayerWorldState {

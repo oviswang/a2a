@@ -141,11 +141,17 @@ export class SocketClient {
   }
 
   // ── A2A companion pairing ──
-  emitPairRequest(toId: string) {
-    this.socket.emit("pair:request", toId);
+  emitPairRequest(toId: string, fromVisitorId?: string, fromCompanionName?: string) {
+    this.socket.emit("pair:request", toId, fromVisitorId, fromCompanionName);
   }
-  emitPairRespond(toId: string, accept: boolean, visitorToken?: string, visitorId?: string) {
-    this.socket.emit("pair:respond", toId, accept, visitorToken, visitorId);
+  emitPairRespond(
+    toId: string,
+    accept: boolean,
+    visitorToken?: string,
+    visitorId?: string,
+    companionName?: string,
+  ) {
+    this.socket.emit("pair:respond", toId, accept, visitorToken, visitorId, companionName);
   }
   onPairIncoming(cb: (ev: PairRequestEvent) => void) {
     this.socket.on("pair:incoming", cb);

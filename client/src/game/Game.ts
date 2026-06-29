@@ -406,6 +406,15 @@ const UI_CLICK_SELECTOR = [
 
 type GamePhase = "flying" | "campsite" | "transitioning" | "moonImpact" | "moonstoneUnion";
 
+/** A2A friends-roster presence row from GET /api/friends/presence. */
+interface FriendPresence {
+  visitorId: string;
+  online: boolean;
+  worldSlug?: string;
+  worldName?: string | null;
+  name?: string;
+}
+
 export class Game {
   private container: HTMLElement;
   private renderer!: WebGLRenderer;
@@ -923,7 +932,7 @@ export class Game {
       appContext: {
         name: "A2A.FUN",
         description:
-          "A2A.FUN is a cosy multiplayer flight game. The player pilots a biplane, a magic carpet, or a boat around a tiny globe-world. The overarching goal is to save the world from a slowly falling moon. Core activities: deliver glowing packages between villages; win races / time-trials; (biplane) shoot sky gremlins with paintballs; (magic carpet) collect sky jellyfish and help defend the eternal flame; (boat) catch fish and explore the islands. Lighting the ancient braziers and defending the eternal flame through cosmic-void moth waves is what ultimately stops the moon. The main-quest progress bar is the eternal-flame braziers: the live game.situation state reports how many of the five are lit (braziers eternal X/5); lighting all five freezes the moon and saves the world (a game.event.world_saved moment) — if the moon reaches the world first, the run is lost (a game.event.world_lost moment) and time rewinds for another try. You also receive the current stage as game.phase (flying, landed at a campsite, or a cutscene like the moonstone union / moon impact) — while a cutscene is playing, react to the moment rather than giving flight directions. You are the player's AI co-pilot riding along: be warm and brief, use the live game state (sent as world-state updates) to tell them what's happening and suggest what to do next, and you can physically fly their vehicle when they ask — left, right, climb, descend, faster, slower, fire, stop. This is a multiplayer game: when other worlds have players who also have AI companions (see the rendezvous world-state, or call find_companions), you can suggest taking the player there to meet up and become A2A friends — call join_world to fly them over, then they can pair in person. When the player flies near another pilot who has their own AI companion (a game.event.met_companion moment), greet that companion warmly with a short one-liner by calling greet_companion — the two of you (the AI companions) actually talk to each other in front of your humans; if another companion greets you first (a game.event.companion_hailed moment with canReply true), reply once the same way. After a friendly hello, you can suggest the two players pair to become A2A friends. The world is also haunted by translucent 'ghost' vehicles of players (and their companions) who flew here before; when the player passes one (a game.event.met_ghost moment), warmly note who they were and offer to befriend them — if the player wants to, call pair_with_ghost to send that player an A2A pairing invite.",
+          "A2A.FUN is a cosy multiplayer flight game. The player pilots a biplane, a magic carpet, or a boat around a tiny globe-world. The overarching goal is to save the world from a slowly falling moon. Core activities: deliver glowing packages between villages; win races / time-trials; (biplane) shoot sky gremlins with paintballs; (magic carpet) collect sky jellyfish and help defend the eternal flame; (boat) catch fish and explore the islands. Lighting the ancient braziers and defending the eternal flame through cosmic-void moth waves is what ultimately stops the moon. The main-quest progress bar is the eternal-flame braziers: the live game.situation state reports how many of the five are lit (braziers eternal X/5); lighting all five freezes the moon and saves the world (a game.event.world_saved moment) — if the moon reaches the world first, the run is lost (a game.event.world_lost moment) and time rewinds for another try. You also receive the current stage as game.phase (flying, landed at a campsite, or a cutscene like the moonstone union / moon impact) — while a cutscene is playing, react to the moment rather than giving flight directions. You are the player's AI co-pilot riding along: be warm and brief, use the live game state (sent as world-state updates) to tell them what's happening and suggest what to do next, and you can physically fly their vehicle when they ask — left, right, climb, descend, faster, slower, fire, stop. This is a multiplayer game: when other worlds have players who also have AI companions (see the rendezvous world-state, or call find_companions), you can suggest taking the player there to meet up and become A2A friends — call join_world to fly them over, then they can pair in person. When the player flies near another pilot who has their own AI companion (a game.event.met_companion moment), greet that companion warmly with a short one-liner by calling greet_companion — the two of you (the AI companions) actually talk to each other in front of your humans; if another companion greets you first (a game.event.companion_hailed moment with canReply true), reply once the same way. After a friendly hello, you can suggest the two players pair to become A2A friends. The player keeps an A2A friends roster of everyone they've paired with — call list_friends to see who's online right now and where, and offer to take the player to a friend who is currently playing (call join_world with that friend's worldSlug). The world is also haunted by translucent 'ghost' vehicles of players (and their companions) who flew here before; when the player passes one (a game.event.met_ghost moment), warmly note who they were and offer to befriend them — if the player wants to, call pair_with_ghost to send that player an A2A pairing invite.",
       },
       tools: [
         {
@@ -995,6 +1004,12 @@ export class Game {
             required: ["message"],
           },
         },
+        {
+          name: "list_friends",
+          description:
+            "Show the player's A2A friends (companions they've paired with before) and who is online right now and in which world. Opens the friends roster and returns the list. Use it when the player asks about their friends / who's online, or to suggest joining a friend who is currently playing (then call join_world with that friend's worldSlug to take them there).",
+          parameters: { type: "object", properties: {} },
+        },
       ],
       execTool: (name, args) => this.execCompanionTool(name, args),
       onMessage: (text) => {
@@ -1050,6 +1065,7 @@ export class Game {
       },
       onJoinWorld: (slug) => this.joinWorldBySlug(slug),
       onPairNearby: () => this.initiateCompanionPairing(),
+      onShowFriends: () => void this.showFriendsRoster(),
     });
 
     void manager.connect().then(async (ok) => {
@@ -1161,6 +1177,30 @@ export class Game {
       const message = typeof args.message === "string" ? args.message.trim() : "";
       this.relayCompanionHail(message || t("Hello there!", "你好呀！"));
       return { ok: true, result: `Greeted ${target.companionName ?? target.name}.` };
+    }
+    if (name === "list_friends") {
+      const friends = ProgressionManager.loadFriends();
+      void this.showFriendsRoster();
+      if (friends.length === 0) {
+        return { ok: true, result: "The player has no A2A friends yet — they add friends by pairing with other pilots." };
+      }
+      const presence = await this.fetchFriendsPresence();
+      const byId = new Map(presence.map((p) => [p.visitorId, p]));
+      return {
+        ok: true,
+        result: {
+          friends: friends.map((f) => {
+            const p = byId.get(f.visitorId);
+            return {
+              name: f.name,
+              companion: f.companionName ?? null,
+              online: !!p?.online,
+              world: p?.worldName ?? null,
+              worldSlug: p?.worldSlug ?? null,
+            };
+          }),
+        },
+      };
     }
     return { ok: false, result: "unknown tool" };
   }
@@ -1335,7 +1375,11 @@ export class Game {
       );
       return;
     }
-    this.socketClient.emitPairRequest(socketId);
+    this.socketClient.emitPairRequest(
+      socketId,
+      ProgressionManager.loadOrCreateVisitorId(),
+      this.companion?.companionDisplayName ?? undefined,
+    );
     this.hud.showAmbientToast(t(`Pairing request sent to ${name}…`, `已向 ${name} 发送配对请求…`));
   }
 
@@ -1643,6 +1687,168 @@ export class Game {
     } catch {
       return [];
     }
+  }
+
+  // ── A2A friends roster (feature 2) ──────────────────────────────────────────
+
+  private friendsRosterCleanup: (() => void) | null = null;
+
+  /** Ask the server which of our paired A2A friends are online right now + where. */
+  private async fetchFriendsPresence(): Promise<FriendPresence[]> {
+    const friends = ProgressionManager.loadFriends();
+    if (friends.length === 0) return [];
+    try {
+      const ids = friends.map((f) => f.visitorId).join(",");
+      const res = await fetch(`${this.getServerUrl()}/api/friends/presence?ids=${encodeURIComponent(ids)}`);
+      if (!res.ok) return [];
+      const json = (await res.json()) as { friends?: FriendPresence[] };
+      return Array.isArray(json.friends) ? json.friends : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** Roster overlay: A2A friends with online status + a one-tap join to where they are. */
+  private async showFriendsRoster() {
+    const friends = ProgressionManager.loadFriends();
+    this.friendsRosterCleanup?.();
+    Game.injectFriendsRosterStyles();
+    const backdrop = document.createElement("div");
+    backdrop.className = "friends-backdrop";
+    const card = document.createElement("div");
+    card.className = "friends-card";
+    const head = document.createElement("div");
+    head.className = "friends-head";
+    head.textContent = t("A2A friends", "A2A 好友");
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "friends-close";
+    closeBtn.type = "button";
+    closeBtn.textContent = "✕";
+    head.appendChild(closeBtn);
+    const list = document.createElement("div");
+    list.className = "friends-list";
+    card.appendChild(head);
+    card.appendChild(list);
+    backdrop.appendChild(card);
+    this.hud.root.appendChild(backdrop);
+    requestAnimationFrame(() => backdrop.classList.add("friends-backdrop--in"));
+    const cleanup = () => {
+      backdrop.classList.remove("friends-backdrop--in");
+      setTimeout(() => backdrop.remove(), 180);
+      if (this.friendsRosterCleanup === cleanup) this.friendsRosterCleanup = null;
+    };
+    this.friendsRosterCleanup = cleanup;
+    closeBtn.addEventListener("click", cleanup);
+    backdrop.addEventListener("click", (e) => {
+      if (e.target === backdrop) cleanup();
+    });
+
+    if (friends.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "friends-empty";
+      empty.textContent = t(
+        "No A2A friends yet. Meet other pilots who have companions and pair to add them here.",
+        "还没有 A2A 好友。遇到其他带伙伴的玩家并配对，就会出现在这里。",
+      );
+      list.appendChild(empty);
+      return;
+    }
+
+    const loading = document.createElement("div");
+    loading.className = "friends-empty";
+    loading.textContent = t("Checking who's online…", "正在查询谁在线…");
+    list.appendChild(loading);
+
+    const presence = await this.fetchFriendsPresence();
+    if (this.friendsRosterCleanup !== cleanup) return; // closed while loading
+    const byId = new Map(presence.map((p) => [p.visitorId, p]));
+    list.innerHTML = "";
+    const sorted = [...friends].sort(
+      (a, b) => Number(!!byId.get(b.visitorId)?.online) - Number(!!byId.get(a.visitorId)?.online),
+    );
+    for (const f of sorted) {
+      const p = byId.get(f.visitorId);
+      const online = !!p?.online;
+      const row = document.createElement("div");
+      row.className = "friends-row";
+      const dot = document.createElement("span");
+      dot.className = `friends-dot${online ? " friends-dot--on" : ""}`;
+      const info = document.createElement("div");
+      info.className = "friends-info";
+      const nm = document.createElement("div");
+      nm.className = "friends-name";
+      nm.textContent = f.companionName ? `${f.name} · ✦ ${f.companionName}` : f.name;
+      const sub = document.createElement("div");
+      sub.className = "friends-sub";
+      sub.textContent = online
+        ? p?.worldName
+          ? t(`In ${p.worldName}`, `在「${p.worldName}」`)
+          : t("Online", "在线")
+        : t("Offline", "离线");
+      info.appendChild(nm);
+      info.appendChild(sub);
+      row.appendChild(dot);
+      row.appendChild(info);
+      if (online && p?.worldSlug && p.worldSlug !== this.worldSlug) {
+        const join = document.createElement("button");
+        join.type = "button";
+        join.className = "friends-join";
+        join.textContent = t("Join", "加入");
+        const slug = p.worldSlug;
+        join.addEventListener("click", () => {
+          cleanup();
+          this.joinWorldBySlug(slug);
+        });
+        row.appendChild(join);
+      } else if (online && p?.worldSlug === this.worldSlug) {
+        const here = document.createElement("span");
+        here.className = "friends-here";
+        here.textContent = t("Here", "在此");
+        row.appendChild(here);
+      }
+      list.appendChild(row);
+    }
+  }
+
+  private static injectFriendsRosterStyles() {
+    if (document.getElementById("friends-roster-styles")) return;
+    const s = document.createElement("style");
+    s.id = "friends-roster-styles";
+    s.textContent = `
+      .friends-backdrop {
+        position: absolute; inset: 0; z-index: 62; display: flex; align-items: center; justify-content: center;
+        background: rgba(8,12,22,0); transition: background 0.18s ease; pointer-events: auto; padding: 16px;
+      }
+      .friends-backdrop--in { background: rgba(8,12,22,0.5); }
+      .friends-card {
+        width: min(380px, 92vw); max-height: 70vh; overflow: hidden; display: flex; flex-direction: column;
+        border-radius: 18px; padding: 16px; background: rgba(22,30,50,0.97);
+        border: 1px solid rgba(180,210,255,0.28); box-shadow: 0 18px 50px rgba(0,0,0,0.5);
+        backdrop-filter: blur(14px); font-family: 'Domine', Georgia, serif; color: rgba(235,243,255,0.96);
+      }
+      .friends-head {
+        display: flex; align-items: center; justify-content: space-between;
+        font-size: 0.95rem; font-weight: 700; letter-spacing: 0.03em; margin-bottom: 10px;
+      }
+      .friends-close { background: none; border: none; color: rgba(255,255,255,0.6); font-size: 0.95rem; cursor: pointer; padding: 4px; }
+      .friends-list { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+      .friends-empty { font-size: 0.8rem; color: rgba(255,255,255,0.7); line-height: 1.5; padding: 8px 2px; }
+      .friends-row {
+        display: flex; align-items: center; gap: 10px;
+        background: rgba(255,255,255,0.05); border-radius: 12px; padding: 9px 11px;
+      }
+      .friends-dot { width: 9px; height: 9px; border-radius: 50%; background: rgba(255,255,255,0.25); flex: 0 0 auto; }
+      .friends-dot--on { background: #5ad17a; box-shadow: 0 0 8px rgba(90,209,122,0.8); }
+      .friends-info { flex: 1; min-width: 0; }
+      .friends-name { font-size: 0.82rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .friends-sub { font-size: 0.7rem; color: rgba(255,255,255,0.6); }
+      .friends-join {
+        background: rgba(120,180,255,0.28); color: #fff; border: none; border-radius: 9px;
+        padding: 6px 14px; font-size: 0.74rem; font-weight: 600; cursor: pointer; white-space: nowrap; flex: 0 0 auto;
+      }
+      .friends-here { font-size: 0.7rem; color: rgba(90,209,122,0.9); white-space: nowrap; }
+    `;
+    document.head.appendChild(s);
   }
 
   /** Companion-driven flight: translate a high-level action into a short, timed
@@ -1954,7 +2160,11 @@ export class Game {
       this.hud.showAmbientToast(t("No one else is here to pair with.", "这里还没有其他玩家可以配对。"));
       return;
     }
-    this.socketClient.emitPairRequest(target[0]);
+    this.socketClient.emitPairRequest(
+      target[0],
+      ProgressionManager.loadOrCreateVisitorId(),
+      this.companion?.companionDisplayName ?? undefined,
+    );
     this.hud.showAmbientToast(
       t(`Pairing request sent to ${target[1]}…`, `已向 ${target[1]} 发送配对请求…`),
     );
@@ -1962,7 +2172,12 @@ export class Game {
 
   /** Another player wants to pair companions with us. Ask for explicit consent;
    *  on accept we hand back our OWN token (consent + proof) so they can pair. */
-  private async handlePairIncoming(fromId: string, fromName: string) {
+  private async handlePairIncoming(
+    fromId: string,
+    fromName: string,
+    fromVisitorId?: string,
+    fromCompanionName?: string,
+  ) {
     if (!this.socketClient) return;
     const myToken = ProgressionManager.loadCompanionToken();
     if (!myToken) {
@@ -1982,7 +2197,22 @@ export class Game {
       this.socketClient?.emitPairRespond(fromId, false);
       return;
     }
-    this.socketClient.emitPairRespond(fromId, true, myToken, ProgressionManager.loadOrCreateVisitorId());
+    this.socketClient.emitPairRespond(
+      fromId,
+      true,
+      myToken,
+      ProgressionManager.loadOrCreateVisitorId(),
+      this.companion?.companionDisplayName ?? undefined,
+    );
+    // Record them in our friends roster (both sides record on a successful pair).
+    if (fromVisitorId) {
+      ProgressionManager.addFriend({
+        visitorId: fromVisitorId,
+        name: fromName,
+        companionName: fromCompanionName,
+        pairedAt: Date.now(),
+      });
+    }
     this.hud.showAmbientToast(t("Pairing accepted.", "已接受配对。"));
   }
 
@@ -1994,6 +2224,7 @@ export class Game {
     accept: boolean;
     visitorToken?: string;
     visitorId?: string;
+    companionName?: string;
   }) {
     if (!ev.accept || !ev.visitorToken || !ev.visitorId) {
       this.hud.showAmbientToast(t("Pairing was declined.", "对方拒绝了配对。"));
@@ -2006,8 +2237,16 @@ export class Game {
         ? t(`Companions paired with ${ev.fromName}! 🤝`, `已与 ${ev.fromName} 的伙伴结为好友！🤝`)
         : t("Pairing failed (check your key's permissions).", "配对失败（请检查密钥权限）。"),
     );
-    // Success → clear any queued ghost-pair intents between us so they stop retrying.
-    if (pairId && ev.visitorId) this.socketClient?.emitGhostPairResolved(ev.visitorId);
+    // Success → record the friend + clear any queued ghost-pair intents between us.
+    if (pairId && ev.visitorId) {
+      ProgressionManager.addFriend({
+        visitorId: ev.visitorId,
+        name: ev.fromName,
+        companionName: ev.companionName,
+        pairedAt: Date.now(),
+      });
+      this.socketClient?.emitGhostPairResolved(ev.visitorId);
+    }
   }
 
   private mountLobby(opts?: { deferUnlockModalsUntilMenuReveal?: boolean }) {
@@ -4009,7 +4248,9 @@ export class Game {
     });
 
     // A2A companion pairing relay (Phase 4).
-    this.socketClient.onPairIncoming((ev) => this.handlePairIncoming(ev.fromId, ev.fromName));
+    this.socketClient.onPairIncoming((ev) =>
+      this.handlePairIncoming(ev.fromId, ev.fromName, ev.fromVisitorId, ev.fromCompanionName),
+    );
     this.socketClient.onPairAnswered((ev) => this.handlePairAnswered(ev));
     this.socketClient.onCompanionHailed((ev) => this.handleCompanionHailed(ev));
 

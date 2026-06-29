@@ -386,6 +386,35 @@ app.get("/health", (_req, res) => {
 const onlineSocketByVisitor = new Map<string, string>(); // visitorId → socketId
 const visitorMetaBySocket = new Map<string, { visitorId: string; name: string; worldSlug: string }>();
 
+// A2A: friends-roster presence. Given the caller's friend visitorIds, report which
+// are online right now and in which world. Non-secret ids only; no tokens involved.
+app.get("/api/friends/presence", async (req, res) => {
+  const idsParam = typeof req.query.ids === "string" ? req.query.ids : "";
+  const ids = idsParam.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 100);
+  const onlineSlugs = new Set<string>();
+  const rows = ids.map((visitorId) => {
+    const socketId = onlineSocketByVisitor.get(visitorId);
+    const meta = socketId ? visitorMetaBySocket.get(socketId) : undefined;
+    if (meta) onlineSlugs.add(meta.worldSlug);
+    return { visitorId, online: !!meta, worldSlug: meta?.worldSlug, name: meta?.name };
+  });
+  // Resolve world display names for the online friends.
+  const slugToName = new Map<string, string>();
+  if (onlineSlugs.size > 0) {
+    const worlds = await prisma.world.findMany({
+      where: { slug: { in: [...onlineSlugs] } },
+      select: { slug: true, name: true },
+    });
+    for (const w of worlds) slugToName.set(w.slug, w.name);
+  }
+  res.json({
+    friends: rows.map((r) => ({
+      ...r,
+      worldName: r.worldSlug ? slugToName.get(r.worldSlug) ?? null : null,
+    })),
+  });
+});
+
 function sendGhostPairInvite(
   toSocketId: string,
   from: { visitorId: string; name: string; socketId: string; worldSlug: string },

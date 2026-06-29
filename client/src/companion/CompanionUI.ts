@@ -23,6 +23,8 @@ export interface CompanionUIOptions {
   onJoinWorld: (slug: string) => void;
   /** Phase 4: pair companions with a co-present player. */
   onPairNearby: () => void;
+  /** A2A: open the friends roster (online status + jump to a friend's world). */
+  onShowFriends?: () => void;
 }
 
 export class CompanionUI {
@@ -99,6 +101,7 @@ export class CompanionUI {
     this.panel.innerHTML = `
       <div class="cmp-panel-head">
         <span class="cmp-panel-title">${t("Your companion", "你的 AI 伙伴")}</span>
+        <button type="button" class="cmp-friends-btn" aria-label="${t("A2A friends", "A2A 好友")}">👥</button>
         <button type="button" class="cmp-panel-close" aria-label="${t("Close", "关闭")}">✕</button>
       </div>
       <div class="cmp-invite-row" style="display:none">
@@ -121,6 +124,7 @@ export class CompanionUI {
     const pairBtn = this.panel.querySelector(".cmp-pair-btn") as HTMLButtonElement;
     pairBtn.textContent = t("Pair nearby", "与附近玩家配对");
     this.panel.querySelector(".cmp-panel-close")!.addEventListener("click", () => this.togglePanel(false));
+    this.panel.querySelector(".cmp-friends-btn")!.addEventListener("click", () => this.opts.onShowFriends?.());
     this.inviteBtn.addEventListener("click", () => this.opts.onInviteFriends());
     pairBtn.addEventListener("click", () => this.opts.onPairNearby());
     this.panel.querySelector(".cmp-input-row")!.addEventListener("submit", (e) => {
@@ -318,6 +322,11 @@ export class CompanionUI {
       .cmp-panel-title { font-size: 0.85rem; font-weight: 700; letter-spacing: 0.04em; }
       .cmp-panel-close {
         background: none; border: none; color: rgba(255,255,255,0.6);
+        font-size: 0.9rem; cursor: pointer; padding: 4px;
+      }
+      .cmp-friends-btn {
+        margin-left: auto; margin-right: 2px;
+        background: none; border: none; color: rgba(255,255,255,0.7);
         font-size: 0.9rem; cursor: pointer; padding: 4px;
       }
       .cmp-invite-row {

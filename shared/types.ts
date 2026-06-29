@@ -259,10 +259,14 @@ export interface GhostPairInvite {
   worldSlug: string;
 }
 
-/** A2A: player `fromId` asks to pair companions with the recipient. */
+/** A2A: player `fromId` asks to pair companions with the recipient. Carries the
+ *  requester's stable non-secret visitorId + companion name so the recipient can
+ *  record them in their friends roster on accept. */
 export interface PairRequestEvent {
   fromId: string;
   fromName: string;
+  fromVisitorId?: string;
+  fromCompanionName?: string;
 }
 /** A2A: the recipient's answer, relayed back to the requester. On accept it
  *  carries the responder's OWN Pouchy token (their consent + proof) plus a
@@ -273,6 +277,8 @@ export interface PairAnswerEvent {
   accept: boolean;
   visitorToken?: string;
   visitorId?: string;
+  /** The responder's companion display name (for the requester's friends roster). */
+  companionName?: string;
 }
 
 export interface ClientToServerEvents {
@@ -298,11 +304,18 @@ export interface ClientToServerEvents {
   /** True while the local player is in a non-world scene where flag play is suspended. */
   "flag:setSuppressed": (suppressed: boolean) => void;
   "debug:forceFlagSpawn": () => void;
-  /** A2A companion pairing: ask `toId` to pair (relayed, same room only). */
-  "pair:request": (toId: string) => void;
+  /** A2A companion pairing: ask `toId` to pair (relayed, same room only). Carries
+   *  the requester's non-secret visitorId + companion name for the friends roster. */
+  "pair:request": (toId: string, fromVisitorId?: string, fromCompanionName?: string) => void;
   /** A2A companion pairing: answer a request from `toId`. `visitorToken` is the
    *  responder's own Pouchy PAT, sent ONLY on accept as consent + proof. */
-  "pair:respond": (toId: string, accept: boolean, visitorToken?: string, visitorId?: string) => void;
+  "pair:respond": (
+    toId: string,
+    accept: boolean,
+    visitorToken?: string,
+    visitorId?: string,
+    companionName?: string,
+  ) => void;
   /** A2A: relay a companion-to-companion greeting to co-present player `toId`
    *  (agents saying hello when their pilots meet). Same room only; never persisted. */
   "companion:hail": (toId: string, message: string) => void;
