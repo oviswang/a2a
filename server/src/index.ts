@@ -143,7 +143,7 @@ app.get("/dashboard", (_req, res) => {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Tiny Skies World Dashboard</title>
+  <title>A2A.FUN World Dashboard</title>
   <style>
     :root { color-scheme: dark; }
     body {
@@ -192,7 +192,7 @@ app.get("/dashboard", (_req, res) => {
   <main>
     <header>
       <div>
-        <h1>Tiny Skies World Dashboard</h1>
+        <h1>A2A.FUN World Dashboard</h1>
         <div class="muted">Live in-memory room counts. Refreshes every 5 seconds.</div>
       </div>
       <div class="muted" id="updated">Loading...</div>
@@ -629,7 +629,7 @@ async function bootstrap() {
   roomManager.startOverflowCleanup(prisma);
 
   httpServer.listen(PORT, () => {
-    console.log(`Tiny Skies server running on http://localhost:${PORT}`);
+    console.log(`A2A.FUN server running on http://localhost:${PORT}`);
   });
 }
 
