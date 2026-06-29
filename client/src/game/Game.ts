@@ -972,7 +972,16 @@ export class Game {
         this.companionUI?.appendAssistantMessage(
           IS_ZH ? `（需要在 Pouchy 里确认：${p.summary}）` : `(Approve in Pouchy: ${p.summary})`,
         ),
-      onVoiceTranscript: (text) => this.handleVoiceCommand(text),
+      onCallTranscript: (role, text) => {
+        // Merge the spoken conversation into the same chat transcript as typed chat.
+        if (role === "user") {
+          this.companionUI?.appendUserMessage(text);
+          this.handleVoiceCommand(text);
+        } else {
+          this.companionUI?.appendAssistantMessage(text);
+          this.packageQuestHUD?.showBubble("Pouchy", text);
+        }
+      },
       onStatus: (s) => {
         this.companionUI?.setStatus(s);
         if (s.state === "ready" && this.worldSlug) {
