@@ -67,6 +67,9 @@ export interface CompanionManagerOptions {
    *  companion's spoken replies — so the app can log the spoken conversation into
    *  the same transcript as text chat (and drive commands off user utterances). */
   onCallTranscript?: (role: "user" | "assistant", text: string) => void;
+  /** The live voice call ended for good — a drop we couldn't transparently recover
+   *  (NOT a user-initiated stopVoice) — so the UI can flip its voice button off. */
+  onVoiceEnded?: () => void;
 }
 
 export type CompanionStatus =
@@ -84,6 +87,21 @@ export class CompanionManager {
   private connecting = false;
   /** Bumped on every start/stop so an in-flight connect can detect it's stale. */
   private callGen = 0;
+  /** The user wants voice ON. Stays true across a transient drop (so the button
+   *  stays lit while we transparently reconnect); cleared by stopVoice / give-up. */
+  private wantVoice = false;
+  /** A voice call's close() consolidates memory AND ends the whole Pouchy session
+   *  server-side. Once that's happened, the next voice call (and any text turn)
+   *  would fail on the dead session, so we rebuild the session first. */
+  private sessionEnded = false;
+  /** Consecutive transparent reconnect attempts since the last user-initiated
+   *  start — bounded so repeated drops don't churn connect/disconnect endlessly. */
+  private reconnectAttempts = 0;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Remembered so a transparent reconnect re-wires the speaking indicator. */
+  private speakingCb: ((speaking: boolean) => void) | undefined;
+  private static readonly MAX_AUTO_RECONNECTS = 1;
+  private static readonly RECONNECT_BACKOFF_MS = 900;
   private disabled = false;
   private ready = false;
   private scopes = new Set<string>();
@@ -100,6 +118,13 @@ export class CompanionManager {
   /** Handshake + open the reply stream. Resolves to whether it connected. */
   async connect(): Promise<boolean> {
     this.opts.onStatus?.({ state: "connecting" });
+    return this.establish();
+  }
+
+  /** Create the SDK client, wire the streams, handshake, and open the reply
+   *  stream. Shared by connect() and refreshSession() (rebuilding after a voice
+   *  call ended the session). */
+  private async establish(): Promise<boolean> {
     try {
       this.client = createCompanion({
         baseUrl: POUCHY_BASE_URL,
@@ -129,12 +154,38 @@ export class CompanionManager {
       this.scopes = new Set(ack.grantedScopes);
       this.client.start();
       this.ready = true;
+      this.disabled = false;
+      this.sessionEnded = false;
       this.opts.onStatus?.({ state: "ready", scopes: ack.grantedScopes });
       return true;
     } catch (e) {
       this.disable(e instanceof Error ? e.message : String(e));
       return false;
     }
+  }
+
+  /** Re-establish a fresh Pouchy session after a previous one was ended. A voice
+   *  call's close() consolidates memory AND ends the whole session server-side
+   *  (POST /session/{id}/end), so afterwards a new voice call — or any text turn —
+   *  would fail on the dead session. We can't selectively keep the session alive
+   *  through close() (the SDK couples them), so we rebuild the client cleanly. */
+  private async refreshSession(): Promise<boolean> {
+    for (const u of this.unsubs.splice(0)) {
+      try {
+        u();
+      } catch {
+        /* ignore */
+      }
+    }
+    try {
+      this.client?.stop();
+    } catch {
+      /* ignore */
+    }
+    this.client = null;
+    this.retained.clear(); // force a full state re-sync onto the new session
+    this.ready = false;
+    return this.establish();
   }
 
   private disable(reason: string) {
@@ -241,35 +292,57 @@ export class CompanionManager {
     }
   }
 
-  /** True when a call is open OR currently being opened — callers must treat both
-   *  as "busy" so they never start a second concurrent call. */
+  /** True when a call is open, currently being opened, OR the user wants voice on
+   *  (covering the brief gap of a transparent reconnect). Callers treat all of
+   *  these as "busy" so they never start a second concurrent call. */
   get inCall(): boolean {
-    return this.call != null || this.connecting;
+    return this.call != null || this.connecting || this.wantVoice;
   }
 
   /** Open the live voice co-pilot. EL Convai needs @elevenlabs/client (peer dep,
    *  resolved by the bundler); OpenAI Realtime needs nothing extra. Guarded so
    *  rapid taps / overlapping calls can't spawn multiple talking agents. */
   async startVoiceCopilot(onSpeakingChange?: (speaking: boolean) => void): Promise<boolean> {
-    if (!this.isReady || !this.client || this.call || this.connecting) return false;
+    if (this.disabled || !this.client || this.call || this.connecting) return false;
+    this.wantVoice = true;
+    this.reconnectAttempts = 0;
+    this.speakingCb = onSpeakingChange;
+    this.clearReconnectTimer();
+    // A prior voice call's close() ended the Pouchy session — rebuild before dialing.
+    if (this.sessionEnded) {
+      const ok = await this.refreshSession();
+      if (!ok) {
+        this.wantVoice = false;
+        return false;
+      }
+    }
+    return this.openCall();
+  }
+
+  /** Dial the live call on the current (alive) session. Shared by the user-start
+   *  path and the transparent reconnect after a drop. */
+  private async openCall(): Promise<boolean> {
+    if (!this.client || this.call || this.connecting) return false;
     this.connecting = true;
     const gen = ++this.callGen;
     try {
       const call = await this.client.connectCall({
         locale: this.opts.locale,
-        onSpeakingChange,
+        onSpeakingChange: this.speakingCb,
         onTranscript: (e) => {
           if (e.text) this.opts.onCallTranscript?.(e.role, e.text);
         },
-        onError: () => this.stopVoice(),
+        onError: () => this.onCallDropped(gen),
       });
-      // If we were stopped (or restarted) while connecting, discard this call.
+      // If we were stopped (or restarted) while connecting, discard this call. Its
+      // close() ends the session, so mark it for a rebuild on the next start.
       if (gen !== this.callGen) {
         try {
           call.close();
         } catch {
           /* ignore */
         }
+        this.sessionEnded = true;
         return false;
       }
       this.call = call;
@@ -278,6 +351,44 @@ export class CompanionManager {
       return false;
     } finally {
       if (gen === this.callGen) this.connecting = false;
+    }
+  }
+
+  /** A live call dropped on its own (transport hiccup, EL onDisconnect, provider
+   *  expiry). The provider already tore its own side down (mic released). Crucially
+   *  we do NOT call the wrapped close() here — that would end the still-alive Pouchy
+   *  session (killing text chat too and forcing a costly rebuild). We just drop our
+   *  handle and, if the user still wants voice, transparently reconnect once. */
+  private onCallDropped(gen: number): void {
+    if (gen !== this.callGen) return; // superseded by a stop/restart
+    this.call = null;
+    this.connecting = false;
+    if (!this.wantVoice) return;
+    if (this.reconnectAttempts >= CompanionManager.MAX_AUTO_RECONNECTS) {
+      // Repeated drops — stop churning (the user disliked connect/disconnect loops)
+      // and let them re-tap intentionally.
+      this.wantVoice = false;
+      this.opts.onVoiceEnded?.();
+      return;
+    }
+    this.reconnectAttempts++;
+    this.clearReconnectTimer();
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (!this.wantVoice) return;
+      void this.openCall().then((ok) => {
+        if (!ok && this.wantVoice) {
+          this.wantVoice = false;
+          this.opts.onVoiceEnded?.();
+        }
+      });
+    }, CompanionManager.RECONNECT_BACKOFF_MS);
+  }
+
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimer != null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
     }
   }
 
@@ -293,15 +404,23 @@ export class CompanionManager {
     }
   }
 
+  /** User-initiated stop. Releases the mic + consolidates memory via the wrapped
+   *  close() — which also ends the whole Pouchy session, so we flag a rebuild for
+   *  the next start. */
   stopVoice(): void {
-    this.callGen++; // invalidate any in-flight connect
+    this.wantVoice = false;
+    this.clearReconnectTimer();
+    this.callGen++; // invalidate any in-flight connect / pending drop handler
     this.connecting = false;
-    try {
-      this.call?.close();
-    } catch {
-      /* idempotent */
+    if (this.call) {
+      try {
+        this.call.close();
+      } catch {
+        /* idempotent */
+      }
+      this.sessionEnded = true;
+      this.call = null;
     }
-    this.call = null;
   }
 
   // ── A2A (Phase 3) ─────────────────────────────────────────────────────────

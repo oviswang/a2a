@@ -982,6 +982,15 @@ export class Game {
           this.packageQuestHUD?.showBubble("Pouchy", text);
         }
       },
+      onVoiceEnded: () => {
+        // The live call dropped and couldn't be transparently recovered — flip the
+        // button off so the player can re-tap, and tell them gently.
+        this.companionUI?.setVoiceActive(false);
+        this.companionCallContextTimer = 0;
+        this.hud.showAmbientToast(
+          t("Voice paused — tap 🎙 to resume.", "语音已暂停，点 🎙 重新开始。"),
+        );
+      },
       onStatus: (s) => {
         this.companionUI?.setStatus(s);
         if (s.state === "ready" && this.worldSlug) {
