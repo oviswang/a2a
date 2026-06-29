@@ -63,10 +63,10 @@ export interface CompanionManagerOptions {
   onConfirmRequest?: (p: ConfirmRequestPayload) => void;
   /** Status changes for the UI (status dot / disabled state). */
   onStatus?: (s: CompanionStatus) => void;
-  /** A finalized USER utterance from a live voice call — used to drive direct,
-   *  deterministic game commands (the voice agent itself can't be trusted to
-   *  call per-app tools on every provider). */
-  onVoiceTranscript?: (text: string) => void;
+  /** A finalized utterance from a live voice call — BOTH the user's words and the
+   *  companion's spoken replies — so the app can log the spoken conversation into
+   *  the same transcript as text chat (and drive commands off user utterances). */
+  onCallTranscript?: (role: "user" | "assistant", text: string) => void;
 }
 
 export type CompanionStatus =
@@ -79,6 +79,11 @@ const RETAINED_MIN_INTERVAL_MS = 1500;
 export class CompanionManager {
   private client: CompanionClient | null = null;
   private call: CompanionCall | null = null;
+  /** True while a voice call is being opened (connectCall is async) — closes the
+   *  race where rapid taps would start several concurrent calls. */
+  private connecting = false;
+  /** Bumped on every start/stop so an in-flight connect can detect it's stale. */
+  private callGen = 0;
   private disabled = false;
   private ready = false;
   private scopes = new Set<string>();
@@ -236,26 +241,43 @@ export class CompanionManager {
     }
   }
 
+  /** True when a call is open OR currently being opened — callers must treat both
+   *  as "busy" so they never start a second concurrent call. */
   get inCall(): boolean {
-    return this.call != null;
+    return this.call != null || this.connecting;
   }
 
   /** Open the live voice co-pilot. EL Convai needs @elevenlabs/client (peer dep,
-   *  resolved by the bundler); OpenAI Realtime needs nothing extra. */
+   *  resolved by the bundler); OpenAI Realtime needs nothing extra. Guarded so
+   *  rapid taps / overlapping calls can't spawn multiple talking agents. */
   async startVoiceCopilot(onSpeakingChange?: (speaking: boolean) => void): Promise<boolean> {
-    if (!this.isReady || !this.client || this.call) return false;
+    if (!this.isReady || !this.client || this.call || this.connecting) return false;
+    this.connecting = true;
+    const gen = ++this.callGen;
     try {
-      this.call = await this.client.connectCall({
+      const call = await this.client.connectCall({
         locale: this.opts.locale,
         onSpeakingChange,
         onTranscript: (e) => {
-          if (e.role === "user" && e.text) this.opts.onVoiceTranscript?.(e.text);
+          if (e.text) this.opts.onCallTranscript?.(e.role, e.text);
         },
         onError: () => this.stopVoice(),
       });
+      // If we were stopped (or restarted) while connecting, discard this call.
+      if (gen !== this.callGen) {
+        try {
+          call.close();
+        } catch {
+          /* ignore */
+        }
+        return false;
+      }
+      this.call = call;
       return true;
     } catch {
       return false;
+    } finally {
+      if (gen === this.callGen) this.connecting = false;
     }
   }
 
@@ -272,6 +294,8 @@ export class CompanionManager {
   }
 
   stopVoice(): void {
+    this.callGen++; // invalidate any in-flight connect
+    this.connecting = false;
     try {
       this.call?.close();
     } catch {
