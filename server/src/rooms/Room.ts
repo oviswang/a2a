@@ -591,6 +591,10 @@ export class Room {
       id: socketId,
       name: player.state.name,
       vehicle: state.vehicle || player.state.vehicle,
+      // Identity is set at join and NOT resent on every move — preserve it so it
+      // isn't wiped on the first move (which would zero out the A2A companionCount).
+      hasCompanion: player.state.hasCompanion,
+      companionName: state.companionName ?? player.state.companionName,
     };
     player.state = fullState;
 

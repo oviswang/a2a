@@ -156,6 +156,11 @@ class RemotePlane {
   get name(): string {
     return this._name;
   }
+  private _companionName: string | null = null;
+  /** This player's AI companion display name (A2A identity), or null. */
+  get companionName(): string | null {
+    return this._companionName;
+  }
   readonly group: Group;
   readonly beacon: PlayerBeacon;
   readonly vehicleType: Vehicle;
@@ -240,6 +245,7 @@ class RemotePlane {
 
   pushState(state: PlayerState) {
     if (state.name) this._name = state.name;
+    if (state.companionName !== undefined) this._companionName = state.companionName || null;
     if (state.vehicleColor !== undefined) {
       this.applyHullColor(state.vehicleColor);
     }
@@ -445,6 +451,8 @@ class RemotePlane {
 export interface RemotePlayerForLabel {
   id: string;
   name: string;
+  /** This player's AI companion display name (A2A identity), or null. */
+  companionName: string | null;
   group: Group;
   vehicleType: Vehicle;
   /** Smoothed 0–1 for name pill / mesh fade (moon cutscene). */
@@ -470,6 +478,7 @@ export class RemotePlaneManager {
       fn({
         id: rp.id,
         name: rp.name,
+        companionName: rp.companionName,
         group: rp.group,
         vehicleType: rp.vehicleType,
         visibilityOpacity: rp.visibilityOpacity,

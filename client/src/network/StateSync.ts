@@ -23,6 +23,9 @@ export type SyncablePlayer = {
 export type StateSyncOptions = {
   getCarpetPortals?: () => CarpetPortalEndpointSnapshot[] | undefined;
   getCarpetPortalTeleportSeq?: () => number | undefined;
+  /** The local player's AI companion display name (A2A identity on the name pill),
+   *  known asynchronously after the companion connects — sent once available. */
+  getCompanionName?: () => string | undefined;
 };
 
 export class StateSync {
@@ -75,6 +78,7 @@ export class StateSync {
       visibility: this.player.visibility ?? 1,
       carpetPortals: this.options.getCarpetPortals?.(),
       carpetPortalTeleportSeq: this.options.getCarpetPortalTeleportSeq?.(),
+      companionName: this.options.getCompanionName?.() || undefined,
       timestamp: Date.now(),
     });
   }

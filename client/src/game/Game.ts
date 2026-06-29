@@ -2956,6 +2956,12 @@ export class Game {
         this.localPlayerWorldScratch.setFromMatrixPosition(this.localPlayer.group.matrixWorld),
       getQPosition: () => this.localPlayer.qPosition,
       getHeading: () => this.localPlayer.heading,
+      onRaceStart: () => {
+        this.companion?.emitMoment("game.event.race_started", {}, { salience: 0.45, voiceRelevant: true });
+      },
+      onRaceLost: () => {
+        this.companion?.emitMoment("game.event.race_lost", {}, { salience: 0.4, voiceRelevant: true });
+      },
       onWin: () => {
         this.companion?.emitMoment("game.event.race_won", { world: this.worldConfig?.name }, { salience: 0.6 });
         this.hud.showRaceWinConfetti();
@@ -3896,6 +3902,7 @@ export class Game {
       getCarpetPortals: () => this.carpetPortalSystem?.getMultiplayerSnapshot(),
       getCarpetPortalTeleportSeq: () =>
         this.playerVehicle === "carpet" ? this.carpetPortalTeleportSeq : undefined,
+      getCompanionName: () => this.companion?.companionDisplayName ?? undefined,
     });
     this.stateSync.start();
 

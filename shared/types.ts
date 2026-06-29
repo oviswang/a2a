@@ -44,6 +44,8 @@ export interface PlayerState {
   carrying?: boolean;
   /** True when this player has a Pouchy AI companion (used for A2A rendezvous). */
   hasCompanion?: boolean;
+  /** The player's AI companion display name, shown on their name pill (A2A identity). */
+  companionName?: string;
   /** Primary hull RGB as 0xRRGGBB (synced so remotes match local paint). */
   vehicleColor?: number;
   /** 0 = invisible, 1 = fully visible (e.g. moon cutscene fade). Omitted = 1. */
