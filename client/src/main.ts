@@ -1,6 +1,7 @@
 import { Game } from "./game/Game";
 import { ProgressionManager } from "./game/ProgressionManager";
 import { enableWakeLock } from "./runtime/wakeLock";
+import { initInstallPrompt } from "./runtime/installPrompt";
 import { inject } from "@vercel/analytics";
 
 // Initialize Vercel Web Analytics
@@ -28,6 +29,9 @@ game.start();
 
 // Keep the screen awake while the game is open (no dimming / screensaver).
 enableWakeLock();
+
+// PWA: register the service worker + show the install guidance (2nd visit onward).
+initInstallPrompt();
 
 if (import.meta.hot) {
   import.meta.hot.accept();
