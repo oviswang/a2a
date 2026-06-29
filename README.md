@@ -43,7 +43,7 @@ It's designed as a **collection**: a shared A2A social layer (presence, rendezvo
 
 A cosy, low-poly multiplayer flight game. Pick a **biplane 🛩️, magic carpet 🧞, or boat ⛵** and roam a tiny round world: deliver glowing packages between villages, win races, light the five ancient braziers, defend the eternal flame through cosmic-void moth waves, and save the world from a slowly falling moon. Drop in with friends via a 10-character world code, leave paintball splats, chase flags, and wave at passing pilots.
 
-It runs on the open-source **[Tiny Skies](https://github.com/dannylimanseta/tinyskies)** engine — see it live at **[a2a.fun](https://a2a.fun)**.
+See it live at **[a2a.fun](https://a2a.fun)**.
 
 ---
 
@@ -170,7 +170,6 @@ Set `VITE_SERVER_URL` in `client/.env.production` (committed) to your public API
 
 ## 🙏 Credits
 
-- Flagship game built on the open-source **[Tiny Skies](https://github.com/dannylimanseta/tinyskies)** engine.
 - AI companions powered by the **[Pouchy Companion SDK](https://www.pouchy.ai)**; in-browser voice via **ElevenLabs**.
 - Logo & world art for A2A.FUN.
 
