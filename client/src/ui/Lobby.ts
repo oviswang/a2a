@@ -8,6 +8,8 @@ import {
 import { EpilogueStatuePreview } from "./EpilogueStatuePreview";
 import { VehicleUnlockPreview } from "./VehicleUnlockPreview";
 import { t, IS_ZH } from "../i18n";
+import { pouchyBrandIconUrl } from "@pouchy_ai/companion-sdk";
+import { POUCHY_BASE_URL } from "../companion/CompanionManager";
 
 const VEHICLE_ORDER: Vehicle[] = ["plane", "carpet", "boat"];
 
@@ -366,16 +368,21 @@ export class Lobby {
 
     // ── Pouchy companion token (opt-in AI co-pilot) ──
     const companionBtn = this.el.querySelector("#lobby-companion-btn") as HTMLButtonElement;
+    const pouchyIconUrl = pouchyBrandIconUrl(POUCHY_BASE_URL, 256);
+    const setCompanionBtn = (label: string) => {
+      companionBtn.innerHTML = `<img class="lobby-companion-icon" alt="Pouchy" /><span class="lobby-companion-label"></span>`;
+      (companionBtn.querySelector(".lobby-companion-icon") as HTMLImageElement).src = pouchyIconUrl;
+      (companionBtn.querySelector(".lobby-companion-label") as HTMLElement).textContent = label;
+    };
     const refreshCompanionBtn = () => {
       const tok = this.options.companionToken ?? null;
       if (tok) {
-        companionBtn.textContent = t(
-          `🤖 Companion connected (pchy_••${tok.slice(-4)})`,
-          `🤖 AI 伙伴已连接（pchy_••${tok.slice(-4)}）`,
+        setCompanionBtn(
+          t(`Companion connected (pchy_••${tok.slice(-4)})`, `AI 伙伴已连接（pchy_••${tok.slice(-4)}）`),
         );
         companionBtn.classList.add("connected");
       } else {
-        companionBtn.textContent = t("🤖 Connect your Pouchy companion", "🤖 连接你的 Pouchy AI 伙伴");
+        setCompanionBtn(t("Connect your Pouchy companion", "连接你的 Pouchy AI 伙伴"));
         companionBtn.classList.remove("connected");
       }
     };
@@ -1022,6 +1029,7 @@ export class Lobby {
       }
       /* Primary CTA: connecting the AI companion is the hero action. */
       .lobby-companion-btn {
+        display: inline-flex; align-items: center; gap: 8px;
         background: linear-gradient(135deg, rgba(96,150,250,0.6), rgba(150,110,245,0.6));
         border: 1px solid rgba(190,205,255,0.6);
         color: #fff; border-radius: 999px; padding: 11px 22px;
@@ -1031,6 +1039,11 @@ export class Lobby {
         transition: background 0.2s, border-color 0.2s, transform 0.1s;
         box-shadow: 0 4px 18px rgba(40,60,130,0.4);
       }
+      .lobby-companion-icon {
+        width: 20px; height: 20px; border-radius: 50%; object-fit: cover;
+        flex: none; display: block; background: rgba(255,255,255,0.15);
+      }
+      .lobby-companion-btn.connected .lobby-companion-icon { width: 18px; height: 18px; }
       .lobby-companion-btn:hover { background: linear-gradient(135deg, rgba(96,150,250,0.78), rgba(150,110,245,0.78)); }
       .lobby-companion-btn:active { transform: scale(0.98); }
       .lobby-companion-btn.connected {
