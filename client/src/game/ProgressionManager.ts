@@ -23,11 +23,14 @@ export interface CompanionFriend {
   bond?: number;
 }
 
-/** Bond points → friendship level (1 ❤️ at 10, then a gentle curve). Lv0 = new. */
+/** Bond points → friendship level. Reachable thresholds so a couple of sessions
+ *  together (a duo is +20) gets friends to the Lv3 "BFF" cosmetics. Lv0 = new. */
+const BOND_THRESHOLDS = [5, 15, 30, 50, 75]; // Lv1 … Lv5
 export function friendBondLevel(bond: number | undefined): number {
   const b = bond ?? 0;
-  if (b < 10) return 0;
-  return Math.floor(Math.sqrt(b / 10)); // 10→1, 40→2, 90→3, 160→4, 250→5 …
+  let lvl = 0;
+  for (const th of BOND_THRESHOLDS) if (b >= th) lvl++;
+  return lvl;
 }
 
 /** A2A sky gifts received from other companions (kept on the player's profile). */
@@ -411,6 +414,20 @@ export class ProgressionManager {
       return after > before ? after : friendBondLevel(f.bond);
     } catch {
       return -1;
+    }
+  }
+
+  /** QA: set a friend's bond to an exact value (for testing cosmetics thresholds). */
+  static setBond(visitorId: string, value: number): boolean {
+    try {
+      const all = ProgressionManager.loadFriends();
+      const f = all.find((x) => x.visitorId === visitorId);
+      if (!f) return false;
+      f.bond = Math.max(0, value);
+      ProgressionManager.idStore().setItem(FRIENDS_KEY, JSON.stringify(all.slice(0, 100)));
+      return true;
+    } catch {
+      return false;
     }
   }
 

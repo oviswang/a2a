@@ -557,6 +557,8 @@ export class Game {
   private qaAutoAcceptPairs = false;
   /** QA-only: auto-accept incoming duo invites (set via window.__a2a.test). */
   private qaAutoAcceptDuo = false;
+  /** QA-only: treat the duo as "linked" regardless of distance (no flight needed). */
+  private qaForceDuoLinked = false;
   private carpetLandmarkSelfieQuest: CarpetLandmarkSelfieQuest | null = null;
   private carpetSelfiePhotoUI: HotspringPhotoUI | null = null;
   private eternalFlameUI: EternalFlameUI | null = null;
@@ -963,6 +965,15 @@ export class Game {
             g.refreshFriendIds();
             return `friend added: ${visitorId}`;
           },
+          /** Set a friend's bond to an exact value (test cosmetics: Lv3 = gold tether). */
+          setBond: (visitorId: string, value: number) => {
+            const ok = ProgressionManager.setBond(visitorId, value);
+            g.refreshFriendIds();
+            return ok ? `bond[${visitorId}]=${value} (Lv${friendBondLevel(value)})` : "no such friend";
+          },
+          /** Treat an active duo as "linked" regardless of distance, so progressPct
+           *  climbs to 100 + completes (with bond +20) without real flight. */
+          forceDuo: (on = true) => { g.qaForceDuoLinked = on; return `forceDuo=${on}`; },
           /** Open/close the chat panel (the input is hidden until the panel opens). */
           openChat: (open = true) => { g.companionUI?.togglePanel(open); return `chat ${open ? "open" : "closed"}`; },
           /** Send a chat message programmatically (no need to interact with the DOM
@@ -2247,7 +2258,7 @@ export class Game {
     }
     this.duo.missing = 0;
     const localPos = new Vector3().setFromMatrixPosition(this.localPlayer.group.matrixWorld);
-    const linked = localPos.distanceTo(peerPos) <= Game.DUO_LINK_RANGE;
+    const linked = this.qaForceDuoLinked || localPos.distanceTo(peerPos) <= Game.DUO_LINK_RANGE;
     this.duo.progress = Math.max(
       0,
       Math.min(Game.DUO_DURATION, this.duo.progress + (linked ? dt : -dt * 0.6)),
