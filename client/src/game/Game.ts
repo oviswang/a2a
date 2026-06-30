@@ -1622,6 +1622,8 @@ export class Game {
       if (!nearest || d < nearest.d) nearest = { id: p.id, name: p.name, companionName: p.companionName, d };
     });
     this.coPresentCompanions = coPresent;
+    // Enable the panel's "Pair nearby" button only while companion-pilots are here.
+    this.companionUI?.setPairAvailable(coPresent.length);
     if (!nearest) return;
     const near = nearest as { id: string; name: string; companionName: string | null; d: number };
     if (near.d > Game.COMPANION_MEET_RANGE) return;
