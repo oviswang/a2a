@@ -250,7 +250,12 @@ class RemotePlane {
 
   pushState(state: PlayerState) {
     if (state.name) this._name = state.name;
-    if (state.companionName !== undefined) this._companionName = state.companionName || null;
+    if (state.companionName !== undefined) {
+      this._companionName = state.companionName || null;
+      // Float a ✦ above this pilot's beacon when they have an AI companion, so
+      // pairable pilots are recognisable from afar (matches the name-tag marker).
+      this.beacon.setHasCompanion(!!this._companionName);
+    }
     if (state.visitorId !== undefined) this._visitorId = state.visitorId || null;
     if (state.vehicleColor !== undefined) {
       this.applyHullColor(state.vehicleColor);
