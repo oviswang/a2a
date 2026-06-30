@@ -38,7 +38,7 @@ export class CompanionUI {
   private voiceImg!: HTMLImageElement;
   private panel!: HTMLElement;
   private transcript!: HTMLElement;
-  private input!: HTMLInputElement;
+  private input!: HTMLDivElement;
   private statusDot!: HTMLElement;
   private inviteRow!: HTMLElement;
   private inviteBtn!: HTMLButtonElement;
@@ -112,14 +112,13 @@ export class CompanionUI {
         <button type="button" class="cmp-pair-btn"></button>
       </div>
       <div class="cmp-transcript" aria-live="polite"></div>
-      <form class="cmp-input-row" autocomplete="off">
-        <input class="cmp-input" type="text" name="a2a-companion-chat"
-          autocomplete="off" autocapitalize="sentences" autocorrect="off" spellcheck="false"
-          enterkeyhint="send" aria-autocomplete="none"
-          data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other"
-          placeholder="${t("Say something to your companion…", "和你的伙伴说点什么…")}" />
-        <button type="submit" class="cmp-send-btn" aria-label="${t("Send", "发送")}">➤</button>
-      </form>
+      <div class="cmp-input-row">
+        <div class="cmp-input" contenteditable="true" role="textbox" aria-multiline="false"
+          enterkeyhint="send" autocapitalize="sentences" autocorrect="off" spellcheck="false"
+          aria-autocomplete="none" data-1p-ignore data-lpignore="true" data-bwignore
+          data-placeholder="${t("Say something to your companion…", "和你的伙伴说点什么…")}"></div>
+        <button type="button" class="cmp-send-btn" aria-label="${t("Send", "发送")}">➤</button>
+      </div>
     `;
     this.transcript = this.panel.querySelector(".cmp-transcript")!;
     this.input = this.panel.querySelector(".cmp-input")!;
@@ -135,13 +134,25 @@ export class CompanionUI {
     this.panel.querySelector(".cmp-friends-btn")!.addEventListener("click", () => this.opts.onShowFriends?.());
     this.inviteBtn.addEventListener("click", () => this.opts.onInviteFriends());
     this.pairBtn.addEventListener("click", () => this.opts.onPairNearby());
-    this.panel.querySelector(".cmp-input-row")!.addEventListener("submit", (e) => {
-      e.preventDefault();
-      const text = this.input.value.trim();
+    const submit = () => {
+      const text = (this.input.textContent ?? "").trim();
       if (!text) return;
-      this.input.value = "";
+      this.input.innerHTML = "";
       this.appendUserMessage(text);
       this.opts.onSendText(text);
+    };
+    this.panel.querySelector(".cmp-send-btn")!.addEventListener("click", () => submit());
+    // Enter sends (but not while an IME composition is in progress, e.g. pinyin).
+    this.input.addEventListener("keydown", (e) => {
+      const ke = e as KeyboardEvent;
+      if (ke.key === "Enter" && !ke.shiftKey && !ke.isComposing) {
+        e.preventDefault();
+        submit();
+      }
+    });
+    // Keep the field truly empty (no stray <br>) so the :empty placeholder shows.
+    this.input.addEventListener("input", () => {
+      if (!this.input.textContent?.trim()) this.input.innerHTML = "";
     });
     this.root.appendChild(this.panel);
 
@@ -296,16 +307,21 @@ export class CompanionUI {
     s.textContent = `
       .cmp-side-stack {
         position: absolute;
-        top: max(72px, calc(64px + env(safe-area-inset-top)));
+        /* Sit 8px below the mute button (top 32 + 36 tall) so the gap to the chat
+         * button equals the stack's own 8px gap → all three are evenly spaced. */
+        top: 76px;
         right: 36px;
         display: flex; flex-direction: column; align-items: center; gap: 8px;
         z-index: 2; pointer-events: auto;
       }
       /* Mirror .hud-top-right's small-screen override so the stack stays under
-         the mute button when the bar shifts in (HUD.ts @media max-width:480px). */
+         the mute button when the bar shifts in (HUD.ts @media max-width:480px).
+         There the mute button is 40px tall and tracks the safe-area, so place the
+         stack at (mute top + 40 + 8) to keep the same even 8px gaps. */
       @media (max-width: 480px) {
         .cmp-side-stack {
           right: max(24px, calc(14px + env(safe-area-inset-right)));
+          top: calc(max(24px, calc(14px + env(safe-area-inset-top))) + 48px);
         }
       }
       .cmp-toggle-btn, .cmp-voice-btn { position: relative; }
@@ -370,14 +386,21 @@ export class CompanionUI {
       .cmp-msg--assistant { background: rgba(255,255,255,0.10); align-self: flex-start; border-bottom-left-radius: 4px; }
       .cmp-msg--user { background: rgba(120,180,255,0.22); align-self: flex-end; border-bottom-right-radius: 4px; }
       .cmp-msg--system { background: rgba(230,120,120,0.16); align-self: center; font-size: 0.74rem; opacity: 0.85; }
-      .cmp-input-row { display: flex; gap: 6px; }
+      .cmp-input-row { display: flex; gap: 6px; align-items: flex-end; }
+      /* A contenteditable div (not <input>) so the OS keyboard never shows its
+       * password / card / location autofill bar over the chat. */
       .cmp-input {
-        flex: 1; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.10);
+        flex: 1; min-width: 0; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.10);
         border-radius: 10px; padding: 9px 12px; color: #fff; font: inherit; font-size: 0.82rem; outline: none;
+        min-height: 1.25em; max-height: 4.6em; overflow-y: auto; line-height: 1.4;
+        white-space: pre-wrap; word-break: break-word; -webkit-user-select: text; user-select: text;
+      }
+      .cmp-input:empty::before {
+        content: attr(data-placeholder); color: rgba(255,255,255,0.4); pointer-events: none;
       }
       .cmp-send-btn {
         background: rgba(120,180,255,0.3); color: #fff; border: none; border-radius: 10px;
-        width: 40px; cursor: pointer; font-size: 0.9rem;
+        width: 40px; height: 38px; flex: 0 0 auto; cursor: pointer; font-size: 0.9rem;
       }
 
       .cmp-letter-stack {
