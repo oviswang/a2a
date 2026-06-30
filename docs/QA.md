@@ -125,6 +125,25 @@ B.__a2a.test.autoAcceptPairs(true); A.__a2a.test.pair()  → both __a2a.friends 
 fetch(__a2a.serverUrl + '/api/worlds/rendezvous?exclude=' + __a2a.worldSlug).then(r=>r.json())
 ```
 
+### Read-only diagnostics worth knowing (always on, even when hooks are OFF)
+- **`__a2a.qa`** = `{ buildHooks, optedIn, testAvailable }`. `buildHooks` is the
+  COMPILE-TIME state: `false` ⇒ this is a production build with hooks tree-shaken out,
+  so `.test` is **legitimately** undefined and `?qa=1`/`?vid=` are no-ops — **not a
+  gating bug**. `.test` exists iff `buildHooks && optedIn` (`?qa=1` in the URL alone
+  satisfies `optedIn`; localStorage is only an extra path, never required).
+- **`__a2a.pair`** = last pairing outcome `{ ok, code, message, withName, at }` or
+  `null`. `code` ∈ `paired | same_account | scope_initiator | scope_visitor | network
+  | declined | no_companion | unknown`. Note `.test.pair()` returns immediately
+  ("pair-requested"); the real result lands on `__a2a.pair` a few seconds later (after
+  the peer answers + the representative pairing runs) — **poll, don't judge null=fail**.
+
+### Test-infra gotchas (learned the hard way)
+- **Use a fresh browser context per round**, and never `waitUntil: 'networkidle'` — the
+  app holds a persistent WebSocket + polls, so network is never idle (it hangs). Use
+  `domcontentloaded` then poll `__a2a`.
+- **`syncPresence()` before any relay hook** (`greet`/`gift`/`pair`) so it targets the
+  CURRENT peer socket id, not a stale one from a long session.
+
 ### Notes
 - **EL voice + dynamic tools:** in a live ElevenLabs call the agent won't reliably
   call app tools (`greet_companion` / `start_duo` / `set_waypoint` …) — the chips and
