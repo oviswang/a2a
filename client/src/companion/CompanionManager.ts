@@ -155,6 +155,10 @@ export class CompanionManager {
   private scopes = new Set<string>();
   /** Reason the most recent pairWithVisitor() failed, classified for the UI. */
   private lastPairError: PairFailReason | null = null;
+  /** Pending one-shot line capture (see composeLine) — intercepts the next reply. */
+  private lineCapture: { resolve: (s: string | null) => void; timer: ReturnType<typeof setTimeout> } | null = null;
+  /** When the user last sent a real chat turn, so background lines don't hijack it. */
+  private lastUserChatAt = 0;
   private readonly opts: CompanionManagerOptions;
 
   /** Last sent value + time per retained `type`, for dedupe + throttle. */
@@ -197,7 +201,18 @@ export class CompanionManager {
       });
 
       this.unsubs.push(
-        this.client.onMessage((text) => this.opts.onMessage(text)),
+        this.client.onMessage((text) => {
+          // A one-shot composed line (e.g. a proactive greeting) captures the next
+          // reply instead of showing it in the player's own chat.
+          if (this.lineCapture) {
+            const cap = this.lineCapture;
+            this.lineCapture = null;
+            clearTimeout(cap.timer);
+            cap.resolve(text);
+            return;
+          }
+          this.opts.onMessage(text);
+        }),
         this.client.onSocialMessage((p) =>
           this.opts.onSocialMessage(p, parseWorldSlug(p.content)),
         ),
@@ -345,11 +360,48 @@ export class CompanionManager {
 
   async sendText(text: string): Promise<void> {
     if (!this.isReady || !this.client) return;
+    this.markUserChat();
+    // A real user turn must never be swallowed by a pending one-shot capture, and
+    // its reply belongs in the chat — release any capture (it falls back to null).
+    if (this.lineCapture) {
+      const cap = this.lineCapture;
+      this.lineCapture = null;
+      clearTimeout(cap.timer);
+      cap.resolve(null);
+    }
     try {
       await this.client.sendText(text);
     } catch {
       /* surfaced via onError if persistent */
     }
+  }
+
+  /** Note that the user is actively chatting, so background one-shot lines don't
+   *  hijack the user's reply (see {@link composeLine}). */
+  markUserChat(): void {
+    this.lastUserChatAt = Date.now();
+  }
+
+  /** Ask the agent to compose ONE short line for a given hidden prompt and resolve
+   *  its text — captured so it does NOT appear in the player's own chat. Returns
+   *  null if unavailable / busy / the user is mid-chat / it times out, so callers
+   *  can fall back to a template. Only one capture runs at a time. */
+  async composeLine(prompt: string, timeoutMs = 7000): Promise<string | null> {
+    if (this.disabled || !this.isReady || !this.client) return null;
+    if (this.lineCapture) return null; // one at a time
+    if (Date.now() - this.lastUserChatAt < 6000) return null; // don't hijack a live chat
+    return new Promise<string | null>((resolve) => {
+      const finish = (s: string | null) => {
+        if (this.lineCapture && this.lineCapture.resolve === finish) this.lineCapture = null;
+        resolve(s);
+      };
+      const timer = setTimeout(() => finish(null), timeoutMs);
+      this.lineCapture = { resolve: finish, timer };
+      this.client!.sendText(prompt).catch(() => {
+        clearTimeout(timer);
+        finish(null);
+      });
+    });
   }
 
   /** True when a call is open, currently being opened, OR the user wants voice on
