@@ -153,8 +153,9 @@ export class SocketClient {
     visitorToken?: string,
     visitorId?: string,
     companionName?: string,
+    reason?: "declined" | "no_companion",
   ) {
-    this.socket.emit("pair:respond", toId, accept, visitorToken, visitorId, companionName);
+    this.socket.emit("pair:respond", toId, accept, visitorToken, visitorId, companionName, reason);
   }
   onPairIncoming(cb: (ev: PairRequestEvent) => void) {
     this.socket.on("pair:incoming", cb);
