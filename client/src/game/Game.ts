@@ -2472,7 +2472,7 @@ export class Game {
           ? t(`In ${p.worldName}`, `在「${p.worldName}」`)
           : t("Online", "在线")
         : t("Offline", "离线");
-      const bondStr = lvl > 0 ? `${"❤️".repeat(Math.min(lvl, 5))} Lv${lvl} · ` : "";
+      const bondStr = lvl > 0 ? `${"❤️".repeat(Math.min(lvl, 5))} ${t("Lv", "等级")}${lvl} · ` : "";
       sub.textContent = `${bondStr}${presence}`;
       info.appendChild(nm);
       info.appendChild(sub);

@@ -72,7 +72,7 @@ export function getNpcPortraitUrl(npcName: string): string {
 }
 
 /** Carpet sky-jellyfish quest speaker (see {@link getJellyfishCaptureLine}). */
-export const JELLYFISH_NPC_SPEAKER = "Sky Jellyfish";
+export const JELLYFISH_NPC_SPEAKER = t("Sky Jellyfish", "天空水母");
 
 /**
  * Line after each sky jellyfish is caught. `collectedAfterCapture` is
@@ -99,7 +99,7 @@ export function getJellyfishCaptureLine(
 }
 
 /** Cosmic-void intro; shown via {@link PackageQuestHUD#showBubble} as two sequential lines. */
-export const ETERNAL_FLAME_SPEAKER = "Eternal Flame";
+export const ETERNAL_FLAME_SPEAKER = t("Eternal Flame", "永恒之火");
 export const ETERNAL_FLAME_VOID_BUBBLES: readonly [string] = [
   t("Defend me! Lunar moths hunger for the last ember. Please, do not let them reach the flame.", "保护我！月蛾渴望吞噬最后的余烬。求你，别让它们碰到火焰。"),
 ];
