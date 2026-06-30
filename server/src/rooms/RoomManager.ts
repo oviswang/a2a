@@ -116,7 +116,7 @@ export class RoomManager {
         fromCompanionName,
       });
     });
-    socket.on("pair:respond", (toId, accept, visitorToken, visitorId, companionName) => {
+    socket.on("pair:respond", (toId, accept, visitorToken, visitorId, companionName, reason) => {
       const target = room.getPlayer(toId);
       if (!target) return;
       target.socket.emit("pair:answered", {
@@ -126,6 +126,7 @@ export class RoomManager {
         visitorToken: accept ? visitorToken : undefined,
         visitorId: accept ? visitorId : undefined,
         companionName: accept ? companionName : undefined,
+        reason: accept ? undefined : reason,
       });
     });
 

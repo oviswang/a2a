@@ -1706,7 +1706,7 @@ export class Game {
       ProgressionManager.loadOrCreateVisitorId(),
       this.companion?.companionDisplayName ?? undefined,
     );
-    this.hud.showAmbientToast(t(`Pairing request sent to ${name}…`, `已向 ${name} 发送配对请求…`));
+    this.beginPairWait(socketId, name);
   }
 
   /** Greet the nearby companion-pilot with a warm line in our companion's voice,
@@ -2859,9 +2859,7 @@ export class Game {
       ProgressionManager.loadOrCreateVisitorId(),
       this.companion?.companionDisplayName ?? undefined,
     );
-    this.hud.showAmbientToast(
-      t(`Pairing request sent to ${target[1]}…`, `已向 ${target[1]} 发送配对请求…`),
-    );
+    this.beginPairWait(target[0], target[1]);
   }
 
   /** Another player wants to pair companions with us. Ask for explicit consent;
@@ -2875,7 +2873,7 @@ export class Game {
     if (!this.socketClient) return;
     const myToken = ProgressionManager.loadCompanionToken();
     if (!myToken) {
-      this.socketClient.emitPairRespond(fromId, false);
+      this.socketClient.emitPairRespond(fromId, false, undefined, undefined, undefined, "no_companion");
       return;
     }
     // QA fast-path: accept without showing the consent card.
@@ -2904,7 +2902,7 @@ export class Game {
       declineLabel: t("Decline", "拒绝"),
     });
     if (!ok || !this.socketClient) {
-      this.socketClient?.emitPairRespond(fromId, false);
+      this.socketClient?.emitPairRespond(fromId, false, undefined, undefined, undefined, "declined");
       return;
     }
     this.socketClient.emitPairRespond(
@@ -2924,7 +2922,7 @@ export class Game {
       });
       this.refreshFriendIds();
     }
-    this.hud.showAmbientToast(t("Pairing accepted.", "已接受配对。"));
+    this.celebratePairing(fromName);
   }
 
   /** The other player answered our pairing request. On accept, run the
@@ -2936,20 +2934,26 @@ export class Game {
     visitorToken?: string;
     visitorId?: string;
     companionName?: string;
+    reason?: "declined" | "no_companion";
   }) {
+    // Stop the "waiting for X to confirm…" indicator (A).
+    this.endPairWait(ev.fromId);
     if (!ev.accept || !ev.visitorToken || !ev.visitorId) {
-      this.hud.showAmbientToast(t("Pairing was declined.", "对方拒绝了配对。"));
+      // Distinguish "they can't pair (no companion)" from an actual decline (B).
+      this.hud.showAmbientToast(
+        ev.reason === "no_companion"
+          ? t(
+              `${ev.fromName} hasn't connected an AI companion, so can't pair yet.`,
+              `${ev.fromName} 还没连接 AI 伙伴，暂时无法配对。`,
+            )
+          : t(`${ev.fromName} declined the pairing.`, `${ev.fromName} 拒绝了配对。`),
+      );
       return;
     }
     if (!this.companion) return;
     const pairId = await this.companion.pairWithVisitor(ev.visitorToken, ev.visitorId, ev.fromName);
-    this.hud.showAmbientToast(
-      pairId
-        ? t(`Companions paired with ${ev.fromName}! 🤝`, `已与 ${ev.fromName} 的伙伴结为好友！🤝`)
-        : t("Pairing failed (check your key's permissions).", "配对失败（请检查密钥权限）。"),
-    );
-    // Success → record the friend + clear any queued ghost-pair intents between us.
     if (pairId && ev.visitorId) {
+      // Success → record the friend, clear queued ghost-pair intents, celebrate (C).
       ProgressionManager.addFriend({
         visitorId: ev.visitorId,
         name: ev.fromName,
@@ -2958,7 +2962,76 @@ export class Game {
       });
       this.refreshFriendIds();
       this.socketClient?.emitGhostPairResolved(ev.visitorId);
+      this.celebratePairing(ev.fromName);
+    } else {
+      this.hud.showAmbientToast(
+        t("Pairing failed (check your key's permissions).", "配对失败（请检查密钥权限）。"),
+      );
     }
+  }
+
+  // ── Pairing feedback: waiting indicator (A) + success celebration (C) ────────
+
+  /** A persistent "waiting for X to confirm…" banner while a pair request is out. */
+  private pairWait: { socketId: string; name: string; timer: number; el: HTMLDivElement } | null = null;
+
+  private beginPairWait(socketId: string, name: string) {
+    this.endPairWait();
+    Game.injectPairWaitStyles();
+    const el = document.createElement("div");
+    el.className = "pair-wait";
+    el.innerHTML = `<span class="pair-wait-dot"></span><span class="pair-wait-text"></span>`;
+    (el.querySelector(".pair-wait-text") as HTMLElement).textContent = t(
+      `Waiting for ${name} to confirm pairing…`,
+      `正在等待 ${name} 确认配对…`,
+    );
+    this.hud.root.appendChild(el);
+    // Auto-clear if no answer arrives (recipient card auto-declines at 45s).
+    const timer = window.setTimeout(() => {
+      this.endPairWait(socketId);
+      this.hud.showAmbientToast(t(`${name} didn't respond to the pairing.`, `${name} 没有回应配对。`));
+    }, 52000);
+    this.pairWait = { socketId, name, timer, el };
+  }
+
+  /** Clear the waiting banner. If `socketId` is given, only clears a wait for it. */
+  private endPairWait(socketId?: string) {
+    if (!this.pairWait) return;
+    if (socketId && this.pairWait.socketId !== socketId) return;
+    clearTimeout(this.pairWait.timer);
+    this.pairWait.el.remove();
+    this.pairWait = null;
+  }
+
+  /** A shared, visible celebration when a pairing succeeds (both sides). */
+  private celebratePairing(name: string) {
+    this.floatGift("🤝");
+    this.floatGift("❤️");
+    this.hud.showAmbientToast(t(`A2A friends with ${name}! 🤝`, `和 ${name} 成为 A2A 好友啦！🤝`));
+    this.packageQuestHUD?.showBubble("🤝", t(`Paired with ${name}`, `已与 ${name} 配对`));
+  }
+
+  private static injectPairWaitStyles() {
+    if (document.getElementById("pair-wait-styles")) return;
+    const s = document.createElement("style");
+    s.id = "pair-wait-styles";
+    s.textContent = `
+      .pair-wait {
+        position: absolute; top: max(70px, calc(58px + env(safe-area-inset-top)));
+        left: 50%; transform: translateX(-50%); z-index: 8; pointer-events: none;
+        display: flex; align-items: center; gap: 8px;
+        background: rgba(22,30,50,0.92); border: 1px solid rgba(180,210,255,0.35);
+        border-radius: 999px; padding: 7px 14px; backdrop-filter: blur(10px);
+        font-family: 'Domine', Georgia, serif; color: rgba(235,243,255,0.96);
+        font-size: 0.76rem; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+      }
+      .pair-wait-dot {
+        width: 8px; height: 8px; border-radius: 50%; background: #9fd0ff;
+        box-shadow: 0 0 8px rgba(159,208,255,0.9); animation: pair-wait-pulse 1s ease-in-out infinite;
+      }
+      @keyframes pair-wait-pulse { 0%,100% { opacity: 0.35; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.15); } }
+    `;
+    document.head.appendChild(s);
   }
 
   private mountLobby(opts?: { deferUnlockModalsUntilMenuReveal?: boolean }) {
@@ -4378,6 +4451,7 @@ export class Game {
     this.friendBondFX = null;
     this.duo = null;
     this.removeDuoBar();
+    this.endPairWait();
     this.hud.dispose();
 
     if (this.playerLight) {
@@ -9360,6 +9434,7 @@ export class Game {
     this.friendBondFX = null;
     this.duo = null;
     this.removeDuoBar();
+    this.endPairWait();
     this.flagSystem?.dispose();
     this.flagSystem = null;
     this.stateSync?.stop();

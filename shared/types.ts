@@ -308,6 +308,8 @@ export interface PairAnswerEvent {
   visitorId?: string;
   /** The responder's companion display name (for the requester's friends roster). */
   companionName?: string;
+  /** Why a non-accept happened, so the requester can show a clear reason. */
+  reason?: "declined" | "no_companion";
 }
 
 export interface ClientToServerEvents {
@@ -344,6 +346,7 @@ export interface ClientToServerEvents {
     visitorToken?: string,
     visitorId?: string,
     companionName?: string,
+    reason?: "declined" | "no_companion",
   ) => void;
   /** A2A: relay a companion-to-companion greeting to co-present player `toId`
    *  (agents saying hello when their pilots meet). Same room only; never persisted. */
