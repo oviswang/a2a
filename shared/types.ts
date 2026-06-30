@@ -75,8 +75,44 @@ export interface WorldConfig {
 export const BRAZIER_COUNT = 5;
 /** Brazier burn duration — keep in sync with client flame timer. */
 export const BRAZIER_BURN_MS = 45_000;
-/** When all five braziers burn together, moon approach pauses for this long (per client). */
+/** When all five braziers burn together, moon approach pauses for this long. */
 export const BRAZIER_MOON_PAUSE_MS = 60_000;
+/** How long the shared moon takes to reach the world (room-authoritative countdown). */
+export const MOON_DURATION_MS = 300_000;
+
+/** One of the five shared braziers in a world's co-op objective. */
+export interface BrazierSlot {
+  lit: boolean;
+  /** Lit with a permanent Eternal Flame (vs a temporary burn). */
+  eternal: boolean;
+  /** Epoch ms a temporary flame expires; null = eternal / unlit. */
+  burnEndsAt: number | null;
+}
+
+/** The shared "save the world" objective state for a room — the moon countdown and
+ *  the five braziers, owned by the server and mirrored to every client in the world. */
+export interface WorldObjectiveState {
+  /** Moon progress as elapsed ms toward {@link moonDurationMs}. */
+  moonElapsedMs: number;
+  moonDurationMs: number;
+  /** Temporarily paused (all five lit, not yet all-eternal). */
+  paused: boolean;
+  /** Epoch ms the current pause ends (when `paused`). */
+  pauseEndsAt: number | null;
+  /** Frozen forever (all five eternal) — the moon is stopped, the world is saved. */
+  frozen: boolean;
+  saved: boolean;
+  braziers: BrazierSlot[];
+}
+
+/** A single shared brazier changed (one player lit it) — for the live "X lit a brazier" beat. */
+export interface ObjectiveBrazierEvent {
+  index: number;
+  lit: boolean;
+  eternal: boolean;
+  /** Display name of the pilot who lit it (for a teammate shout-out), if known. */
+  by?: string;
+}
 
 /** Matches client `Globe` moonstone ruin placement count. */
 export const MOONSTONE_RUIN_COUNT = 2;
@@ -247,6 +283,18 @@ export interface ServerToClientEvents {
   "duo:incoming": (ev: DuoPeerEvent) => void;
   "duo:answered": (ev: DuoAnswerEvent) => void;
   "duo:completed": (ev: { fromId: string }) => void;
+  /** Shared co-op objective: the room's full moon + brazier state (on join, on
+   *  change, and periodically) so every client mirrors the same shared goal. */
+  "objective:sync": (state: WorldObjectiveState) => void;
+  /** Shared co-op objective: one brazier just changed (lit/expired) — for the
+   *  live "✦ X lit a brazier (3/5)!" beat. */
+  "objective:brazier": (ev: ObjectiveBrazierEvent) => void;
+  /** Shared co-op objective: the whole room saved the world together (all five
+   *  braziers hold the Eternal Flame) — everyone celebrates. */
+  "world:saved": (ev: { method: "eternal_flames" }) => void;
+  /** Shared co-op objective: the shared moon reached the world — the whole room
+   *  fails together and the objective rewinds. */
+  "world:lost": () => void;
 }
 
 /** A2A duo challenge handshake between two co-present friends. */
@@ -357,4 +405,9 @@ export interface ClientToServerEvents {
   "duo:invite": (toId: string) => void;
   "duo:respond": (toId: string, accept: boolean) => void;
   "duo:done": (toId: string) => void;
+  /** Shared co-op objective: the local player flew into an unlit brazier and lit it
+   *  (eternal = spent one of their Eternal Flames). The server applies it to the
+   *  shared state and acks whether it was accepted (rejected if already eternal, so
+   *  the client can refund a wasted flame on a simultaneous-light race). */
+  "brazier:light": (index: number, eternal: boolean, ack: (res: { accepted: boolean }) => void) => void;
 }

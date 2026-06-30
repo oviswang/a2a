@@ -912,6 +912,39 @@ export class Braziers {
     return this.states.length;
   }
 
+  /** Apply the room's authoritative shared brazier state (server-owned, so every
+   *  pilot sees the same lit braziers — anyone's light counts for the team). Lights /
+   *  extinguishes / upgrades each slot, animating the fade. Temp-burn timers are kept
+   *  on the LOCAL clock (server epochs would clock-skew); the server authoritatively
+   *  extinguishes a temp flame by sending it back as unlit. */
+  applyServerState(slots: { lit: boolean; eternal: boolean }[]) {
+    const now = Date.now();
+    for (let i = 0; i < this.states.length && i < slots.length; i++) {
+      const s = this.states[i]!;
+      const srv = slots[i]!;
+      if (srv.lit) {
+        const wasLit = s.lit;
+        if (!wasLit) {
+          s.fadeInT = 0;
+          s.fadeOutT = 0;
+        }
+        s.lit = true;
+        s.eternal = srv.eternal;
+        if (srv.eternal) {
+          s.burnEndsAtMs = null;
+        } else if (!wasLit || s.burnEndsAtMs == null) {
+          // Newly (temporarily) lit → run a fresh local burn timer.
+          s.burnEndsAtMs = now + BRAZIER_BURN_MS;
+        }
+      } else if (s.lit) {
+        s.lit = false;
+        s.eternal = false;
+        s.burnEndsAtMs = null;
+        s.fadeOutT = 0;
+      }
+    }
+  }
+
   update(
     dt: number,
     playerWorldPos: Vector3,
