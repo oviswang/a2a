@@ -555,6 +555,8 @@ export class Game {
   };
   /** QA-only: auto-accept incoming pairing requests (set via window.__a2a.test). */
   private qaAutoAcceptPairs = false;
+  /** QA-only: auto-accept incoming duo invites (set via window.__a2a.test). */
+  private qaAutoAcceptDuo = false;
   private carpetLandmarkSelfieQuest: CarpetLandmarkSelfieQuest | null = null;
   private carpetSelfiePhotoUI: HotspringPhotoUI | null = null;
   private eternalFlameUI: EternalFlameUI | null = null;
@@ -853,9 +855,18 @@ export class Game {
         get coPresent() {
           return g.coPresentCompanions.map((m) => ({ name: m.name, companion: m.companionName }));
         },
-        /** Paired A2A friends (names only). */
+        /** Paired A2A friends with bond level. */
         get friends() {
-          return ProgressionManager.loadFriends().map((f) => ({ name: f.name, companion: f.companionName ?? null }));
+          return ProgressionManager.loadFriends().map((f) => ({
+            name: f.name, companion: f.companionName ?? null,
+            bond: f.bond ?? 0, bondLevel: friendBondLevel(f.bond),
+          }));
+        },
+        /** Active "fly together" duo state, for asserting feature 4. */
+        get duo() {
+          return g.duo
+            ? { active: true, peer: g.duo.peerName, progressPct: Math.round((g.duo.progress / Game.DUO_DURATION) * 100) }
+            : { active: false };
         },
         get giftsReceived() { return ProgressionManager.loadReceivedGifts().length; },
         /** The visible chat transcript rows — for asserting replies arrived. */
@@ -925,6 +936,20 @@ export class Game {
             void g.execCompanionTool("rally_companions", { message: msg });
             return `rallied ${list.length} pilot(s)`;
           },
+          /** Invite a co-present paired friend to a "fly together" duo. */
+          duo: () => {
+            if (g.duo) return "duo-already-active";
+            let tgt: { id: string; name: string } | null = null;
+            g.remotePlanes?.forEachRemote((p) => {
+              if (!tgt && p.visitorId && g.friendVisitorIds.has(p.visitorId)) tgt = { id: p.id, name: p.name };
+            });
+            if (!tgt || !g.socketClient) return "no-friend-in-world (must be paired + co-present)";
+            const t2 = tgt as { id: string; name: string };
+            g.socketClient.emitDuoInvite(t2.id);
+            return `duo-invited ${t2.name}`;
+          },
+          /** Auto-accept incoming duo invites (skips the consent card). */
+          acceptDuo: (on = true) => { g.qaAutoAcceptDuo = on; return `acceptDuo=${on}`; },
         };
       }
 
@@ -2142,6 +2167,11 @@ export class Game {
   private async handleDuoIncoming(fromId: string, fromName: string) {
     if (!this.socketClient) return;
     if (this.duo) { this.socketClient.emitDuoRespond(fromId, false); return; }
+    if (this.qaAutoAcceptDuo) {
+      this.socketClient.emitDuoRespond(fromId, true);
+      this.startDuo(fromId, fromName, this.visitorIdForSocket(fromId));
+      return;
+    }
     const ok = await this.showPairingCard({
       title: t("Fly together ✨", "默契同飞 ✨"),
       message: t(
