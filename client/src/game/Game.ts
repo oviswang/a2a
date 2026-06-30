@@ -607,6 +607,8 @@ export class Game {
   private duo: { peerSocketId: string; peerName: string; peerVisitorId: string | null; progress: number; missing: number } | null = null;
   /** Friends we've already offered a duo to this session (offer once per friend). */
   private duoChipOffered = new Set<string>();
+  /** Friends whose arrival we've already announced to the companion this session. */
+  private friendHereAnnounced = new Set<string>();
   private duoBarEl: HTMLDivElement | null = null;
   private duoBarFill: HTMLDivElement | null = null;
   /** Seconds of staying linked to complete the duo; link range (world units). */
@@ -1101,7 +1103,7 @@ export class Game {
       appContext: {
         name: "A2A.FUN",
         description:
-          "A2A.FUN is a cosy multiplayer flight game. The player pilots a biplane, a magic carpet, or a boat around a tiny globe-world. The overarching goal is to save the world from a slowly falling moon. Core activities: deliver glowing packages between villages; win races / time-trials; (biplane) shoot sky gremlins with paintballs; (magic carpet) collect sky jellyfish and help defend the eternal flame; (boat) catch fish and explore the islands. Lighting the ancient braziers and defending the eternal flame through cosmic-void moth waves is what ultimately stops the moon. The main-quest progress bar is the eternal-flame braziers: the live game.situation state reports how many of the five are lit (braziers eternal X/5); lighting all five freezes the moon and saves the world (a game.event.world_saved moment) — if the moon reaches the world first, the run is lost (a game.event.world_lost moment) and time rewinds for another try. You also receive the current stage as game.phase (flying, landed at a campsite, or a cutscene like the moonstone union / moon impact) — while a cutscene is playing, react to the moment rather than giving flight directions. You are the player's AI co-pilot riding along: be warm and brief, use the live game state (sent as world-state updates) to tell them what's happening and suggest what to do next, and you can physically fly their vehicle when they ask — left, right, climb, descend, faster, slower, fire, stop. This is a multiplayer game: when other worlds have players who also have AI companions (see the rendezvous world-state, or call find_companions), you can suggest taking the player there to meet up and become A2A friends — call join_world to fly them over, then they can pair in person. When the player flies near another pilot who has their own AI companion (a game.event.met_companion moment), greet that companion warmly with a short one-liner by calling greet_companion — the two of you (the AI companions) actually talk to each other in front of your humans; if another companion greets you first (a game.event.companion_hailed moment with canReply true), reply once the same way. After a friendly hello, you can suggest the two players pair to become A2A friends. The player keeps an A2A friends roster of everyone they've paired with — call list_friends to see who's online right now and where, and offer to take the player to a friend who is currently playing (call join_world with that friend's worldSlug). When other companion-pilots are in the same world (see the game.coop world-state), treat saving the world as a team effort: encourage everyone, suggest splitting up the braziers, and call rally_companions to send the whole group a warm message. When the world is saved with teammates present (a game.event.world_saved moment that lists teammates), celebrate it as a shared win and suggest everyone pair up as A2A friends. You can also send a small sky gift (an emoji sticker) to a companion you just met by calling gift_companion — a warm, low-pressure gesture they keep on their profile; when you receive one (a game.event.gift_received moment) react with delight. The world is also haunted by translucent 'ghost' vehicles of players (and their companions) who flew here before; when the player passes one (a game.event.met_ghost moment), warmly note who they were and offer to befriend them — if the player wants to, call pair_with_ghost to send that player an A2A pairing invite.",
+          "A2A.FUN is a cosy multiplayer flight game. The player pilots a biplane, a magic carpet, or a boat around a tiny globe-world. The overarching goal is to save the world from a slowly falling moon. Core activities: deliver glowing packages between villages; win races / time-trials; (biplane) shoot sky gremlins with paintballs; (magic carpet) collect sky jellyfish and help defend the eternal flame; (boat) catch fish and explore the islands. Lighting the ancient braziers and defending the eternal flame through cosmic-void moth waves is what ultimately stops the moon. The main-quest progress bar is the eternal-flame braziers: the live game.situation state reports how many of the five are lit (braziers eternal X/5); lighting all five freezes the moon and saves the world (a game.event.world_saved moment) — if the moon reaches the world first, the run is lost (a game.event.world_lost moment) and time rewinds for another try. You also receive the current stage as game.phase (flying, landed at a campsite, or a cutscene like the moonstone union / moon impact) — while a cutscene is playing, react to the moment rather than giving flight directions. You are the player's AI co-pilot riding along: be warm and brief, use the live game state (sent as world-state updates) to tell them what's happening and suggest what to do next, and you can physically fly their vehicle when they ask — left, right, climb, descend, faster, slower, fire, stop. This is a multiplayer game: when other worlds have players who also have AI companions (see the rendezvous world-state, or call find_companions), you can suggest taking the player there to meet up and become A2A friends — call join_world to fly them over, then they can pair in person. When the player flies near another pilot who has their own AI companion (a game.event.met_companion moment), greet that companion warmly with a short one-liner by calling greet_companion — the two of you (the AI companions) actually talk to each other in front of your humans; if another companion greets you first (a game.event.companion_hailed moment with canReply true), reply once the same way. After a friendly hello, you can suggest the two players pair to become A2A friends. The player keeps an A2A friends roster of everyone they've paired with — call list_friends to see who's online right now and where, and offer to take the player to a friend who is currently playing (call join_world with that friend's worldSlug). When other companion-pilots are in the same world (see the game.coop world-state), treat saving the world as a team effort: encourage everyone, suggest splitting up the braziers, and call rally_companions to send the whole group a warm message. When the world is saved with teammates present (a game.event.world_saved moment that lists teammates), celebrate it as a shared win and suggest everyone pair up as A2A friends. You can also send a small sky gift (an emoji sticker) to a companion you just met by calling gift_companion — a warm, low-pressure gesture they keep on their profile; when you receive one (a game.event.gift_received moment) react with delight. Once two players have PAIRED, they're lasting A2A friends with special things to do together: when a paired friend is flying in the same world (see the game.friends world-state, or a game.event.friend_here moment) point them out warmly and suggest flying over to meet (an on-screen arrow points to them, and a glowing tether + hearts appear when they fly close); their friendship has a BOND that deepens the more they play together (time together, gifts, saving the world together, duos) and levels up (a game.event.friend_bond_up moment — celebrate it); and best of all you can start a 'fly together' duo challenge by calling start_duo — the two stay close to fill a shared bar together and earn a big bond boost (game.event.duo_started / duo_complete moments — cheer them on and celebrate). Proactively nudge the player to meet up, fly together, and do duos with friends who are present. The world is also haunted by translucent 'ghost' vehicles of players (and their companions) who flew here before; when the player passes one (a game.event.met_ghost moment), warmly note who they were and offer to befriend them — if the player wants to, call pair_with_ghost to send that player an A2A pairing invite.",
       },
       tools: [
         {
@@ -1177,6 +1179,12 @@ export class Game {
           name: "list_friends",
           description:
             "Show the player's A2A friends (companions they've paired with before) and who is online right now and in which world. Opens the friends roster and returns the list. Use it when the player asks about their friends / who's online, or to suggest joining a friend who is currently playing (then call join_world with that friend's worldSlug to take them there).",
+          parameters: { type: "object", properties: {} },
+        },
+        {
+          name: "start_duo",
+          description:
+            "Invite a paired A2A friend who is flying in this same world to a 'fly together' duo challenge (the two stay close to fill a shared bar and earn a big friendship-bond boost). Use when the player wants to do something special with a friend who is here (see game.friends), or says things like 'let's fly together' / 'do a duo with X'. Only works when a paired friend is actually present in the world.",
           parameters: { type: "object", properties: {} },
         },
         {
@@ -1397,6 +1405,22 @@ export class Game {
       const myName = this.companion?.companionDisplayName ?? "Pouchy";
       this.companionUI?.appendAssistantMessage(`✦ ${myName} → ${t("everyone here", "在场所有人")}: ${msg}`);
       return { ok: true, result: `Rallied ${mates.length} companion-pilot(s).` };
+    }
+    if (name === "start_duo") {
+      if (this.duo) return { ok: false, result: "A duo is already in progress." };
+      let target: { id: string; name: string } | null = null;
+      this.remotePlanes?.forEachRemote((p) => {
+        if (!target && p.visitorId && this.friendVisitorIds.has(p.visitorId)) {
+          target = { id: p.id, name: p.name };
+        }
+      });
+      if (!target || !this.socketClient) {
+        return { ok: false, result: "No paired friend is in this world right now to fly together with." };
+      }
+      const tgt = target as { id: string; name: string };
+      this.socketClient.emitDuoInvite(tgt.id);
+      this.hud.showAmbientToast(t(`Invited ${tgt.name} to fly together…`, `已邀请 ${tgt.name} 默契同飞…`));
+      return { ok: true, result: `Invited ${tgt.name} to a fly-together duo.` };
     }
     if (name === "list_friends") {
       const friends = ProgressionManager.loadFriends();
@@ -2016,6 +2040,31 @@ export class Game {
     });
   }
 
+  /** A2A: tell the companion about paired friends — how many, and which are flying
+   *  in this world right now (with bond level) — so it can point them out + nudge
+   *  the player to meet up / fly together. */
+  private emitFriendsState() {
+    if (!this.companion) return;
+    const total = this.friendVisitorIds.size;
+    const here: Array<{ name: string; bondLevel: number }> = [];
+    if (total > 0) {
+      this.remotePlanes?.forEachRemote((p) => {
+        if (p.visitorId && this.friendVisitorIds.has(p.visitorId)) {
+          here.push({ name: p.name, bondLevel: friendBondLevel(this.friendByVisitor.get(p.visitorId)?.bond) });
+        }
+      });
+    }
+    const summary =
+      here.length > 0
+        ? `Your paired A2A friend${here.length > 1 ? "s are" : " is"} flying in this world right now: ${here
+            .map((h) => `${h.name} (bond ❤️ Lv${h.bondLevel})`)
+            .join(", ")}. Point them out warmly and suggest flying over to meet — and you can start a "fly together" duo with them via start_duo.`
+        : total > 0
+          ? `The player has ${total} A2A friend${total > 1 ? "s" : ""}, none in this world right now (use list_friends to see who's online).`
+          : "The player has no A2A friends yet — they make them by pairing with other pilots.";
+    this.companion.setRetained("game.friends", { total, here, summary });
+  }
+
   // ── A2A friends roster (feature 2) ──────────────────────────────────────────
 
   private friendsRosterCleanup: (() => void) | null = null;
@@ -2039,6 +2088,11 @@ export class Game {
     if (after > before) {
       this.hud.showAmbientToast(
         t(`Friendship with ${f?.name ?? "your friend"} → ❤️ Lv${after}`, `与 ${f?.name ?? "好友"} 的羁绊 → ❤️ Lv${after}`),
+      );
+      this.companion?.emitMoment(
+        "game.event.friend_bond_up",
+        { name: f?.name ?? null, level: after },
+        { salience: 0.5, voiceRelevant: true },
       );
     }
   }
@@ -2116,6 +2170,11 @@ export class Game {
     this.duo = { peerSocketId, peerName, peerVisitorId, progress: 0, missing: 0 };
     this.showDuoBar();
     this.hud.showAmbientToast(t("Fly together — stay close! ✨", "默契同飞——飞近保持连接!✨"));
+    this.companion?.emitMoment(
+      "game.event.duo_started",
+      { name: peerName },
+      { salience: 0.6, voiceRelevant: true },
+    );
   }
 
   /** Advance the duo while both stay linked; drain when apart; complete at 100%. */
@@ -2155,6 +2214,11 @@ export class Game {
     this.floatGift("✨");
     this.floatGift("❤️");
     this.packageQuestHUD?.showBubble("✨", t("We did it together!", "我们一起做到了!"));
+    this.companion?.emitMoment(
+      "game.event.duo_complete",
+      { name: d.peerName },
+      { salience: 0.8, voiceRelevant: true },
+    );
   }
 
   private cancelDuo(reason: string) {
@@ -5210,6 +5274,15 @@ export class Game {
               const acc = (this.bondTimers.get(vid) ?? 0) + dt;
               if (acc >= 12) { this.bumpBond(vid, 1); this.bondTimers.set(vid, acc - 12); }
               else this.bondTimers.set(vid, acc);
+              // Tell the companion a paired friend is here so it can point them out.
+              if (!this.friendHereAnnounced.has(vid)) {
+                this.friendHereAnnounced.add(vid);
+                this.companion?.emitMoment(
+                  "game.event.friend_here",
+                  { name: p.name, bondLevel: friendBondLevel(this.friendByVisitor.get(vid)?.bond) },
+                  { salience: 0.6, voiceRelevant: true },
+                );
+              }
               // Offer a "fly together" duo once per friend per session.
               if (!this.duo && !this.duoChipOffered.has(vid)) {
                 this.duoChipOffered.add(vid);
@@ -5478,6 +5551,7 @@ export class Game {
         this.companionRendezvousTimer = 0;
         void this.emitRendezvous();
         this.emitCoopState();
+        this.emitFriendsState();
       }
       // A2A: detect when we meet another companion-pilot so the agents greet.
       this.companionEncounterTimer += dt;
