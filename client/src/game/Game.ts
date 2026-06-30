@@ -852,6 +852,20 @@ export class Game {
     try {
       const api: Record<string, unknown> = {
         version: "diag1",
+        /** Why are the `.test` hooks present or absent? `buildHooks` is the
+         *  COMPILE-TIME gate (true only in a dev/preview build with VITE_QA_HOOKS=1;
+         *  always false in the public production bundle, where the whole `.test` block
+         *  is tree-shaken out — no URL/localStorage flag can revive it). `optedIn` is
+         *  the RUNTIME `?qa=1` (URL alone suffices) or localStorage `a2a_qa=1`.
+         *  `.test` exists iff `buildHooks && optedIn`. So `buildHooks:false` means
+         *  "production build, hooks compiled out" — NOT a gating bug. */
+        get qa() {
+          return {
+            buildHooks: __A2A_QA__,
+            optedIn: g.qaRuntimeOptedIn(),
+            testAvailable: __A2A_QA__ && g.qaRuntimeOptedIn(),
+          };
+        },
         get hasToken() { return !!ProgressionManager.loadCompanionToken(); },
         get companionReady() { return g.companion?.isReady ?? false; },
         get inCall() { return g.companion?.inCall ?? false; },
