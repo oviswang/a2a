@@ -8348,7 +8348,7 @@ export class Game {
       this.packageQuestHUD.hideDeliveryTarget();
       this.setPortalHintVisible(false);
 
-      this.hud.setWorldName(localizeWorldName("Cosmic Void"));
+      this.hud.setWorldName(t("Cosmic Void", "宇宙虚空"));
       this.hud.setPlayerCountVisible(false);
 
       this.applyDayNightPreset();
