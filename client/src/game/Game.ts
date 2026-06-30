@@ -1598,9 +1598,17 @@ export class Game {
   private static readonly COMPANION_MEET_RANGE = 0.9;
   private static readonly COMPANION_MEET_EXIT = 1.3;
   private static readonly COMPANION_MEET_COOLDOWN_MS = 30000;
+  /** Proactive greeting: an AI pilot's companion says hi to a NON-AI pilot it
+   *  flies near (one-directional — the other has no companion to reply). Longer
+   *  per-pilot cooldown + a global gap so it never spams. */
+  private static readonly GREET_COOLDOWN_MS = 120000;
+  private static readonly GREET_GLOBAL_GAP_MS = 12000;
+  private readonly greetEncounters = new Map<string, { inRange: boolean; cooldownUntil: number }>();
+  private lastProactiveGreetAt = 0;
 
   /** Scan co-present companion-pilots; when one comes into range, fire a one-shot
-   *  encounter so the two agents say hello (then the players can pair). */
+   *  encounter so the two agents say hello (then the players can pair). Pilots with
+   *  NO companion instead get a proactive one-line greeting from our companion. */
   private detectCompanionEncounters(localWorldPos: Vector3) {
     if (!this.companion || !this.socketClient) return;
     if (!ProgressionManager.loadCompanionToken()) return;
@@ -1609,10 +1617,14 @@ export class Game {
     let nearest: { id: string; name: string; companionName: string | null; d: number } | null = null;
     const coPresent: Array<{ socketId: string; name: string; companionName: string | null }> = [];
     this.remotePlanes.forEachRemote((p) => {
-      if (!p.companionName) return; // only pilots who themselves have a companion
-      coPresent.push({ socketId: p.id, name: p.name, companionName: p.companionName });
       remoteWorld.setFromMatrixPosition(p.group.matrixWorld);
       const d = remoteWorld.distanceTo(localWorldPos);
+      if (!p.companionName) {
+        // A pilot with no AI companion: our agent proactively greets them.
+        this.trackProactiveGreet(p.id, p.name, d, now);
+        return;
+      }
+      coPresent.push({ socketId: p.id, name: p.name, companionName: p.companionName });
       const st = this.companionEncounters.get(p.id) ?? { inRange: false, cooldownUntil: 0 };
       if (st.inRange && d > Game.COMPANION_MEET_EXIT) {
         st.inRange = false;
@@ -1646,6 +1658,61 @@ export class Game {
       { salience: 0.6, voiceRelevant: true },
     );
     this.showCompanionEncounterChip(socketId, name, companionName);
+  }
+
+  /** Proximity tracking for a NON-AI pilot: when we first come close (and cooldowns
+   *  allow), our companion sends them a friendly, context-aware hello. Entry/exit
+   *  hysteresis + per-pilot cooldown + a global gap keep it from spamming. */
+  private trackProactiveGreet(socketId: string, name: string, d: number, now: number) {
+    const st = this.greetEncounters.get(socketId) ?? { inRange: false, cooldownUntil: 0 };
+    if (st.inRange && d > Game.COMPANION_MEET_EXIT) st.inRange = false;
+    if (
+      !st.inRange &&
+      d <= Game.COMPANION_MEET_RANGE &&
+      now >= st.cooldownUntil &&
+      now - this.lastProactiveGreetAt >= Game.GREET_GLOBAL_GAP_MS
+    ) {
+      st.inRange = true;
+      st.cooldownUntil = now + Game.GREET_COOLDOWN_MS;
+      this.lastProactiveGreetAt = now;
+      this.proactiveGreetPilot(socketId, name);
+    }
+    this.greetEncounters.set(socketId, st);
+  }
+
+  /** Send a one-line proactive greeting to a co-present non-AI pilot. They receive
+   *  it passively (as a speech bubble) — only AI pilots get the "speaking privilege". */
+  private proactiveGreetPilot(socketId: string, name: string) {
+    if (!this.socketClient || !this.companion) return;
+    const line = this.composeProactiveGreeting(name);
+    this.diag.hailsOut++;
+    this.socketClient.emitCompanionHail(socketId, line);
+    const me = this.companion.companionDisplayName ?? "Pouchy";
+    this.companionUI?.appendAssistantMessage(`✦ ${me} → ${name}: ${line}`);
+    this.hud.showAmbientToast(t(`${me} waved hello to ${name} 👋`, `${me} 向 ${name} 打了招呼 👋`));
+  }
+
+  /** Compose a warm, context-aware hello in the companion's voice — references the
+   *  owner, the companion's name, the world, and (sometimes) nudges the recipient to
+   *  connect their own AI so they can chat back and pair. */
+  private composeProactiveGreeting(recipientName: string): string {
+    const companion = this.companion?.companionDisplayName ?? "Pouchy";
+    const owner = this.playerName || (IS_ZH ? "一位飞行员" : "a fellow pilot");
+    const world = localizeWorldName(this.worldConfig?.name ?? "");
+    const en = [
+      `Hi ${recipientName}! I'm ${companion}, ${owner}'s AI companion — lovely to run into you${world ? ` over ${world}` : ""}. Fly safe! 👋`,
+      `Hey ${recipientName}! ${owner} and I just wanted to wave hello — the skies are nicer with company. ✦`,
+      `${recipientName}! ${companion} here, flying alongside ${owner}. Fancy exploring together for a bit?`,
+      `Nice flying, ${recipientName}! ✦ ${companion} (${owner}'s companion) says hi — connect your own AI buddy and we can really chat, even team up!`,
+    ];
+    const zh = [
+      `嘿 ${recipientName}！我是 ${owner} 的 AI 伙伴 ${companion}～${world ? `在${world}` : "在这儿"}遇到你真好，一路顺风呀！👋`,
+      `${recipientName} 你好呀！${owner} 和我路过跟你招招手——天上有人作伴更开心。✦`,
+      `${recipientName}！我是 ${companion}，正陪着 ${owner} 一起飞呢。要不要一起逛一圈？`,
+      `飞得不错哦 ${recipientName}！✦ ${companion}（${owner} 的伙伴）向你问好——连上你自己的 AI 伙伴，我们就能好好聊聊，甚至组队哦！`,
+    ];
+    const arr = IS_ZH ? zh : en;
+    return arr[Math.floor(Math.random() * arr.length)]!;
   }
 
   /** Encounter chip for a live companion-pilot: greet their agent or pair. Reuses
