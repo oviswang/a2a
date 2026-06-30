@@ -42,6 +42,7 @@ export class CompanionUI {
   private statusDot!: HTMLElement;
   private inviteRow!: HTMLElement;
   private inviteBtn!: HTMLButtonElement;
+  private pairBtn!: HTMLButtonElement;
   private letterStack!: HTMLElement;
 
   private canInvite = false;
@@ -125,12 +126,15 @@ export class CompanionUI {
     this.inviteRow = this.panel.querySelector(".cmp-invite-row")!;
     this.inviteBtn = this.panel.querySelector(".cmp-invite-btn")!;
     this.inviteBtn.textContent = t("Invite friends", "邀请好友");
-    const pairBtn = this.panel.querySelector(".cmp-pair-btn") as HTMLButtonElement;
-    pairBtn.textContent = t("Pair nearby", "与附近玩家配对");
+    this.pairBtn = this.panel.querySelector(".cmp-pair-btn") as HTMLButtonElement;
+    this.pairBtn.textContent = t("Pair nearby", "与附近玩家配对");
+    // Disabled until a co-present companion-pilot is actually nearby, so we never
+    // offer a pairing that can't succeed.
+    this.setPairAvailable(0);
     this.panel.querySelector(".cmp-panel-close")!.addEventListener("click", () => this.togglePanel(false));
     this.panel.querySelector(".cmp-friends-btn")!.addEventListener("click", () => this.opts.onShowFriends?.());
     this.inviteBtn.addEventListener("click", () => this.opts.onInviteFriends());
-    pairBtn.addEventListener("click", () => this.opts.onPairNearby());
+    this.pairBtn.addEventListener("click", () => this.opts.onPairNearby());
     this.panel.querySelector(".cmp-input-row")!.addEventListener("submit", (e) => {
       e.preventDefault();
       const text = this.input.value.trim();
@@ -197,6 +201,19 @@ export class CompanionUI {
       `世界代码：${slug}`,
     );
     void worldName;
+  }
+
+  /** Enable the "Pair nearby" button only when companion-pilots are co-present, so
+   *  tapping it always reaches someone who can actually pair. `count` = nearby
+   *  pilots who have a connected companion. */
+  setPairAvailable(count: number) {
+    if (!this.pairBtn) return;
+    const available = count > 0;
+    this.pairBtn.disabled = !available;
+    this.pairBtn.classList.toggle("cmp-pair-btn--ready", available);
+    this.pairBtn.title = available
+      ? t("Pair companions with a nearby pilot", "与附近的飞行员配对 AI 伙伴")
+      : t("No companion-pilots nearby yet", "附近暂无可配对的飞行员");
   }
 
   appendAssistantMessage(text: string) {
@@ -342,7 +359,9 @@ export class CompanionUI {
         background: rgba(120,180,255,0.22); color: #fff; border: none; border-radius: 8px;
         padding: 6px 12px; font-size: 0.72rem; font-weight: 600; cursor: pointer; white-space: nowrap;
       }
-      .cmp-pair-btn { background: rgba(180,140,255,0.24); }
+      .cmp-pair-btn { background: rgba(180,140,255,0.24); transition: opacity 0.2s ease; }
+      .cmp-pair-btn:disabled { opacity: 0.32; cursor: default; filter: grayscale(0.6); }
+      .cmp-pair-btn--ready { background: rgba(180,140,255,0.4); }
       .cmp-transcript {
         flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;
         font-size: 0.82rem; line-height: 1.4; min-height: 80px;
