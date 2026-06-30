@@ -559,6 +559,16 @@ export class Game {
     hailsIn: 0, hailsOut: 0, giftsIn: 0, giftsOut: 0, encounters: 0,
     lastError: null as string | null,
   };
+  /** Outcome of the most recent pairing attempt — observable on `window.__a2a.pair`
+   *  so QA/automation can assert the result (incl. the same-account / scope reason)
+   *  without scraping a transient toast. Never contains the token. */
+  private lastPairResult: {
+    ok: boolean;
+    code: string;
+    message: string;
+    withName?: string;
+    at: number;
+  } | null = null;
   /** QA-only: auto-accept incoming pairing requests (set via window.__a2a.test). */
   private qaAutoAcceptPairs = false;
   /** QA-only: auto-accept incoming duo invites (set via window.__a2a.test). */
@@ -880,6 +890,11 @@ export class Game {
             : { active: false };
         },
         get giftsReceived() { return ProgressionManager.loadReceivedGifts().length; },
+        /** Outcome of the most recent pairing attempt: `{ ok, code, message, withName,
+         *  at }` or null. `code` is "paired" | "same_account" | "scope_initiator" |
+         *  "scope_visitor" | "network" | "declined" | "no_companion" | "unknown" — so
+         *  QA can assert the same-account failure without scraping the toast. */
+        get pair() { return g.lastPairResult; },
         /** The visible chat transcript rows — for asserting replies arrived. */
         transcript() {
           return Array.from(document.querySelectorAll(".cmp-msg")).map((e) => ({
@@ -3110,14 +3125,16 @@ export class Game {
     this.endPairWait(ev.fromId);
     if (!ev.accept || !ev.visitorToken || !ev.visitorId) {
       // Distinguish "they can't pair (no companion)" from an actual decline (B).
-      this.hud.showAmbientToast(
+      const code = ev.reason === "no_companion" ? "no_companion" : "declined";
+      const message =
         ev.reason === "no_companion"
           ? t(
               `${ev.fromName} hasn't connected an AI companion, so can't pair yet.`,
               `${ev.fromName} 还没连接 AI 伙伴，暂时无法配对。`,
             )
-          : t(`${ev.fromName} declined the pairing.`, `${ev.fromName} 拒绝了配对。`),
-      );
+          : t(`${ev.fromName} declined the pairing.`, `${ev.fromName} 拒绝了配对。`);
+      this.lastPairResult = { ok: false, code, message, withName: ev.fromName, at: Date.now() };
+      this.hud.showAmbientToast(message);
       return;
     }
     if (!this.companion) return;
@@ -3132,9 +3149,13 @@ export class Game {
       });
       this.refreshFriendIds();
       this.socketClient?.emitGhostPairResolved(ev.visitorId);
+      this.lastPairResult = { ok: true, code: "paired", message: `paired with ${ev.fromName}`, withName: ev.fromName, at: Date.now() };
       this.celebratePairing(ev.fromName);
     } else {
-      this.hud.showAmbientToast(this.pairFailureMessage(this.companion.getLastPairError()));
+      const reason = this.companion.getLastPairError();
+      const message = this.pairFailureMessage(reason);
+      this.lastPairResult = { ok: false, code: reason ?? "unknown", message, withName: ev.fromName, at: Date.now() };
+      this.hud.showAmbientToast(message);
     }
   }
 
