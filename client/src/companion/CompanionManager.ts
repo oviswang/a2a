@@ -48,6 +48,54 @@ export type ToolExecutor = (
   args: Record<string, unknown>,
 ) => Promise<{ ok: boolean; result?: unknown }>;
 
+/** Why an in-world pairing attempt failed, classified for a precise toast. */
+export type PairFailReason =
+  | "same_account" // both companions belong to the same Pouchy account
+  | "scope_initiator" // this player's token lacks represent / represent:pair
+  | "scope_visitor" // the other player's token lacks social.message
+  | "network" // connect/relay failure
+  | "unknown";
+
+/** Map a raw SDK/HTTP error from pairVisitor onto a user-facing reason. */
+function classifyPairError(err: unknown): PairFailReason {
+  const msg = (err instanceof Error ? err.message : String(err ?? "")).toLowerCase();
+  if (!msg) return "unknown";
+  // Pairing a companion with itself (same uid) — the most common tester mistake.
+  if (
+    msg.includes("self") ||
+    msg.includes("same account") ||
+    msg.includes("same uid") ||
+    msg.includes("cannot pair with yourself") ||
+    msg.includes("already friends")
+  ) {
+    return "same_account";
+  }
+  // Missing scopes. The initiator needs represent / represent:pair; the visitor
+  // needs social.message. HTTP 403 / "forbidden" / "scope" / "permission".
+  if (msg.includes("represent")) return "scope_initiator";
+  if (msg.includes("social.message") || msg.includes("social_message")) return "scope_visitor";
+  if (
+    msg.includes("403") ||
+    msg.includes("forbidden") ||
+    msg.includes("scope") ||
+    msg.includes("permission") ||
+    msg.includes("unauthorized") ||
+    msg.includes("401")
+  ) {
+    return "scope_initiator";
+  }
+  if (
+    msg.includes("network") ||
+    msg.includes("fetch") ||
+    msg.includes("timeout") ||
+    msg.includes("connect") ||
+    msg.includes("econn")
+  ) {
+    return "network";
+  }
+  return "unknown";
+}
+
 export interface CompanionManagerOptions {
   token: string;
   locale: "en" | "zh";
@@ -105,6 +153,8 @@ export class CompanionManager {
   private disabled = false;
   private ready = false;
   private scopes = new Set<string>();
+  /** Reason the most recent pairWithVisitor() failed, classified for the UI. */
+  private lastPairError: PairFailReason | null = null;
   private readonly opts: CompanionManagerOptions;
 
   /** Last sent value + time per retained `type`, for dedupe + throttle. */
@@ -465,6 +515,7 @@ export class CompanionManager {
     visitorName: string | undefined,
   ): Promise<string | null> {
     if (this.disabled) return null;
+    this.lastPairError = null;
     let rep: CompanionClient | null = null;
     try {
       rep = createCompanion({
@@ -477,7 +528,14 @@ export class CompanionManager {
       await rep.connect();
       const { pairId } = await rep.pairVisitor(visitorToken);
       return pairId;
-    } catch {
+    } catch (e) {
+      this.lastPairError = classifyPairError(e);
+      // Token is a bearer secret, so we deliberately do NOT log the visitor token;
+      // only the classified reason + the raw message (which never contains it).
+      console.warn(
+        `[companion] pairVisitor failed (${this.lastPairError}):`,
+        e instanceof Error ? e.message : e,
+      );
       return null;
     } finally {
       try {
@@ -486,6 +544,11 @@ export class CompanionManager {
         /* ignore */
       }
     }
+  }
+
+  /** Why the most recent pairWithVisitor() returned null (for a precise toast). */
+  getLastPairError(): PairFailReason | null {
+    return this.lastPairError;
   }
 
   // ── Teardown ────────────────────────────────────────────────────────────────
