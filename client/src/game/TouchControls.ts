@@ -353,13 +353,17 @@ export class TouchControls {
         z-index: 110;
         pointer-events: none;
         touch-action: none;
+        /* How far BOTH control clusters are lifted off the bottom edge, so they sit
+         * in comfortable thumb reach (scales with screen height, with a floor; kept
+         * modest so the raised right buttons stay clear of the chat panel). */
+        --tc-lift: max(64px, 8vh);
       }
       .tc-joy-base {
         position: absolute;
         /* Raised off the bottom corner so the top of the joystick lines up with the
          * top of the right-hand button stack (↑ + ●), which is easier to reach.
-         * Offset = right-stack height − joystick height (see .tc-right-stack). */
-        bottom: calc(max(20px, env(safe-area-inset-bottom)) + 47px);
+         * Offset = (right-stack height − joystick height) + the shared lift. */
+        bottom: calc(max(20px, env(safe-area-inset-bottom)) + 47px + var(--tc-lift));
         left: max(14px, calc(10px + env(safe-area-inset-left)));
         width: 110px;
         height: 110px;
@@ -386,9 +390,9 @@ export class TouchControls {
       .tc-right-col {
         position: absolute;
         right: max(12px, calc(8px + env(safe-area-inset-right)));
-        /* Anchored to the bottom safe-area; the joystick is raised to meet the TOP
-         * of this stack (see .tc-joy-base) rather than its bottom. */
-        bottom: max(20px, env(safe-area-inset-bottom));
+        /* Lifted by the same amount as the joystick (which adds a stack-height offset
+         * on top, to align their TOPS) so both clusters rise together. */
+        bottom: calc(max(20px, env(safe-area-inset-bottom)) + var(--tc-lift));
         display: flex;
         flex-direction: column;
         align-items: flex-end;
@@ -455,8 +459,9 @@ export class TouchControls {
         }
         .tc-joy-base {
           width: 100px; height: 100px;
-          /* 2×76 + 13 gap − 100 = 65px to align with the taller mobile button stack. */
-          bottom: calc(max(20px, env(safe-area-inset-bottom)) + 65px);
+          /* 2×76 + 13 gap − 100 = 65px to align with the taller mobile button stack,
+           * plus the shared lift so both clusters rise together. */
+          bottom: calc(max(20px, env(safe-area-inset-bottom)) + 65px + var(--tc-lift));
         }
         .tc-joy-thumb { width: 40px; height: 40px; }
         .tc-elevate-btn,
