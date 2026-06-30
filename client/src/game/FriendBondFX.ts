@@ -7,6 +7,7 @@ import {
   LineBasicMaterial,
   Vector3,
 } from "three";
+import { t } from "../i18n";
 
 /** A paired A2A friend present in the world this frame. */
 export interface FriendInWorld {
@@ -136,7 +137,7 @@ export class FriendBondFX {
       chevron.style.transform = `rotate(${screenAng}deg)`;
       const label = arrow.lastElementChild as HTMLElement;
       const bff = (f.bondLevel ?? 0) >= 3 ? "❤︎ " : "";
-      label.textContent = `${bff}${f.name} · ${Math.round((d * DIST_SCALE) / 10) * 10}m`;
+      label.textContent = `${bff}${f.name} · ${Math.round((d * DIST_SCALE) / 10) * 10}${t("m", "米")}`;
     }
 
     // Drop arrows for friends who left.

@@ -184,12 +184,12 @@ export class HUD {
         </button>
       </div>
       <div class="hud-xp-panel">
-        <span class="hud-xp-level">LVL 1</span>
+        <span class="hud-xp-level">等级 1</span>
         <div class="hud-xp-bar-row">
           <div class="hud-xp-bar">
             <div class="hud-xp-bar-fill"></div>
           </div>
-          <span class="hud-xp-value">0 XP</span>
+          <span class="hud-xp-value">0 经验</span>
         </div>
       </div>
     `,
@@ -333,17 +333,17 @@ export class HUD {
   }
 
   setXP(current: number, nextLevelXP: number, currentLevelXP: number, level: number) {
-    this.xpLevelEl.textContent = `LVL ${level}`;
+    this.xpLevelEl.textContent = `${t("LVL", "等级")} ${level}`;
     const range = nextLevelXP - currentLevelXP;
     const progress = range > 0 ? (current - currentLevelXP) / range : 1;
     this.xpBarFill.style.width = `${Math.min(100, Math.max(0, progress * 100))}%`;
-    this.xpValueEl.textContent = `${current} XP`;
+    this.xpValueEl.textContent = `${current} ${t("XP", "经验")}`;
   }
 
   showXPGain(amount: number) {
     const popup = document.createElement("div");
     popup.className = "hud-xp-popup";
-    popup.textContent = `+${amount} XP`;
+    popup.textContent = `+${amount} ${t("XP", "经验")}`;
     this.el.appendChild(popup);
 
     requestAnimationFrame(() => popup.classList.add("hud-xp-popup-animate"));
