@@ -15,7 +15,18 @@ import type {
   ServerToClientEvents,
   ClientToServerEvents,
   Vehicle,
+  WorldObjectiveState,
+  BrazierSlot,
+  ObjectiveBrazierEvent,
 } from "@globefly/shared";
+
+// Shared co-op objective constants — keep in sync with shared/types.ts (the server
+// imports shared TYPES but, like the flag/paintball constants, keeps its own value
+// copies so it never runtime-imports values from the shared source package).
+const BRAZIER_COUNT = 5;
+const BRAZIER_BURN_MS = 45_000;
+const BRAZIER_MOON_PAUSE_MS = 60_000;
+const MOON_DURATION_MS = 300_000;
 import {
   FLAG_AUTO_RESPAWN_MS,
   FLAG_CAPTURE_DURATION_MS,
@@ -119,6 +130,22 @@ export class Room {
   private hotFlagChallengers = new Map<string, ChallengerEntry>();
   private hotFlagSpawnTimer: ReturnType<typeof setTimeout> | null = null;
   private hotFlagFreeRespawnTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // ── Shared co-op objective: one moon countdown + five braziers for the whole room ──
+  private braziers: BrazierSlot[] = Array.from({ length: BRAZIER_COUNT }, () => ({
+    lit: false,
+    eternal: false,
+    burnEndsAt: null,
+  }));
+  private moonElapsedMs = 0;
+  /** Epoch ms a temporary all-five-lit pause ends; null = not paused. */
+  private moonPauseEndsAt: number | null = null;
+  private moonFrozen = false;
+  private objectiveSaved = false;
+  private objectiveTimer: ReturnType<typeof setInterval> | null = null;
+  private lastObjectiveSyncMs = 0;
+  private static readonly OBJECTIVE_TICK_MS = 1000;
+  private static readonly OBJECTIVE_SYNC_MS = 3000;
 
   constructor(slug: string, globeRadius: number, worldSeed: number, terrainType: string) {
     this.slug = slug;
@@ -254,6 +281,129 @@ export class Room {
       if (this.players.size < 2) return;
       this.spawnHotFlagAtRandomPosition();
     }, FLAG_SPAWN_DELAY_MS);
+  }
+
+  // ── Shared co-op objective ────────────────────────────────────────────────
+  private buildObjectiveState(): WorldObjectiveState {
+    const now = Date.now();
+    return {
+      moonElapsedMs: this.moonElapsedMs,
+      moonDurationMs: MOON_DURATION_MS,
+      paused: this.moonPauseEndsAt != null && now < this.moonPauseEndsAt,
+      pauseEndsAt: this.moonPauseEndsAt,
+      frozen: this.moonFrozen,
+      saved: this.objectiveSaved,
+      braziers: this.braziers.map((b) => ({ ...b })),
+    };
+  }
+
+  private broadcastObjectiveSync() {
+    this.lastObjectiveSyncMs = Date.now();
+    const state = this.buildObjectiveState();
+    for (const [, p] of this.players) p.socket.emit("objective:sync", state);
+  }
+
+  private broadcastObjectiveBrazier(ev: ObjectiveBrazierEvent) {
+    for (const [, p] of this.players) p.socket.emit("objective:brazier", ev);
+  }
+
+  private startObjectiveTimerIfNeeded() {
+    if (this.objectiveTimer != null || this.players.size === 0) return;
+    this.objectiveTimer = setInterval(() => this.tickObjective(), Room.OBJECTIVE_TICK_MS);
+  }
+
+  private clearObjectiveTimer() {
+    if (this.objectiveTimer != null) {
+      clearInterval(this.objectiveTimer);
+      this.objectiveTimer = null;
+    }
+  }
+
+  /** Reset the shared objective for a fresh attempt (on a shared loss, or when the
+   *  room empties so a future session starts clean). */
+  private resetObjective() {
+    this.moonElapsedMs = 0;
+    this.moonPauseEndsAt = null;
+    this.moonFrozen = false;
+    this.objectiveSaved = false;
+    for (const b of this.braziers) {
+      b.lit = false;
+      b.eternal = false;
+      b.burnEndsAt = null;
+    }
+  }
+
+  private tickObjective() {
+    if (this.players.size === 0) return;
+    const now = Date.now();
+    let changed = false;
+
+    // Expire temporary brazier flames.
+    for (let i = 0; i < this.braziers.length; i++) {
+      const b = this.braziers[i]!;
+      if (b.lit && !b.eternal && b.burnEndsAt != null && now >= b.burnEndsAt) {
+        b.lit = false;
+        b.burnEndsAt = null;
+        this.broadcastObjectiveBrazier({ index: i, lit: false, eternal: false });
+        changed = true;
+      }
+    }
+
+    if (!this.moonFrozen && !this.objectiveSaved) {
+      const stillPaused = this.moonPauseEndsAt != null && now < this.moonPauseEndsAt;
+      if (this.moonPauseEndsAt != null && now >= this.moonPauseEndsAt) {
+        this.moonPauseEndsAt = null;
+        changed = true;
+      }
+      if (!stillPaused) {
+        this.moonElapsedMs += Room.OBJECTIVE_TICK_MS;
+        if (this.moonElapsedMs >= MOON_DURATION_MS) {
+          // Shared loss — the whole room fails together, then the objective rewinds.
+          for (const [, p] of this.players) p.socket.emit("world:lost");
+          this.resetObjective();
+          this.broadcastObjectiveSync();
+          return;
+        }
+      }
+    }
+
+    if (changed || now - this.lastObjectiveSyncMs >= Room.OBJECTIVE_SYNC_MS) {
+      this.broadcastObjectiveSync();
+    }
+  }
+
+  /** A player flew into brazier `index` and lit it (eternal = spent an Eternal Flame).
+   *  Applies it to the shared state, broadcasts, and resolves win/pause. Returns whether
+   *  it was accepted (rejected when already eternal / already-lit-and-only-temp, so the
+   *  caller can refund a wasted flame on a simultaneous-light race). */
+  lightBrazier(socketId: string, index: number, eternal: boolean): { accepted: boolean } {
+    if (!this.players.has(socketId)) return { accepted: false };
+    if (!Number.isInteger(index) || index < 0 || index >= BRAZIER_COUNT) return { accepted: false };
+    if (this.objectiveSaved || this.moonFrozen) return { accepted: false };
+    const b = this.braziers[index]!;
+    // Already permanent → nothing to do. Already temp-lit and this is only temp → no-op.
+    if (b.eternal) return { accepted: false };
+    if (b.lit && !eternal) return { accepted: false };
+
+    const now = Date.now();
+    b.lit = true;
+    b.eternal = !!eternal;
+    b.burnEndsAt = b.eternal ? null : now + BRAZIER_BURN_MS;
+    const by = this.players.get(socketId)?.state.name;
+    this.broadcastObjectiveBrazier({ index, lit: true, eternal: b.eternal, by });
+
+    const allEternal = this.braziers.every((x) => x.lit && x.eternal);
+    const allLit = this.braziers.every((x) => x.lit);
+    if (allEternal) {
+      this.objectiveSaved = true;
+      this.moonFrozen = true;
+      this.moonPauseEndsAt = null;
+      for (const [, p] of this.players) p.socket.emit("world:saved", { method: "eternal_flames" });
+    } else if (allLit) {
+      this.moonPauseEndsAt = now + BRAZIER_MOON_PAUSE_MS;
+    }
+    this.broadcastObjectiveSync();
+    return { accepted: true };
   }
 
   forceFlagSpawn() {
@@ -470,6 +620,10 @@ export class Room {
       .map((p) => p.state);
     socket.emit("world:state", allPlayers);
     socket.emit("flag:sync", this.buildFlagSync());
+    // Shared co-op objective: hand the joiner the room's current moon + brazier state
+    // (so a late joiner inherits the in-progress countdown), and run the moon timer.
+    socket.emit("objective:sync", this.buildObjectiveState());
+    this.startObjectiveTimerIfNeeded();
 
     this.scheduleHotFlagSpawnIfNeeded();
 
@@ -504,6 +658,9 @@ export class Room {
       this.hotFlagHolderId = null;
       this.hotFlagImmuneUntilMs = 0;
       this.clearAllChallengersWithBroadcast();
+      // Stop the moon and reset the shared objective so the next session starts fresh.
+      this.clearObjectiveTimer();
+      this.resetObjective();
       return;
     }
 

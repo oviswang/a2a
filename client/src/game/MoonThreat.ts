@@ -100,6 +100,12 @@ export class MoonThreat {
   private approachPauseRemaining = 0;
   /** All-five eternal flames — moon approach and spin frozen until reset. */
   private permanentlyFrozen = false;
+  /** Currently paused by the shared objective (all five lit but not all eternal).
+   *  The server owns the pause; the client just holds the moon while it's set. */
+  private serverPaused = false;
+  /** Room-authoritative mode: the SERVER decides the loss (world:lost → impactNow),
+   *  so the client never self-triggers impact (its elapsed is capped just below 1). */
+  private serverDriven = false;
 
   get isPermanentlyFrozen(): boolean {
     return this.permanentlyFrozen;
@@ -114,8 +120,11 @@ export class MoonThreat {
     return this.impacted;
   }
 
-  /** True when the moon is about to hit — time to start the cutscene. */
+  /** True when the moon is about to hit — time to start the cutscene. In
+   *  server-driven mode the loss is decided by the server (world:lost → impactNow),
+   *  so this never pre-triggers (the elapsed sits capped just below 1 until then). */
   get isNearImpact() {
+    if (this.serverDriven) return false;
     return !this.impacted && this.progress >= NEAR_IMPACT_THRESHOLD;
   }
 
@@ -162,6 +171,34 @@ export class MoonThreat {
     if (this.impacted || this.permanentlyFrozen) return;
     const sec = remainingMs / 1000;
     this.approachPauseRemaining = Math.max(this.approachPauseRemaining, sec);
+  }
+
+  /** Snap to the room's authoritative shared moon state. The server owns the
+   *  countdown, the pause, and the freeze, so every client's moon stays in lock-step
+   *  (and therefore reaches impact together → a shared loss). Local `update()` still
+   *  advances between ~3 s syncs for smoothness; each sync corrects the drift. */
+  syncFromServer(s: { elapsedMs: number; paused: boolean; frozen: boolean }) {
+    this.serverDriven = true;
+    if (this.impacted) return; // mid-cinematic; resync after reset
+    this.serverPaused = s.paused;
+    if (s.frozen) {
+      if (!this.permanentlyFrozen) this.freezeApproachForever(s.elapsedMs / 1000);
+      else this.elapsed = Math.min(s.elapsedMs / 1000, this.approachDurationSec * 0.999);
+      return;
+    }
+    this.permanentlyFrozen = false;
+    // Cap just below 1 so the client never self-triggers impact — the server decides
+    // the shared loss and broadcasts world:lost → impactNow() (all clients together).
+    this.elapsed = Math.max(0, Math.min(s.elapsedMs / 1000, this.approachDurationSec * 0.999));
+  }
+
+  /** The shared moon reached the world — the server told the whole room. Begin the
+   *  impact cinematic immediately (the one place impact starts in server-driven mode).
+   *  Sets `impacted`, so subsequent objective:sync snaps are ignored until reset. */
+  impactNow() {
+    if (this.impacted) return;
+    this.elapsed = this.approachDurationSec;
+    this.triggerImpact();
   }
 
   /** World-space position of the moon centre. */
@@ -635,7 +672,9 @@ if (uMolten > 0.01) {
     }
     this.updateEmbers(freeze ? 0 : dt, molten);
 
-    if (t >= 1.0 && !this.impacted) {
+    // The server decides the shared loss (world:lost → impactNow); in server-driven
+    // mode the client never self-triggers impact (its elapsed is capped below 1).
+    if (t >= 1.0 && !this.impacted && !this.serverDriven) {
       this.triggerImpact();
     }
   }
@@ -669,7 +708,8 @@ if (uMolten > 0.01) {
       return;
     }
 
-    this.applyPreImpactApproach(dt, true);
+    // Server-driven: render + interpolate, but hold while the shared pause is on.
+    this.applyPreImpactApproach(dt, !this.serverPaused);
   }
 
   getShakeTrauma(): number {
@@ -933,6 +973,9 @@ if (uMolten > 0.01) {
     this.impactTime = 0;
     this.approachPauseRemaining = 0;
     this.permanentlyFrozen = false;
+    this.serverPaused = false;
+    // Next objective:sync re-enables server-driven mode.
+    this.serverDriven = false;
     this.group.position.copy(MOON_APPROACH_DIR).multiplyScalar(MOON_START_DISTANCE);
     this.group.rotation.y = 0;
     for (const w of this.shockwaveWaves) {

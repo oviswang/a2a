@@ -14,6 +14,8 @@ import type {
   DuoPeerEvent,
   DuoAnswerEvent,
   GhostPairInvite,
+  WorldObjectiveState,
+  ObjectiveBrazierEvent,
   PaintballFiredEvent,
   PaintballHitEvent,
   PaintballUpgradeFlags,
@@ -210,6 +212,25 @@ export class SocketClient {
   }
   onGhostPairNotice(cb: (ev: { name: string }) => void) {
     this.socket.on("ghostpair:notice", cb);
+  }
+
+  // ── Shared co-op objective (one moon + five braziers per world) ──
+  /** Tell the server the local player lit brazier `index` (eternal = spent a flame).
+   *  The ack says whether it was accepted (rejected → refund the flame). */
+  emitBrazierLight(index: number, eternal: boolean, ack: (res: { accepted: boolean }) => void) {
+    this.socket.emit("brazier:light", index, eternal, ack);
+  }
+  onObjectiveSync(cb: (state: WorldObjectiveState) => void) {
+    this.socket.on("objective:sync", cb);
+  }
+  onObjectiveBrazier(cb: (ev: ObjectiveBrazierEvent) => void) {
+    this.socket.on("objective:brazier", cb);
+  }
+  onWorldSaved(cb: (ev: { method: "eternal_flames" }) => void) {
+    this.socket.on("world:saved", cb);
+  }
+  onWorldLost(cb: () => void) {
+    this.socket.on("world:lost", cb);
   }
 
   disconnect() {

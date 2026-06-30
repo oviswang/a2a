@@ -181,6 +181,13 @@ export class RoomManager {
       target.socket.emit("duo:completed", { fromId: socket.id });
     });
 
+    // Shared co-op objective: the local player lit a brazier; the room applies it and
+    // acks whether it was accepted (so a wasted Eternal Flame can be refunded on a race).
+    socket.on("brazier:light", (index, eternal, ack) => {
+      const res = room.lightBrazier(socket.id, Number(index), eternal === true);
+      if (typeof ack === "function") ack(res);
+    });
+
     socket.on("disconnect", () => {
       room.removePlayer(socket.id);
       if (room.isEmpty) {
