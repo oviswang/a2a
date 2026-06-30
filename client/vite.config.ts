@@ -7,7 +7,9 @@ import path from "path";
 // the flag dead-code-eliminate the whole block — incl. the consent-bypassing
 // autoAcceptPairs — from the bundle. Loaded via loadEnv so .env.production counts.
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), "");
+  // Read env from THIS dir (where .env.production lives) so the flag is picked up
+  // regardless of the build's working directory on CI/Vercel.
+  const env = loadEnv(mode, __dirname, "");
   return {
   define: {
     __A2A_QA__: JSON.stringify(mode === "development" || env.VITE_QA_HOOKS === "1"),
