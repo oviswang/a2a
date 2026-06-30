@@ -2964,9 +2964,38 @@ export class Game {
       this.socketClient?.emitGhostPairResolved(ev.visitorId);
       this.celebratePairing(ev.fromName);
     } else {
-      this.hud.showAmbientToast(
-        t("Pairing failed (check your key's permissions).", "配对失败（请检查密钥权限）。"),
-      );
+      this.hud.showAmbientToast(this.pairFailureMessage(this.companion.getLastPairError()));
+    }
+  }
+
+  /** Turn a classified pairing failure into a precise, actionable toast. */
+  private pairFailureMessage(reason: ReturnType<CompanionManager["getLastPairError"]>): string {
+    switch (reason) {
+      case "same_account":
+        return t(
+          "Pairing needs two different Pouchy accounts — you both used the same companion.",
+          "配对需要两个不同的 Pouchy 账号——你们用的是同一个伙伴。",
+        );
+      case "scope_initiator":
+        return t(
+          "Your key can't pair: it needs the represent / represent:pair permission.",
+          "你的密钥无法配对：需要 represent / represent:pair 权限。",
+        );
+      case "scope_visitor":
+        return t(
+          "Their key can't be paired: it needs the social.message permission.",
+          "对方的密钥无法配对：需要 social.message 权限。",
+        );
+      case "network":
+        return t(
+          "Pairing failed — couldn't reach Pouchy. Check your connection and try again.",
+          "配对失败——无法连接 Pouchy，请检查网络后重试。",
+        );
+      default:
+        return t(
+          "Pairing failed. Make sure you each use a different Pouchy account with pairing permission.",
+          "配对失败。请确保双方使用不同的 Pouchy 账号，且密钥具备配对权限。",
+        );
     }
   }
 
