@@ -974,6 +974,15 @@ export class Game {
           /** Treat an active duo as "linked" regardless of distance, so progressPct
            *  climbs to 100 + completes (with bond +20) without real flight. */
           forceDuo: (on = true) => { g.qaForceDuoLinked = on; return `forceDuo=${on}`; },
+          /** One-shot: complete the active duo NOW (bond +20 + celebration), without
+           *  waiting on the rAF tick — for headless/background tabs where rAF is
+           *  throttled. The peer also finishes (duo:completed relay). */
+          completeDuo: () => {
+            if (!g.duo) return "no-active-duo";
+            const peer = g.duo.peerName;
+            g.completeDuo(true);
+            return `duo completed with ${peer}`;
+          },
           /** Open/close the chat panel (the input is hidden until the panel opens). */
           openChat: (open = true) => { g.companionUI?.togglePanel(open); return `chat ${open ? "open" : "closed"}`; },
           /** Send a chat message programmatically (no need to interact with the DOM
