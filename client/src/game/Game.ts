@@ -839,6 +839,9 @@ export class Game {
         get inCall() { return g.companion?.inCall ?? false; },
         get companionName() { return g.companion?.companionDisplayName ?? null; },
         get worldSlug() { return g.worldSlug ?? null; },
+        /** The game server (Railway) base URL — use this to fetch /api/* (NOT the
+         *  page origin, which is the Vercel SPA and 404s API routes to index.html). */
+        get serverUrl() { try { return g.getServerUrl(); } catch { return null; } },
         /** This tab's A2A visitorId — distinct per tab in QA mode (sessionStorage). */
         get visitorId() { return ProgressionManager.loadOrCreateVisitorId(); },
         /** Socket-layer multiplayer state (event-driven; unaffected by rAF throttle). */
@@ -950,6 +953,16 @@ export class Game {
           },
           /** Auto-accept incoming duo invites (skips the consent card). */
           acceptDuo: (on = true) => { g.qaAutoAcceptDuo = on; return `acceptDuo=${on}`; },
+          /** Open/close the chat panel (the input is hidden until the panel opens). */
+          openChat: (open = true) => { g.companionUI?.togglePanel(open); return `chat ${open ? "open" : "closed"}`; },
+          /** Send a chat message programmatically (no need to interact with the DOM
+           *  input) — mirrors typing + send, so replies arrive on the stream. */
+          say: (text: string) => {
+            if (!text || !g.companion) return "no-companion";
+            g.companionUI?.appendUserMessage(text);
+            if (!g.handleVoiceCommand(text)) { g.diag.messagesOut++; void g.companion.sendText(text); }
+            return "sent";
+          },
         };
       }
 
