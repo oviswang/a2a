@@ -953,6 +953,16 @@ export class Game {
           },
           /** Auto-accept incoming duo invites (skips the consent card). */
           acceptDuo: (on = true) => { g.qaAutoAcceptDuo = on; return `acceptDuo=${on}`; },
+          /** QA: register a peer as a friend in the LOCAL roster by visitorId, WITHOUT
+           *  real SDK pairing — so the friend pointer / tether / heart / bond / duo
+           *  (all visitorId-based on our side) become testable with one account. Run
+           *  it in BOTH tabs (each with the other's __a2a.visitorId). */
+          addFakeFriend: (visitorId: string, name = "QA-Friend") => {
+            if (!visitorId) return "need a visitorId";
+            ProgressionManager.addFriend({ visitorId, name, companionName: name, pairedAt: Date.now() });
+            g.refreshFriendIds();
+            return `friend added: ${visitorId}`;
+          },
           /** Open/close the chat panel (the input is hidden until the panel opens). */
           openChat: (open = true) => { g.companionUI?.togglePanel(open); return `chat ${open ? "open" : "closed"}`; },
           /** Send a chat message programmatically (no need to interact with the DOM
