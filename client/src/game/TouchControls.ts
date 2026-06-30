@@ -356,7 +356,10 @@ export class TouchControls {
       }
       .tc-joy-base {
         position: absolute;
-        bottom: max(20px, env(safe-area-inset-bottom));
+        /* Raised off the bottom corner so the top of the joystick lines up with the
+         * top of the right-hand button stack (↑ + ●), which is easier to reach.
+         * Offset = right-stack height − joystick height (see .tc-right-stack). */
+        bottom: calc(max(20px, env(safe-area-inset-bottom)) + 47px);
         left: max(14px, calc(10px + env(safe-area-inset-left)));
         width: 110px;
         height: 110px;
@@ -383,7 +386,8 @@ export class TouchControls {
       .tc-right-col {
         position: absolute;
         right: max(12px, calc(8px + env(safe-area-inset-right)));
-        /* Align the bottom button with the bottom of the left joystick base. */
+        /* Anchored to the bottom safe-area; the joystick is raised to meet the TOP
+         * of this stack (see .tc-joy-base) rather than its bottom. */
         bottom: max(20px, env(safe-area-inset-bottom));
         display: flex;
         flex-direction: column;
@@ -449,7 +453,11 @@ export class TouchControls {
         .tc-action-btn {
           backdrop-filter: none;
         }
-        .tc-joy-base { width: 100px; height: 100px; }
+        .tc-joy-base {
+          width: 100px; height: 100px;
+          /* 2×76 + 13 gap − 100 = 65px to align with the taller mobile button stack. */
+          bottom: calc(max(20px, env(safe-area-inset-bottom)) + 65px);
+        }
         .tc-joy-thumb { width: 40px; height: 40px; }
         .tc-elevate-btn,
         .tc-descend-btn,
