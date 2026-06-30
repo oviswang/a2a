@@ -235,6 +235,12 @@ class RemotePlane {
     this.opacityMaterials = collectRemoteOpacityMaterials(this.group);
   }
 
+  /** Whether this pilot is currently carrying a delivery package (observable
+   *  activity, for context-aware greetings). */
+  get isCarrying(): boolean {
+    return this.carrying;
+  }
+
   /** Multiplayer hot-flag bearer (not related to {@link PlayerState.carrying} / package). */
   setCarryingFlag(on: boolean) {
     this.hotFlag.visible = on;
@@ -468,6 +474,8 @@ export interface RemotePlayerForLabel {
   visitorId: string | null;
   group: Group;
   vehicleType: Vehicle;
+  /** Whether this pilot is carrying a delivery package (for context-aware greetings). */
+  isCarrying: boolean;
   /** Smoothed 0–1 for name pill / mesh fade (moon cutscene). */
   visibilityOpacity: number;
 }
@@ -495,6 +503,7 @@ export class RemotePlaneManager {
         visitorId: rp.visitorId,
         group: rp.group,
         vehicleType: rp.vehicleType,
+        isCarrying: rp.isCarrying,
         visibilityOpacity: rp.visibilityOpacity,
       });
     }
