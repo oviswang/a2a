@@ -33,15 +33,16 @@ function injectStyles() {
   s.textContent = `
     .reel-overlay {
       position: fixed; inset: 0; z-index: 45; touch-action: none;
-      display: flex; align-items: center; justify-content: center;
-      background: radial-gradient(ellipse at center, rgba(6,12,24,0.15), rgba(6,12,24,0.5));
+      display: flex; flex-direction: column; align-items: flex-end; justify-content: center;
+      gap: 12px; padding-right: max(24px, 7vw);
+      /* Only shade the right side where the bar sits — keep the boat/water view clear. */
+      background: linear-gradient(90deg, transparent 45%, rgba(6,12,24,0.42) 100%);
       opacity: 0; transition: opacity 0.15s ease; user-select: none;
     }
     .reel-overlay.reel-overlay--in { opacity: 1; }
     .reel-stage { display: flex; align-items: center; gap: 18px; }
     .reel-title {
-      position: absolute; top: 14%; left: 50%; transform: translateX(-50%);
-      color: #eaf2ff; text-align: center; text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+      color: #eaf2ff; text-align: right; text-shadow: 0 2px 8px rgba(0,0,0,0.6);
     }
     .reel-title-main { font-size: 20px; font-weight: 700; }
     .reel-title-sub { font-size: 13px; opacity: 0.8; margin-top: 3px; }
@@ -69,8 +70,7 @@ function injectStyles() {
       background: linear-gradient(#8affc0, #38d98a);
     }
     .reel-hint {
-      position: absolute; bottom: 12%; left: 50%; transform: translateX(-50%);
-      color: rgba(255,255,255,0.85); font-size: 14px; text-align: center;
+      color: rgba(255,255,255,0.85); font-size: 14px; text-align: right;
       text-shadow: 0 2px 6px rgba(0,0,0,0.6);
     }
   `;
