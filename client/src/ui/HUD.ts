@@ -946,13 +946,20 @@ export class HUD {
         transition: background 0.2s, color 0.2s;
         padding: 0;
       }
-      /* "Change craft" lives at the bottom-right, above the flight controls (not in
-       * the crowded top-right cluster). It keeps the shared button styling above. */
+      /* "Change craft" is the 4th button in the top-right column, directly below the
+       * mute (top-right bar) + the two companion buttons (.cmp-side-stack). Positioned
+       * absolutely to line up under them; keeps the shared button styling above. */
       .hud-vehicle-btn {
         position: absolute;
         z-index: 6;
-        right: max(20px, calc(14px + env(safe-area-inset-right)));
-        bottom: calc(max(20px, env(safe-area-inset-bottom)) + max(64px, 8vh) + 190px);
+        top: 164px;
+        right: 36px;
+      }
+      @media (max-width: 480px) {
+        .hud-vehicle-btn {
+          top: calc(max(24px, calc(14px + env(safe-area-inset-top))) + 144px);
+          right: max(24px, calc(14px + env(safe-area-inset-right)));
+        }
       }
       .hud-vehicle-btn:hover,
       .hud-campsite-btn:hover,
