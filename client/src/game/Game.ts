@@ -1100,11 +1100,18 @@ export class Game {
             g.eternalFlameUI?.syncFromSave();
             return `eternalFlameCount=${next}`;
           },
-          /** LEVIATHAN: seed the plane to L4 so the boat unlocks. Then use the ⇄
-           *  change-craft button (or reload) and pick the boat. */
+          /** LEVIATHAN: seed the plane to L4 so the boat unlocks in the lobby.
+           *  For automation, prefer `setVehicle("boat")` which switches directly. */
           unlockBoat: () => {
             ProgressionManager.qaUnlockBoat();
-            return "boat unlocked (level-4 seeded) — switch craft (⇄) or reload, then pick the boat";
+            return 'boat unlocked (level-4 seeded) — now call test.setVehicle("boat"), or ⇄ / reload and pick it';
+          },
+          /** LEVIATHAN/general: switch craft directly (no lobby) and rejoin the SAME
+           *  world — bypasses the in-flight ⇄ button for automated co-op testing. */
+          setVehicle: (v = "boat") => {
+            const allowed = ["plane", "carpet", "boat"];
+            if (!allowed.includes(v)) return `bad-vehicle (use ${allowed.join(" | ")})`;
+            return g.qaSwitchVehicle(v as Vehicle);
           },
           /** LEVIATHAN: ask the server to force-surface a giant near you (ignores the
            *  2-boat spawn gate; the min-2-hunters DAMAGE gate still applies). */
@@ -3701,6 +3708,33 @@ export class Game {
     } finally {
       this.switchingVehicle = false;
     }
+  }
+
+  /** QA-only: switch craft directly (no lobby / no fade) and rejoin the SAME world,
+   *  so automated tests can become a Boat without driving the in-flight ⇄ button.
+   *  Mirrors {@link beginVehicleSwitch} minus the lobby picker. */
+  private qaSwitchVehicle(vehicle: Vehicle): string {
+    if (this.switchingVehicle) return "busy";
+    if (this.gamePhase !== "flying") return "not-flying (get into flight first)";
+    this.switchingVehicle = true;
+    this.running = false;
+    try {
+      this.teardownGameplaySession("switch_vehicle");
+      this.dayNightCycle.moonProgress = 0;
+      this.moonThreat?.reset();
+      this.shouldShowBrazierMoonResume = false;
+      this.applyDayNightPreset();
+      this.gamePhase = "flying";
+      this.moonCinematicStep = "done";
+      this.moonCinematicCamera = null;
+      this.introActive = false;
+      this.vehicleHintsEl = null;
+      this.campsiteHintsEl = null;
+      this.startGame(vehicle);
+    } finally {
+      this.switchingVehicle = false;
+    }
+    return `vehicle=${vehicle} (rejoining ${this.worldSlug})`;
   }
 
   /** Gremlin damage emptied the plane HP: fade to black, tear down session, main menu. */
