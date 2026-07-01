@@ -5,7 +5,7 @@
  * - Cross-origin requests (game API, Pouchy, ElevenLabs, fonts CDN): untouched.
  * Its presence + the manifest make the app installable.
  */
-const VERSION = "a2a-v1";
+const VERSION = "a2a-v2";
 const STATIC_CACHE = `a2a-static-${VERSION}`;
 
 self.addEventListener("install", () => {
@@ -37,10 +37,14 @@ self.addEventListener("fetch", (event) => {
   // Never intercept cross-origin (API, Pouchy, ElevenLabs, font CDNs, analytics).
   if (url.origin !== self.location.origin) return;
 
-  // App shell / navigations → network-first so new builds always load.
+  // App shell / navigations → network-first, BYPASSING the HTTP cache, so a new
+  // deploy's index.html (with the new hashed JS) always loads on reload instead of a
+  // stale cached shell. Falls back to cache only when offline.
   if (req.mode === "navigate") {
     event.respondWith(
-      fetch(req).catch(() => caches.match(req).then((r) => r || caches.match("/"))),
+      fetch(req, { cache: "no-store" }).catch(() =>
+        caches.match(req).then((r) => r || caches.match("/")),
+      ),
     );
     return;
   }
