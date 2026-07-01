@@ -938,6 +938,10 @@ export class Game {
          *  moonDurationMs, paused, frozen, saved, braziers:[{lit,eternal}] }` or null.
          *  Use it to assert the shared quest syncs across two clients. */
         get objective() { return g.lastObjective; },
+        /** Read-only co-op Leviathan state: `{ active, hp, maxHp, x, y, z, hunters,
+         *  expiresAt }` or null. Use it to assert the shared giant syncs across the
+         *  boats and that HP only drops when 2+ boats haul together. */
+        get leviathan() { return g.lastLeviathan; },
         /** This player's Eternal Flame inventory (earned solo in the void, spent into
          *  the shared braziers). */
         get eternalFlames() { return ProgressionManager.loadPlayerWorldState().eternalFlameCount ?? 0; },
