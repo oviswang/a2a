@@ -200,6 +200,22 @@ export class SocketClient {
   onMoonstoneLifted(cb: (ev: { index: number; fromId: string }) => void) {
     this.socket.on("moonstone:lifted", cb);
   }
+  // ── Carpet co-op void (shared flame-shield) ──
+  emitVoidEnter() {
+    this.socket.emit("void:enter");
+  }
+  emitVoidLeave() {
+    this.socket.emit("void:leave");
+  }
+  emitVoidShieldHit() {
+    this.socket.emit("void:shieldHit");
+  }
+  onVoidSync(cb: (ev: { coop: boolean; shieldHp: number; shieldMax: number }) => void) {
+    this.socket.on("void:sync", cb);
+  }
+  onVoidLost(cb: () => void) {
+    this.socket.on("void:lost", cb);
+  }
   // ── A2A duo challenge ("fly together") ──
   emitDuoInvite(toId: string) {
     this.socket.emit("duo:invite", toId);

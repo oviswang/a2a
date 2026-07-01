@@ -220,6 +220,10 @@ export class RoomManager {
       room.relayMoonstoneLift(socket.id, Number(index));
     });
 
+    socket.on("void:enter", () => room.voidEnter(socket.id));
+    socket.on("void:leave", () => room.voidLeave(socket.id));
+    socket.on("void:shieldHit", () => room.voidShieldHit(socket.id));
+
     socket.on("disconnect", () => {
       room.removePlayer(socket.id);
       if (room.isEmpty) {

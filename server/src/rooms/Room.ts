@@ -40,6 +40,10 @@ const LEVIATHAN_HIT_COOLDOWN_MS = 700;
 const LEVIATHAN_HAUL_RADIUS = 1.1;
 /** Wait this long after a giant leaves before another may surface. */
 const LEVIATHAN_COOLDOWN_MS = 60_000;
+/** Carpet co-op void: shared shield HP contributed per defender in the void. */
+const VOID_SHIELD_PER_DEFENDER = 12;
+/** Co-op void activates only with at least this many carpets in the void together. */
+const VOID_MIN_DEFENDERS = 2;
 import {
   FLAG_AUTO_RESPAWN_MS,
   FLAG_CAPTURE_DURATION_MS,
@@ -184,6 +188,12 @@ export class Room {
   private leviathanHaulers = new Map<string, number>();
   /** Display names that landed a hit this fight (for the victory shout-out). */
   private leviathanContributors = new Set<string>();
+
+  // ── Carpet co-op void: shared flame-shield session ──
+  private voidParticipants = new Set<string>();
+  private voidCoop = false;
+  private voidShieldHp = 0;
+  private voidShieldMax = 0;
 
   constructor(slug: string, globeRadius: number, worldSeed: number, terrainType: string) {
     this.slug = slug;
@@ -576,6 +586,55 @@ export class Room {
     }
   }
 
+  // ── Carpet co-op void (shared flame-shield) ──────────────────────────────
+  private broadcastVoidSync() {
+    const ev = { coop: this.voidCoop, shieldHp: this.voidShieldHp, shieldMax: this.voidShieldMax };
+    for (const id of this.voidParticipants) this.players.get(id)?.socket.emit("void:sync", ev);
+  }
+
+  /** Recompute the shared shield when the void population changes. */
+  private recomputeVoid() {
+    const n = this.voidParticipants.size;
+    const wasCoop = this.voidCoop;
+    this.voidCoop = n >= VOID_MIN_DEFENDERS;
+    if (this.voidCoop) {
+      this.voidShieldMax = VOID_SHIELD_PER_DEFENDER * n;
+      // First moment it becomes co-op, fill the shared shield ("reinforcements!").
+      if (!wasCoop) this.voidShieldHp = this.voidShieldMax;
+      else this.voidShieldHp = Math.min(this.voidShieldHp + VOID_SHIELD_PER_DEFENDER, this.voidShieldMax);
+    } else {
+      this.voidShieldMax = 0;
+      this.voidShieldHp = 0;
+    }
+    this.broadcastVoidSync();
+  }
+
+  voidEnter(socketId: string) {
+    if (!this.players.has(socketId) || this.voidParticipants.has(socketId)) return;
+    this.voidParticipants.add(socketId);
+    this.recomputeVoid();
+  }
+
+  voidLeave(socketId: string) {
+    if (!this.voidParticipants.delete(socketId)) return;
+    this.recomputeVoid();
+  }
+
+  /** A moth reached the shared shield on a co-op participant's client. */
+  voidShieldHit(socketId: string) {
+    if (!this.voidCoop || !this.voidParticipants.has(socketId)) return;
+    this.voidShieldHp = Math.max(0, this.voidShieldHp - 1);
+    if (this.voidShieldHp <= 0) {
+      for (const id of this.voidParticipants) this.players.get(id)?.socket.emit("void:lost");
+      // End the session; each client tears its own void down and rejoins.
+      this.voidParticipants.clear();
+      this.voidCoop = false;
+      this.voidShieldMax = 0;
+      return;
+    }
+    this.broadcastVoidSync();
+  }
+
   forceFlagSpawn() {
     if (this.hotFlagSpawnTimer != null) {
       clearTimeout(this.hotFlagSpawnTimer);
@@ -821,6 +880,7 @@ export class Room {
     this.leviathanHaulers.delete(socketId);
     // Drop an active giant when the world empties so a future session starts clean.
     if (this.players.size === 0 && this.leviathanActive) this.clearLeviathan(false);
+    if (this.voidParticipants.has(socketId)) this.voidLeave(socketId);
 
     for (const [, p] of this.players) {
       p.socket.emit("player:left", socketId);

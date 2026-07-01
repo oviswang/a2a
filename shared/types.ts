@@ -320,6 +320,12 @@ export interface ServerToClientEvents {
   /** Carpet co-op: a teammate started raising moonstone `index` — raise it on this
    *  client too, so two carpets each lifting one triggers the shared union. */
   "moonstone:lifted": (ev: { index: number; fromId: string }) => void;
+  /** Carpet co-op void: the shared flame-shield state for the room's void session.
+   *  `coop` is true only when 2+ carpets are in the void together; when false the
+   *  client keeps its normal solo shield. */
+  "void:sync": (ev: { coop: boolean; shieldHp: number; shieldMax: number }) => void;
+  /** Carpet co-op void: the shared shield broke — everyone in the void fails together. */
+  "void:lost": () => void;
   /** A2A duo challenge ("fly together"): a friend invited you / answered / finished. */
   "duo:incoming": (ev: DuoPeerEvent) => void;
   "duo:answered": (ev: DuoAnswerEvent) => void;
@@ -456,6 +462,11 @@ export interface ClientToServerEvents {
   /** Carpet co-op: I started raising moonstone `index` — relay to the room so a
    *  teammate raising the other stone can trigger the shared union. */
   "moonstone:lift": (index: number) => void;
+  /** Carpet co-op void: I entered / left the cosmic void (for shared-shield sessions). */
+  "void:enter": () => void;
+  "void:leave": () => void;
+  /** Carpet co-op void: a moth reached the shared shield on my client (co-op only). */
+  "void:shieldHit": () => void;
   /** A2A duo challenge ("fly together"): invite / answer / report completion. */
   "duo:invite": (toId: string) => void;
   "duo:respond": (toId: string, accept: boolean) => void;
