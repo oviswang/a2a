@@ -154,6 +154,7 @@ import {
   type FishRarity,
 } from "./OceanFish";
 import { showFishdexPanel } from "../ui/FishdexPanel";
+import { startReelMinigame } from "../ui/ReelMinigame";
 /** Consecutive catches within this window keep the fishing combo alive. */
 const FISH_COMBO_WINDOW_MS = 8000;
 /** Cap on the combo XP multiplier. */
@@ -4362,6 +4363,24 @@ export class Game {
           }
           this.hud.showOceanMysteryPresenceHint(alreadyRewarded);
         }
+      };
+      // Prized fish (rare/epic/octopus) hand off to the reel minigame when hooked.
+      this.oceanFish.onReelStart = (info) => {
+        const of = this.oceanFish;
+        startReelMinigame({
+          species: info.species,
+          rarity: info.rarity,
+          onResult: (win) => {
+            if (this.oceanFish !== of || !of) return; // session ended mid-reel
+            of.resolveReel(win);
+            if (win) {
+              this.audioManager.resumeContextIfNeeded();
+              this.cameraRig.shake(0.02, 0.16);
+            } else {
+              this.hud.showAmbientToast(t("It got away…", "跑掉了…"), 1500);
+            }
+          },
+        });
       };
       this.oceanFish.setFishingLineResolution(this.container.clientWidth, this.container.clientHeight);
       this.showFishdexTracker();
