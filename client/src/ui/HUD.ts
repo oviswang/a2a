@@ -55,6 +55,8 @@ export class HUD {
   private onMuteToggle: (() => boolean) | null = null;
   private onCampsiteClick: (() => void) | null = null;
   private campsiteBtn!: HTMLButtonElement;
+  private vehicleBtn!: HTMLButtonElement;
+  private onSwitchVehicle: (() => void) | null = null;
   private entranceDone = false;
   private campsitePromptEl: HTMLDivElement | null = null;
 
@@ -100,6 +102,14 @@ export class HUD {
         <div class="hud-quest-trackers" style="display:none" aria-label="Quest progress"></div>
       </div>
       <div class="hud-top-right">
+        <button class="hud-vehicle-btn" aria-label="Change craft" style="display:none">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="17 1 21 5 17 9"/>
+            <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+            <polyline points="7 23 3 19 7 15"/>
+            <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+          </svg>
+        </button>
         <button class="hud-campsite-btn" aria-label="Go to campsite">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 2 3 20h18Z"/>
@@ -150,6 +160,14 @@ export class HUD {
         <div class="hud-quest-trackers" style="display:none" aria-label="任务进度"></div>
       </div>
       <div class="hud-top-right">
+        <button class="hud-vehicle-btn" aria-label="切换载具" style="display:none">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="17 1 21 5 17 9"/>
+            <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+            <polyline points="7 23 3 19 7 15"/>
+            <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+          </svg>
+        </button>
         <button class="hud-campsite-btn" aria-label="前往营地">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 2 3 20h18Z"/>
@@ -213,6 +231,11 @@ export class HUD {
 
     this.campsiteBtn.addEventListener("click", () => {
       this.onCampsiteClick?.();
+    });
+
+    this.vehicleBtn = this.el.querySelector(".hud-vehicle-btn")!;
+    this.vehicleBtn.addEventListener("click", () => {
+      this.onSwitchVehicle?.();
     });
 
     this.fullscreenBtn.addEventListener("click", () => {
@@ -695,6 +718,14 @@ export class HUD {
     this.onCampsiteClick = fn;
   }
 
+  /** Wire + show the in-game "change craft" button (switch vehicle without a restart). */
+  setSwitchVehicleAction(fn: () => void) {
+    this.onSwitchVehicle = fn;
+  }
+  setSwitchVehicleButtonVisible(visible: boolean) {
+    if (this.vehicleBtn) this.vehicleBtn.style.display = visible ? "" : "none";
+  }
+
   setCampsiteButtonVisible(visible: boolean) {
     if (!CAMPSITE_HOME_ENABLED) return;
     this.campsiteBtn.style.display = visible ? "" : "none";
@@ -894,6 +925,7 @@ export class HUD {
         align-items: center;
       }
 
+      .hud-vehicle-btn,
       .hud-campsite-btn,
       .hud-fullscreen-btn,
       .hud-mute-btn {
@@ -911,12 +943,14 @@ export class HUD {
         transition: background 0.2s, color 0.2s;
         padding: 0;
       }
+      .hud-vehicle-btn:hover,
       .hud-campsite-btn:hover,
       .hud-fullscreen-btn:hover,
       .hud-mute-btn:hover {
         background: rgba(255, 255, 255, 0.15);
         color: rgba(255, 255, 255, 0.95);
       }
+      .hud-vehicle-btn:active,
       .hud-campsite-btn:active,
       .hud-fullscreen-btn:active,
       .hud-mute-btn:active {
@@ -1705,6 +1739,7 @@ export class HUD {
         .hud-brazier-tracker {
           top: max(24px, calc(14px + env(safe-area-inset-top)));
         }
+        .hud-vehicle-btn,
         .hud-campsite-btn,
         .hud-fullscreen-btn,
         .hud-mute-btn {
