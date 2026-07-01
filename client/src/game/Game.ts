@@ -1113,6 +1113,14 @@ export class Game {
             g.socketClient.emitDebugForceLeviathan();
             return "leviathan:forced — watch window.__a2a.leviathan";
           },
+          /** LEVIATHAN: start/stop hauling programmatically (so two tabs can haul
+           *  together without physically holding the button). The boat must still be
+           *  in range, and damage still needs 2+ boats hauling at once. */
+          haul: (on = true) => {
+            if (on) g.startHaul();
+            else g.stopHaul();
+            return `haul=${on}`;
+          },
         };
       }
 
