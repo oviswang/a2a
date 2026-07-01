@@ -3236,8 +3236,8 @@ export class Game {
     this.lastLeviathan = state;
     if (!state || !state.active) {
       this.removeSeaGiant();
-      this.hud.setLeviathanBar(null);
-      this.hud.setHaulButtonVisible(false);
+      this.hud?.setLeviathanBar(null);
+      this.hud?.setHaulButtonVisible(false);
       this.stopHaul();
       return;
     }
@@ -3258,8 +3258,8 @@ export class Game {
 
   private handleLeviathanDefeated(ev: { hunters: string[] }) {
     this.removeSeaGiant();
-    this.hud.setLeviathanBar(null);
-    this.hud.setHaulButtonVisible(false);
+    this.hud?.setLeviathanBar(null);
+    this.hud?.setHaulButtonVisible(false);
     this.stopHaul();
     this.lastLeviathan = null;
     // Shared victory — reward the boats that were present.
@@ -3285,8 +3285,8 @@ export class Game {
 
   private handleLeviathanFled() {
     this.removeSeaGiant();
-    this.hud.setLeviathanBar(null);
-    this.hud.setHaulButtonVisible(false);
+    this.hud?.setLeviathanBar(null);
+    this.hud?.setHaulButtonVisible(false);
     this.stopHaul();
     this.lastLeviathan = null;
     this.hud.showAmbientToast(t("The Leviathan dived away…", "巨兽潜入深海了…"), 2000);
@@ -5225,8 +5225,10 @@ export class Game {
     this.stopHaul();
     this.removeSeaGiant();
     this.lastLeviathan = null;
-    this.hud.setLeviathanBar(null);
-    this.hud.setHaulButtonVisible(false);
+    // teardown must tolerate a not-yet/already-gone HUD (every other line here is
+    // hud-agnostic) — a non-optional access here crashed switch-craft / setVehicle.
+    this.hud?.setLeviathanBar(null);
+    this.hud?.setHaulButtonVisible(false);
     this.selfieProgressCached = 0;
     this.remotePlanes?.dispose();
     this.landmarkHUD?.dispose();
