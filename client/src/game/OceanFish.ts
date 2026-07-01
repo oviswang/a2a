@@ -23,14 +23,65 @@ import {
 } from "./SphericalMath";
 import { isLand } from "./SimplexNoise";
 import type { AudioManager } from "../audio/AudioManager";
-import { createFishVisual, type FishVariant, type OceanFishVisual } from "./OceanFishMesh";
+import {
+  createFishVisual,
+  type FishVariant,
+  type FishRarity,
+  type OceanFishVisual,
+} from "./OceanFishMesh";
 import { FishCatchVfx } from "./FishCatchVfx";
-export type { FishVariant } from "./OceanFishMesh";
+import { t } from "../i18n";
+export type { FishVariant, FishRarity } from "./OceanFishMesh";
 import { randomOceanQuaternion } from "./Boat";
 import type { UpgradeState } from "./UpgradeManager";
 
 export const FISH_COUNT = 240;
 export const FISH_CATCH_XP = 15;
+
+/** XP awarded per catch by rarity (before the combo multiplier the game applies). */
+export const FISH_RARITY_XP: Record<FishRarity, number> = {
+  common: FISH_CATCH_XP,
+  rare: 40,
+  epic: 90,
+};
+
+/** What {@link OceanFish.onCatch} reports for each catch. */
+export interface FishCatchInfo {
+  variant: FishVariant;
+  rarity: FishRarity;
+  /** Localized species name (for the catch banner + future Fishdex). */
+  species: string;
+  /** Base XP for this rarity (game applies the combo multiplier on top). */
+  baseXp: number;
+}
+
+/** Rolls a rarity for a fish; large silhouettes skew toward the prized tiers. */
+function rollFishRarity(isLarge: boolean, r: number): FishRarity {
+  if (isLarge) return r < 0.12 ? "epic" : r < 0.45 ? "rare" : "common";
+  return r < 0.03 ? "epic" : r < 0.18 ? "rare" : "common";
+}
+
+/** Deterministic localized species name from a rarity + roll. */
+function pickSpecies(rarity: FishRarity, r: number): string {
+  const common = [
+    t("Sardine", "沙丁鱼"),
+    t("Mackerel", "鲭鱼"),
+    t("Anchovy", "凤尾鱼"),
+    t("Herring", "青鳞鱼"),
+  ];
+  const rare = [
+    t("Silverscale", "银鳞鱼"),
+    t("Moonperch", "月光鲷"),
+    t("Rainbow Fin", "虹鳍鱼"),
+  ];
+  const epic = [
+    t("Golden Marlin", "黄金旗鱼"),
+    t("Abyss Dragonfish", "深海龙鱼"),
+    t("Starmark Ray", "星纹魟"),
+  ];
+  const list = rarity === "epic" ? epic : rarity === "rare" ? rare : common;
+  return list[Math.floor(r * list.length) % list.length]!;
+}
 /** After this many catches in a session, mystery octopuses may appear (eternal flame reward, once per save). */
 export const FISH_COUNT_BEFORE_MYSTERY_OCTOPUS = 12;
 /** How many “octopus” shadows spawn at once; reeling in one makes the rest vanish. */
@@ -96,6 +147,9 @@ interface Fish {
   status: FishStatus;
   phase: number;
   variant: FishVariant;
+  rarity: FishRarity;
+  /** Localized species name, chosen at spawn. */
+  species: string;
   visual: OceanFishVisual;
   respawnT: number;
   respawnMoved: boolean;
@@ -128,7 +182,7 @@ const RING_LOCAL_NORMAL = new Vector3(0, 0, 1);
 
 export class OceanFish {
   readonly group = new Group();
-  onCatch: ((variant: FishVariant) => void) | null = null;
+  onCatch: ((info: FishCatchInfo) => void) | null = null;
 
   private fish: Fish[] = [];
   private time = 0;
@@ -296,11 +350,14 @@ export class OceanFish {
     // ── Fish pool ────────────────────────────────────────────────
     for (let i = 0; i < FISH_COUNT; i++) {
       const variant: FishVariant = i % 5 === 0 ? "large" : "normal";
-      const visual = createFishVisual(variant);
-      this.group.add(visual.group);
 
       const seed = worldSeed + sessionSalt * 7919 + i * 982451653 + 901;
       const rnd = seededRandom(seed);
+      const rarity = rollFishRarity(variant === "large", rnd());
+      const species = pickSpecies(rarity, rnd());
+      const visual = createFishVisual(variant, rarity);
+      this.group.add(visual.group);
+
       const schoolId = Math.min(NUM_SCHOOLS - 1, Math.floor(i / FISH_PER_SCHOOL));
       const ringAngle = rnd() * Math.PI * 2;
       const spreadRad = 0.1 + 0.9 * rnd();
@@ -315,6 +372,8 @@ export class OceanFish {
         status: "swimming",
         phase: (i * 2.17) % (Math.PI * 2),
         variant,
+        rarity,
+        species,
         visual,
         respawnT: 0,
         respawnMoved: false,
@@ -383,6 +442,8 @@ export class OceanFish {
         status: "swimming",
         phase: 9.11 + n * 0.77,
         variant: "octopus",
+        rarity: "epic",
+        species: t("Mystery Octopus", "神秘章鱼"),
         visual,
         respawnT: 0,
         respawnMoved: false,
@@ -673,14 +734,17 @@ export class OceanFish {
 
       // ── Capturing — flee + progress ──
       if (f.status === "capturing") {
+        // Rarer fish fight harder: they flee a touch faster and fill slower.
+        const rarityFlee = f.rarity === "epic" ? 1.18 : f.rarity === "rare" ? 1.07 : 1.0;
+        const rarityFill = f.rarity === "epic" ? 0.55 : f.rarity === "rare" ? 0.78 : 1.0;
         const speedMult =
-          f.variant === "octopus" ? 1.0 : f.variant === "large" ? 0.9 : 1.0;
+          f.variant === "octopus"
+            ? 1.0
+            : (f.variant === "large" ? 0.9 : 1.0) * rarityFlee;
         const fillMult =
           f.variant === "octopus"
             ? 1 / 2.4
-            : f.variant === "large"
-              ? 1 / 1.5
-              : 1.0;
+            : (f.variant === "large" ? 1 / 1.5 : 1.0) * rarityFill;
         const frame = tangentFrame(f.posQ);
 
         // Base wander turn (faster, more erratic when hooked)
@@ -725,7 +789,12 @@ export class OceanFish {
           if (f.progress >= 1) {
             this.catchCount += 1;
             this.catchVfx.spawn(this.group.parent, wp.clone(), boatTargetPos, f.variant);
-            this.onCatch?.(f.variant);
+            this.onCatch?.({
+              variant: f.variant,
+              rarity: f.rarity,
+              species: f.species,
+              baseXp: FISH_RARITY_XP[f.rarity],
+            });
             this.removeActiveCapture(i);
             if (f.variant === "octopus") {
               this.mysteryOctopusCleanupAfterCatch = true;

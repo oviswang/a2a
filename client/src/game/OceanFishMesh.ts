@@ -17,6 +17,17 @@ const GLOW_COLOR_EVENING = new Color(0xff4400);
 
 export type FishVariant = "normal" | "large" | "octopus";
 
+/** Catch-value tier layered on top of the silhouette variant. Rare/epic fish glow
+ *  faintly in daylight so a "fishing master" can spot and chase the prized ones. */
+export type FishRarity = "common" | "rare" | "epic";
+
+/** Steady rarity glow (color + minimum daytime opacity). Common fish stay plain shadows. */
+const RARITY_GLOW: Record<FishRarity, { color: Color; base: number } | null> = {
+  common: null,
+  rare: { color: new Color(0x66ccff), base: 0.26 },
+  epic: { color: new Color(0xffcc33), base: 0.4 },
+};
+
 let sharedShadowTexture: CanvasTexture | null = null;
 let sharedLargeShadowTexture: CanvasTexture | null = null;
 let shadowTextureRefCount = 0;
@@ -497,9 +508,13 @@ const FILL_HALF = BAR_H * 0.5;
  * Fish shadow + vertical progress bar. Parent positions `group` at world position;
  * `shadowGroup` / `barGroup` rotations are set by {@link OceanFish}.
  */
-export function createFishVisual(variant: FishVariant = "normal"): OceanFishVisual {
+export function createFishVisual(
+  variant: FishVariant = "normal",
+  rarity: FishRarity = "common",
+): OceanFishVisual {
   if (variant === "octopus") return createOctopusVisual();
 
+  const rarityGlow = RARITY_GLOW[rarity];
   const isLarge = variant === "large";
   shadowTextureRefCount += 1;
   glowTextureRefCount += 1;
@@ -630,11 +645,22 @@ export function createFishVisual(variant: FishVariant = "normal"): OceanFishVisu
     const g = Math.max(0, Math.min(1, Math.max(night, evening) * opacityFade));
     const denom = night + evening + 1e-6;
     const tNight = night / denom;
+    const alphaScale = 0.35 * (1 - tNight) + 0.15 * tNight;
+    const nightOpacity = g * alphaScale;
+
+    if (rarityGlow) {
+      // Rare/epic fish keep a steady coloured shimmer (visible even in daylight) so
+      // they stand out to spot; night/evening only adds on top of the rarity floor.
+      glowMat.color.copy(rarityGlow.color);
+      const opacity = Math.max(nightOpacity, rarityGlow.base * opacityFade);
+      glowMat.opacity = opacity;
+      glowMesh.visible = opacity > 0.02;
+      return;
+    }
+
     // Neutral glow map → material color reads clearly: orange (evening) vs cyan (night).
     glowMat.color.copy(GLOW_COLOR_EVENING).lerp(GLOW_COLOR_NIGHT, tNight);
-
-    const alphaScale = 0.35 * (1 - tNight) + 0.15 * tNight;
-    glowMat.opacity = g * alphaScale;
+    glowMat.opacity = nightOpacity;
     glowMesh.visible = g > 0.02;
   }
 
