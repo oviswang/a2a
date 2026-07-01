@@ -186,6 +186,13 @@ export class SocketClient {
   onFlameReceived(cb: (ev: { fromId: string; fromName: string; fromCompanionName?: string }) => void) {
     this.socket.on("flame:received", cb);
   }
+  // ── A2A: two carpets flew close (shared photo keepsake) ──
+  emitCarpetPhoto(toId: string) {
+    this.socket.emit("carpet:photo", toId);
+  }
+  onCarpetPhotoed(cb: (ev: { fromId: string; fromName: string; fromCompanionName?: string }) => void) {
+    this.socket.on("carpet:photoed", cb);
+  }
   // ── A2A duo challenge ("fly together") ──
   emitDuoInvite(toId: string) {
     this.socket.emit("duo:invite", toId);
