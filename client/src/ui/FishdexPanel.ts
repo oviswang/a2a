@@ -1,6 +1,7 @@
 import { t } from "../i18n";
 import { FISH_SPECIES, fishSpeciesName, type FishRarity, type FishSpecies } from "../game/OceanFish";
 import { ProgressionManager } from "../game/ProgressionManager";
+import { makeFishIcon } from "./fishIcons";
 
 const RARITY_COLOR: Record<FishRarity, string> = {
   common: "rgba(210, 224, 240, 0.9)",
@@ -64,11 +65,10 @@ function injectStyles() {
     }
     .fishdex-item--locked { background: rgba(255,255,255,0.02); }
     .fishdex-icon {
-      width: 18px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
-      font-size: 15px; line-height: 1;
+      width: 34px; height: 34px; flex: 0 0 auto;
+      display: flex; align-items: center; justify-content: center;
     }
-    .fishdex-icon--locked { opacity: 0.32; filter: grayscale(1) brightness(0.7); }
-    .fishdex-dot { width: 10px; height: 10px; border-radius: 50%; display: block; }
+    .fishdex-icon canvas { display: block; }
     .fishdex-text { flex: 1 1 auto; min-width: 0; }
     .fishdex-name { font-size: 14px; font-weight: 600; }
     .fishdex-name--locked { color: rgba(255,255,255,0.55); }
@@ -139,16 +139,9 @@ export function showFishdexPanel() {
 
       const icon = document.createElement("div");
       icon.className = "fishdex-icon";
-      if (entry) {
-        const dot = document.createElement("span");
-        dot.className = "fishdex-dot";
-        dot.style.background = RARITY_COLOR[rarity];
-        icon.appendChild(dot);
-      } else {
-        // Dim silhouette instead of a blank dot, so locked entries read as "to collect".
-        icon.textContent = "🐟";
-        icon.classList.add("fishdex-icon--locked");
-      }
+      // A hand-drawn creature per species — coloured when caught, dark silhouette
+      // when still undiscovered.
+      icon.appendChild(makeFishIcon(sp, !!entry, 34));
 
       const text = document.createElement("div");
       text.className = "fishdex-text";
