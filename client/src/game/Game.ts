@@ -1130,6 +1130,24 @@ export class Game {
             else g.stopHaul();
             return `haul=${on}`;
           },
+          /** MOONSTONE co-op: raise ruin `index` (0 or 1) as if flying over it, and
+           *  relay it to the room. Two tabs raising different indices within ~15s
+           *  should trigger the shared union on both. */
+          raiseMoonstone: (index = 0) => {
+            const i = Number(index);
+            if (i !== 0 && i !== 1) return "index must be 0 or 1";
+            g.globe.startMoonstoneRuinCycle(i, Date.now());
+            g.moonstoneLiftedBy[i] = "local";
+            g.socketClient?.emitMoonstoneLift(i);
+            return `raised moonstone ${i}`;
+          },
+          /** CO-OP VOID: exercise the shared-shield server session directly (without
+           *  the full 3D void). Two tabs voidEnter() → __a2a.voidCoop.coop=true and
+           *  shieldMax scales; voidShieldHit() decrements the shared pool; at 0 the
+           *  server sends void:lost. */
+          voidEnter: () => { g.socketClient?.emitVoidEnter(); return "void:enter sent — watch __a2a.voidCoop"; },
+          voidLeave: () => { g.socketClient?.emitVoidLeave(); return "void:leave sent"; },
+          voidShieldHit: () => { g.socketClient?.emitVoidShieldHit(); return "void:shieldHit sent"; },
         };
       }
 
