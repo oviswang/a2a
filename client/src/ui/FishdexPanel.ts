@@ -147,7 +147,7 @@ export function showFishdexPanel() {
       text.className = "fishdex-text";
       const name = document.createElement("div");
       name.className = "fishdex-name" + (entry ? "" : " fishdex-name--locked");
-      name.textContent = entry ? fishSpeciesName(sp) : "？？？";
+      name.textContent = entry ? fishSpeciesName(sp) : t("Mystery shadow", "神秘鱼影");
       text.appendChild(name);
       if (!entry) {
         const hint = document.createElement("div");
