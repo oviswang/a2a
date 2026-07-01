@@ -179,6 +179,13 @@ export class SocketClient {
   onCompanionGifted(cb: (ev: CompanionGiftEvent) => void) {
     this.socket.on("companion:gifted", cb);
   }
+  // ── A2A: give an Eternal Flame to a co-present teammate ──
+  emitFlameGift(toId: string) {
+    this.socket.emit("flame:gift", toId);
+  }
+  onFlameReceived(cb: (ev: { fromId: string; fromName: string; fromCompanionName?: string }) => void) {
+    this.socket.on("flame:received", cb);
+  }
   // ── A2A duo challenge ("fly together") ──
   emitDuoInvite(toId: string) {
     this.socket.emit("duo:invite", toId);
