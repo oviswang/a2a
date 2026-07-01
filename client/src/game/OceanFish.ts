@@ -150,7 +150,14 @@ const SCHOOL_MAX_OFFSET = 0.82;
 /** School centroid wander speed along the sphere (slightly slower than old solo fish). */
 const SCHOOL_WANDER_SPEED = 0.11;
 
-type FishStatus = "swimming" | "capturing" | "respawning";
+type FishStatus = "swimming" | "capturing" | "respawning" | "reeling";
+
+/** A prized fish (rare/epic/octopus) triggers the reel minigame once hooked. */
+function isPrized(rarity: FishRarity): boolean {
+  return rarity !== "common";
+}
+/** Catch progress at which a prized fish "bites" and hands off to the reel minigame. */
+const REEL_BITE_THRESHOLD = 0.35;
 
 interface SchoolState {
   centerQ: Quaternion;
@@ -206,6 +213,15 @@ const RING_LOCAL_NORMAL = new Vector3(0, 0, 1);
 export class OceanFish {
   readonly group = new Group();
   onCatch: ((info: FishCatchInfo) => void) | null = null;
+  /** Fired when a prized fish bites and the reel minigame should start. The game
+   *  runs the minigame and calls {@link resolveReel} with the outcome. */
+  onReelStart: ((info: FishCatchInfo) => void) | null = null;
+
+  /** A reel minigame is in progress for {@link reelFishIdx}; pauses catches. */
+  private reelActive = false;
+  private reelFishIdx = -1;
+  /** Latest deck landing spot, cached so {@link resolveReel} can spawn the catch VFX. */
+  private readonly lastBoatTargetPos = new Vector3();
 
   private fish: Fish[] = [];
   private time = 0;
@@ -429,6 +445,73 @@ export class OceanFish {
 
   getCatchCount(): number {
     return this.catchCount;
+  }
+
+  /** True while a reel minigame is in progress. */
+  isReeling(): boolean {
+    return this.reelActive;
+  }
+
+  /** Awards the catch: VFX, {@link onCatch}, and respawn/cleanup. */
+  private completeCatch(idx: number, wp: Vector3, boatTargetPos: Vector3) {
+    const f = this.fish[idx];
+    if (!f) return;
+    this.catchCount += 1;
+    this.catchVfx.spawn(this.group.parent, wp.clone(), boatTargetPos, f.variant);
+    this.onCatch?.({
+      variant: f.variant,
+      rarity: f.rarity,
+      speciesKey: f.speciesKey,
+      species: f.species,
+      baseXp: FISH_RARITY_XP[f.rarity],
+    });
+    this.removeActiveCapture(idx);
+    if (f.variant === "octopus") {
+      this.mysteryOctopusCleanupAfterCatch = true;
+    } else {
+      f.status = "respawning";
+      f.respawnT = 0;
+      f.respawnMoved = false;
+      f.progress = 0;
+      f.visual.setProgress(0);
+    }
+  }
+
+  /** Freezes a hooked prized fish and asks the game to run the reel minigame. */
+  private startReel(idx: number) {
+    const f = this.fish[idx];
+    if (!f) return;
+    this.reelActive = true;
+    this.reelFishIdx = idx;
+    f.status = "reeling";
+    this.removeActiveCapture(idx);
+    this.onReelStart?.({
+      variant: f.variant,
+      rarity: f.rarity,
+      speciesKey: f.speciesKey,
+      species: f.species,
+      baseXp: FISH_RARITY_XP[f.rarity],
+    });
+  }
+
+  /** Resolve the active reel minigame: land the catch on a win, or let it go. */
+  resolveReel(win: boolean) {
+    if (!this.reelActive) return;
+    const idx = this.reelFishIdx;
+    this.reelActive = false;
+    this.reelFishIdx = -1;
+    const f = this.fish[idx];
+    if (!f || f.status !== "reeling") return;
+    if (win) {
+      this.completeCatch(idx, f.worldPos, this.lastBoatTargetPos);
+    } else {
+      // Got away — reset and let it swim off / respawn elsewhere.
+      f.progress = 0;
+      f.visual.setProgress(0);
+      f.status = "respawning";
+      f.respawnT = 0;
+      f.respawnMoved = false;
+    }
   }
 
   /**
@@ -676,6 +759,7 @@ export class OceanFish {
     
     // Shift landing spot slightly astern (backwards) so it lands on the deck, not the bow
     const boatTargetPos = boatWorldPos.clone().addScaledVector(_boatForward, -0.18);
+    this.lastBoatTargetPos.copy(boatTargetPos);
 
     // Pre-compute world positions (used for range checks before movement)
     for (const f of this.fish) {
@@ -693,7 +777,11 @@ export class OceanFish {
       return dist <= effExitR;
     });
 
-    while (captureEnabled && this.activeCaptures.length < this.fishMaxConcurrent) {
+    while (
+      captureEnabled &&
+      !this.reelActive &&
+      this.activeCaptures.length < this.fishMaxConcurrent
+    ) {
       let bestIdx = -1;
       let bestDist = effCatchR;
       for (let i = 0; i < this.fish.length; i++) {
@@ -755,10 +843,16 @@ export class OceanFish {
         continue;
       }
 
+      // ── Reeling: frozen on the line while the reel minigame plays ──
+      if (f.status === "reeling") {
+        this.applyFishTransform(f, boatRadial, cameraPos, dayWeight, nightWeight);
+        continue;
+      }
+
       // ── Swimming: position comes from school centroid (see top of update) ──
 
-      // ── Capturing — flee + progress ──
-      if (f.status === "capturing") {
+      // ── Capturing — flee + progress (paused while a reel is active) ──
+      if (f.status === "capturing" && !this.reelActive) {
         // Rarer fish fight harder: they flee a touch faster and fill slower.
         const rarityFlee = f.rarity === "epic" ? 1.18 : f.rarity === "rare" ? 1.07 : 1.0;
         const rarityFill = f.rarity === "epic" ? 0.55 : f.rarity === "rare" ? 0.78 : 1.0;
@@ -811,26 +905,11 @@ export class OceanFish {
         const dist = wp.distanceTo(boatWorldPos);
         if (dist < effCatchR && captureEnabled && this.activeCaptures.includes(i)) {
           f.progress = Math.min(1, f.progress + effFill * fillMult * dt);
-          if (f.progress >= 1) {
-            this.catchCount += 1;
-            this.catchVfx.spawn(this.group.parent, wp.clone(), boatTargetPos, f.variant);
-            this.onCatch?.({
-              variant: f.variant,
-              rarity: f.rarity,
-              speciesKey: f.speciesKey,
-              species: f.species,
-              baseXp: FISH_RARITY_XP[f.rarity],
-            });
-            this.removeActiveCapture(i);
-            if (f.variant === "octopus") {
-              this.mysteryOctopusCleanupAfterCatch = true;
-            } else {
-              f.status = "respawning";
-              f.respawnT = 0;
-              f.respawnMoved = false;
-              f.progress = 0;
-              f.visual.setProgress(0);
-            }
+          if (isPrized(f.rarity) && f.progress >= REEL_BITE_THRESHOLD) {
+            // Prized fish bite → hand off to the reel minigame (game drives it).
+            this.startReel(i);
+          } else if (f.progress >= 1) {
+            this.completeCatch(i, wp, boatTargetPos);
           }
         } else {
           f.progress = Math.max(0, f.progress - FISH_DECAY_RATE * dt);
