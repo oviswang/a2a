@@ -174,6 +174,18 @@ export class RoomManager {
       });
     });
 
+    // A2A: relay the "two carpets flew close" shared photo moment.
+    socket.on("carpet:photo", (toId) => {
+      const target = room.getPlayer(toId);
+      if (!target) return;
+      const me = room.getPlayer(socket.id)?.state;
+      target.socket.emit("carpet:photoed", {
+        fromId: socket.id,
+        fromName: me?.name ?? state.name,
+        fromCompanionName: me?.companionName,
+      });
+    });
+
     // A2A duo challenge ("fly together") — invite / answer / completion, room-scoped.
     socket.on("duo:invite", (toId) => {
       const target = room.getPlayer(toId);

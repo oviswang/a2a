@@ -315,6 +315,8 @@ export interface ServerToClientEvents {
   /** A2A: a teammate gave you one of their earned Eternal Flames (carpet generosity)
    *  so you can plant it at a brazier toward the shared win. */
   "flame:received": (ev: { fromId: string; fromName: string; fromCompanionName?: string }) => void;
+  /** A2A: two magic carpets flew close — a shared capybara photo keepsake moment. */
+  "carpet:photoed": (ev: { fromId: string; fromName: string; fromCompanionName?: string }) => void;
   /** A2A duo challenge ("fly together"): a friend invited you / answered / finished. */
   "duo:incoming": (ev: DuoPeerEvent) => void;
   "duo:answered": (ev: DuoAnswerEvent) => void;
@@ -446,6 +448,8 @@ export interface ClientToServerEvents {
   "companion:gift": (toId: string, gift: string) => void;
   /** A2A: give one of your Eternal Flames to co-present player `toId` (same room). */
   "flame:gift": (toId: string) => void;
+  /** A2A: two carpets flew close — tell peer `toId` to play the shared photo moment. */
+  "carpet:photo": (toId: string) => void;
   /** A2A duo challenge ("fly together"): invite / answer / report completion. */
   "duo:invite": (toId: string) => void;
   "duo:respond": (toId: string, accept: boolean) => void;
