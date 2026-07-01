@@ -579,7 +579,7 @@ export class Game {
   /** Peers our companion has already auto-replied to this encounter (caps ping-pong). */
   private hailReplied = new Set<string>();
   /** A2A feature 3: companion-pilots currently co-present in this world (teammates). */
-  private coPresentCompanions: Array<{ socketId: string; name: string; companionName: string | null }> = [];
+  private coPresentCompanions: Array<{ socketId: string; name: string; companionName: string | null; vehicle?: Vehicle }> = [];
   /** Headless/QA diagnostics counters, surfaced read-only on `window.__a2a`. Never
    *  exposes the token — only counts + booleans + display names. */
   private readonly diag = {
@@ -1779,7 +1779,7 @@ export class Game {
     const now = Date.now();
     const remoteWorld = new Vector3();
     let nearest: { id: string; name: string; companionName: string | null; d: number; activity: GreetActivity } | null = null;
-    const coPresent: Array<{ socketId: string; name: string; companionName: string | null }> = [];
+    const coPresent: Array<{ socketId: string; name: string; companionName: string | null; vehicle: Vehicle }> = [];
     this.remotePlanes.forEachRemote((p) => {
       remoteWorld.setFromMatrixPosition(p.group.matrixWorld);
       const d = remoteWorld.distanceTo(localWorldPos);
@@ -1789,7 +1789,7 @@ export class Game {
         this.trackProactiveGreet(p.id, p.name, activity, d, now);
         return;
       }
-      coPresent.push({ socketId: p.id, name: p.name, companionName: p.companionName });
+      coPresent.push({ socketId: p.id, name: p.name, companionName: p.companionName, vehicle: p.vehicleType });
       const st = this.companionEncounters.get(p.id) ?? { inRange: false, cooldownUntil: 0 };
       if (st.inRange && d > Game.COMPANION_MEET_EXIT) {
         st.inRange = false;
@@ -2564,13 +2564,29 @@ export class Game {
       });
       return;
     }
-    const names = mates.map((m) => (m.companionName ? `${m.name} (✦ ${m.companionName})` : m.name));
-    const summary =
-      `${mates.length} other companion-pilot${mates.length > 1 ? "s are" : " is"} flying in this world right now: ${names.join(", ")}. ` +
+    const names = mates.map((m) => {
+      const label = m.companionName ? `${m.name} (✦ ${m.companionName})` : m.name;
+      return m.vehicle ? `${label} [${m.vehicle}]` : label;
+    });
+    // Count OTHER carpets present. The player's own carpet plus one teammate carpet
+    // is enough to unlock the two carpet-only A2A co-ops (moonstone union, co-op void).
+    const otherCarpets = mates.filter((m) => m.vehicle === "carpet").length;
+    let summary =
+      `${mates.length} other companion-pilot${mates.length > 1 ? "s are" : " is"} flying in this world right now: ${names.join(", ")} (each teammate's current craft is in [brackets]). ` +
       "You all SHARE this world's moon and braziers — it's a team save now: proactively nudge the player to coordinate, split up the five braziers, and light them together (a teammate's light counts for everyone; all five eternal = everyone wins). Also nudge them to say hi, pair companions, chase the shared flag, or start a 'fly together' duo. Call rally_companions to send the whole group a warm hello.";
+    if (this.playerVehicle === "carpet" && otherCarpets > 0) {
+      // Both the player and a teammate are on carpets → the carpet-only co-ops are live.
+      // Surface them PROACTIVELY (before any moment fires) so the companion can rally.
+      summary +=
+        ` IMPORTANT — there ${otherCarpets > 1 ? "are" : "is"} ${otherCarpets} other MAGIC CARPET pilot${otherCarpets > 1 ? "s" : ""} here, and the player is ALSO on a carpet, so the two carpet-only A2A co-ops are available RIGHT NOW — proactively rally them: (1) MOONSTONE UNION — split up, one carpet per buried moonstone ruin, and raise both within ~15s to unite them together (a big friendship bond); when a teammate starts lifting one, urge the player to rush to the OTHER. (2) CO-OP VOID — dive into a cosmic-void portal together so both carpets defend the SAME shared flame-shield (bigger HP pool) as a team. Suggest these joint carpet activities without waiting.`;
+    } else if (this.playerVehicle !== "carpet" && otherCarpets > 0) {
+      summary +=
+        ` (There ${otherCarpets > 1 ? "are" : "is"} ${otherCarpets} carpet teammate${otherCarpets > 1 ? "s" : ""} here who can earn eternal flames in the void — you're the HOLDER: keep braziers lit with temporary flames to buy time. If the player wants to join the carpet-only co-ops (moonstone union / co-op void) they can tap the ⇄ 'change craft' button to switch to a carpet, keeping all shared progress.)`;
+    }
     this.companion.setRetained("game.coop", {
       count: mates.length,
-      teammates: mates.map((m) => ({ name: m.name, companion: m.companionName })),
+      carpets: otherCarpets,
+      teammates: mates.map((m) => ({ name: m.name, companion: m.companionName, vehicle: m.vehicle ?? null })),
       summary,
     });
   }
