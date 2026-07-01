@@ -234,6 +234,9 @@ export class HUD {
     });
 
     this.vehicleBtn = this.el.querySelector(".hud-vehicle-btn")!;
+    // Move it out of the top-right cluster to the HUD root so it can sit at the
+    // bottom-right (above the flight controls), positioned absolutely by CSS.
+    this.el.appendChild(this.vehicleBtn);
     this.vehicleBtn.addEventListener("click", () => {
       this.onSwitchVehicle?.();
     });
@@ -942,6 +945,14 @@ export class HUD {
         cursor: pointer;
         transition: background 0.2s, color 0.2s;
         padding: 0;
+      }
+      /* "Change craft" lives at the bottom-right, above the flight controls (not in
+       * the crowded top-right cluster). It keeps the shared button styling above. */
+      .hud-vehicle-btn {
+        position: absolute;
+        z-index: 6;
+        right: max(20px, calc(14px + env(safe-area-inset-right)));
+        bottom: calc(max(20px, env(safe-area-inset-bottom)) + max(64px, 8vh) + 190px);
       }
       .hud-vehicle-btn:hover,
       .hud-campsite-btn:hover,
