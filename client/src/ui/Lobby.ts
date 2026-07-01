@@ -230,6 +230,9 @@ export class Lobby {
           <div class="lobby-title-block" style="--title-last-char-i:${LOBBY_TITLE_LAST_CHAR_I}">
             <p class="lobby-tagline">${t("A Cosy Exploration Game", "一款惬意的探索游戏")}</p>
             <h1 class="lobby-title" aria-label="${LOBBY_DISPLAY_TITLE}">${lobbyTitleLettersHtml()}</h1>
+            <a class="lobby-guide-link" href="/guide.html?lang=${IS_ZH ? "zh" : "en"}" target="_blank" rel="noopener noreferrer">
+              <span aria-hidden="true">📖</span> ${t("How to play", "玩法指南")}
+            </a>
           </div>
           <div class="lobby-username">
             <div class="lobby-greeting-row">
@@ -1053,6 +1056,16 @@ export class Lobby {
         font-weight: 600; font-size: 0.82rem; padding: 8px 16px;
       }
       .lobby-companion-help { font-size: 0.72rem; color: rgba(255,255,255,0.72); text-decoration: underline; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+      .lobby-guide-link {
+        display: inline-flex; align-items: center; gap: 0.32em; margin-top: 0.62em;
+        font-family: 'Domine', Georgia, serif; font-size: 0.8rem; font-weight: 600;
+        color: #fff; text-decoration: none; letter-spacing: 0.02em;
+        padding: 0.3em 0.85em; border-radius: 999px;
+        background: rgba(255,255,255,0.16); border: 1px solid rgba(255,255,255,0.28);
+        backdrop-filter: blur(4px); text-shadow: 0 1px 3px rgba(0,0,0,0.45);
+        transition: background 0.18s ease, transform 0.18s ease;
+      }
+      .lobby-guide-link:hover { background: rgba(255,255,255,0.28); transform: translateY(-1px); }
 
       /* De-emphasize the name via size only; keep it legible on bright skies. */
       .lobby-greeting-hi, .lobby-name { font-size: 0.95rem; opacity: 1; text-shadow: 0 1px 4px rgba(0,0,0,0.55); }
