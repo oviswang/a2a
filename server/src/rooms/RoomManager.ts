@@ -162,6 +162,18 @@ export class RoomManager {
       });
     });
 
+    // A2A: relay giving an Eternal Flame to a co-present teammate.
+    socket.on("flame:gift", (toId) => {
+      const target = room.getPlayer(toId);
+      if (!target) return;
+      const me = room.getPlayer(socket.id)?.state;
+      target.socket.emit("flame:received", {
+        fromId: socket.id,
+        fromName: me?.name ?? state.name,
+        fromCompanionName: me?.companionName,
+      });
+    });
+
     // A2A duo challenge ("fly together") — invite / answer / completion, room-scoped.
     socket.on("duo:invite", (toId) => {
       const target = room.getPlayer(toId);
