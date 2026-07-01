@@ -86,11 +86,6 @@ export class SocketClient {
     this.socket.emit("debug:forceFlagSpawn");
   }
 
-  /** QA/debug: force-surface a Leviathan near me. */
-  emitDebugForceLeviathan() {
-    this.socket.emit("debug:forceLeviathan");
-  }
-
   onPaintballFired(cb: (ev: PaintballFiredEvent) => void) {
     this.socket.on("paintball:fired", cb);
   }

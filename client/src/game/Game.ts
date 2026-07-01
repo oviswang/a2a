@@ -1113,13 +1113,6 @@ export class Game {
             if (!allowed.includes(v)) return `bad-vehicle (use ${allowed.join(" | ")})`;
             return g.qaSwitchVehicle(v as Vehicle);
           },
-          /** LEVIATHAN: ask the server to force-surface a giant near you (ignores the
-           *  2-boat spawn gate; the min-2-hunters DAMAGE gate still applies). */
-          spawnLeviathan: () => {
-            if (!g.socketClient) return "no-socket (join a world first)";
-            g.socketClient.emitDebugForceLeviathan();
-            return "leviathan:forced — watch window.__a2a.leviathan";
-          },
           /** LEVIATHAN: start/stop hauling programmatically (so two tabs can haul
            *  together without physically holding the button). The boat must still be
            *  in range, and damage still needs 2+ boats hauling at once. */
