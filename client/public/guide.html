@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>A2A.FUN — Player Guide</title>
+<meta name="description" content="How to play A2A.FUN — vehicles, the win path, activities, your AI companion, and A2A co-op." />
+<link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png" />
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=Nunito:wght@400;600;700;800;900&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --teal:#22b8a6;--teal-d:#159b8b;--coral:#ff7a5c;--ink:#2a3b45;
+    --cream:#fbf7ef;--card:#fff;--sky:#eaf7f5;--gold:#f4b740;--violet:#7b6cf6;--muted:#5a6a72;
+  }
+  html{-webkit-text-size-adjust:100%}
+  body{
+    font-family:'Nunito','Noto Sans SC',system-ui,sans-serif;color:var(--ink);
+    background:linear-gradient(165deg,#eaf7f5 0%,#fbf7ef 45%,#fdefe9 100%);
+    background-attachment:fixed;line-height:1.6;-webkit-font-smoothing:antialiased;
+    padding:0 0 60px;
+  }
+  .lang-zh body,body.zh{font-family:'Noto Sans SC','Nunito',system-ui,sans-serif}
+  .wrap{max-width:980px;margin:0 auto;padding:0 20px}
+
+  /* top bar */
+  .topbar{position:sticky;top:0;z-index:50;background:rgba(251,247,239,.86);backdrop-filter:blur(10px);
+    border-bottom:1px solid rgba(21,155,139,.14)}
+  .topbar .row{max-width:980px;margin:0 auto;padding:10px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:19px;color:var(--teal-d);text-decoration:none}
+  .brand img{height:26px}
+  .langtoggle{display:flex;background:#fff;border:2px solid #e6ded1;border-radius:999px;overflow:hidden;flex-shrink:0}
+  .langtoggle button{border:0;background:transparent;padding:6px 14px;font-weight:800;font-size:14px;color:var(--muted);cursor:pointer;font-family:inherit}
+  .langtoggle button.on{background:var(--teal);color:#fff}
+
+  /* hero */
+  header.hero{text-align:center;padding:40px 0 8px}
+  header.hero img.logo{width:min(300px,72vw);height:auto;filter:drop-shadow(0 8px 18px rgba(34,184,166,.18))}
+  header.hero h1{font-size:clamp(26px,6vw,40px);font-weight:900;margin:14px 0 6px;letter-spacing:-.5px}
+  header.hero .tag{font-size:clamp(15px,3.6vw,19px);color:var(--teal-d);font-weight:700;padding:0 6px}
+  header.hero .tag b{color:var(--coral)}
+  .rule{height:5px;border-radius:5px;background:linear-gradient(90deg,var(--teal),var(--gold),var(--coral));margin:26px 0 10px}
+
+  section{margin:34px 0}
+  h2{font-size:clamp(20px,4.6vw,27px);font-weight:900;margin:0 0 16px;display:flex;align-items:center;gap:11px}
+  h2 .n{background:var(--teal);color:#fff;width:38px;height:38px;border-radius:11px;display:inline-flex;
+    align-items:center;justify-content:center;font-size:20px;box-shadow:0 4px 0 var(--teal-d);flex-shrink:0}
+
+  /* vehicle cards */
+  .veh{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .vcard{background:var(--card);border-radius:20px;padding:22px;box-shadow:0 10px 26px rgba(40,90,90,.09);
+    border:3px solid #fff;position:relative;overflow:hidden}
+  .vcard::after{content:'';position:absolute;right:-36px;top:-36px;width:118px;height:118px;border-radius:50%;background:var(--sky);z-index:0}
+  .vcard>*{position:relative;z-index:1}
+  .vcard .ic{width:64px;height:64px}
+  .vcard h3{font-size:21px;margin:10px 0 6px}
+  .vcard .lv{display:inline-block;font-size:12.5px;font-weight:800;color:#fff;background:var(--coral);padding:3px 11px;border-radius:999px;margin-bottom:11px}
+  .vcard .lv.free{background:var(--teal)}
+  .vcard p{font-size:15.5px;color:var(--muted)}
+  .vcard .role{margin-top:11px;font-size:14px;font-weight:800;color:var(--teal-d)}
+
+  /* win flow */
+  .flow{background:#12303a;border-radius:22px;padding:26px 22px;color:#eaf7f5}
+  .flow .steps{display:flex;align-items:stretch;gap:6px}
+  .fstep{flex:1;text-align:center;padding:4px}
+  .fstep .ic{width:46px;height:46px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.3))}
+  .fstep .em{font-size:36px;line-height:46px}
+  .fstep h4{font-size:15.5px;margin:7px 0 4px;color:#fff}
+  .fstep p{font-size:12.5px;color:#a9cfca;line-height:1.45}
+  .arr{align-self:center;color:var(--gold);font-size:26px;font-weight:900}
+  .flow .note{margin-top:18px;font-size:15px;background:rgba(255,255,255,.08);border-radius:12px;padding:13px 16px}
+  .flow .note b{color:var(--gold)}
+
+  /* activities */
+  .acts{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+  .act{display:flex;gap:15px;align-items:center;background:var(--card);border-radius:16px;padding:15px 17px;box-shadow:0 6px 16px rgba(40,90,90,.07)}
+  .act .ic{width:46px;height:46px;flex-shrink:0}
+  .act .em{font-size:36px;width:46px;text-align:center;flex-shrink:0}
+  .act h4{font-size:17px;margin-bottom:3px}
+  .badge{font-size:11.5px;font-weight:800;padding:1px 8px;border-radius:999px;margin-left:5px;vertical-align:middle;white-space:nowrap}
+  .badge.xp{color:#b9820a;background:#fff3d6}
+  .badge.only{color:#fff;background:var(--violet)}
+  .act p{font-size:14px;color:var(--muted);line-height:1.45}
+
+  /* social */
+  .social{background:linear-gradient(135deg,#fff,#fef3ee);border-radius:22px;padding:26px 24px;box-shadow:0 10px 26px rgba(255,120,90,.11);border:3px solid #fff}
+  .social .lead{font-size:16px;color:#6a4a42;margin-bottom:16px}
+  .social .lead b{color:var(--coral)}
+  .sub{font-size:14px;font-weight:900;color:var(--teal-d);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px}
+  .sgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 26px}
+  .srow{display:flex;gap:12px;align-items:flex-start}
+  .srow .em{font-size:26px;flex-shrink:0;width:34px;text-align:center;line-height:1.25}
+  .srow h4{font-size:16px;margin-bottom:2px}
+  .srow h4 .new{font-size:10.5px;color:#fff;background:var(--coral);padding:1px 7px;border-radius:999px;margin-left:5px;vertical-align:middle;font-weight:800}
+  .srow p{font-size:13.5px;color:#5a5560;line-height:1.45}
+
+  /* quickstart */
+  .qs{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .qcard{background:var(--teal);color:#fff;border-radius:18px;padding:20px;box-shadow:0 8px 0 var(--teal-d)}
+  .qcard .step{font-size:13px;font-weight:800;opacity:.82;letter-spacing:1px}
+  .qcard h4{font-size:20px;margin:4px 0 8px}
+  .qcard p{font-size:15px;opacity:.97}
+
+  /* tips */
+  .tips{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .tipbox{background:var(--card);border-radius:18px;padding:20px 22px;box-shadow:0 6px 16px rgba(40,90,90,.07)}
+  .tipbox h3{font-size:18px;margin-bottom:10px}
+  .tipbox ul{list-style:none}
+  .tipbox li{font-size:14.5px;color:var(--muted);padding:6px 0 6px 24px;position:relative;line-height:1.5}
+  .tipbox.bad li::before{content:'✕';position:absolute;left:0;color:var(--coral);font-weight:900}
+  .tipbox.good li::before{content:'✓';position:absolute;left:0;color:var(--teal);font-weight:900}
+  .tipbox b{color:var(--ink)}
+
+  footer{text-align:center;margin-top:36px;font-size:14.5px;color:#8a9aa0}
+  footer a{color:var(--teal-d);font-weight:800;text-decoration:none}
+
+  /* ---- responsive ---- */
+  @media (max-width:760px){
+    .veh{grid-template-columns:1fr}
+    .acts{grid-template-columns:1fr}
+    .sgrid{grid-template-columns:1fr}
+    .qs{grid-template-columns:1fr}
+    .tips{grid-template-columns:1fr}
+    .flow{padding:20px 16px}
+    .flow .steps{flex-direction:column;gap:2px}
+    .fstep{display:flex;align-items:center;gap:14px;text-align:left;padding:8px 4px}
+    .fstep .ic,.fstep .em{flex-shrink:0}
+    .fstep .txt{flex:1}
+    .fstep h4{margin:0 0 2px}
+    .arr{transform:rotate(90deg);align-self:center;margin:-2px 0}
+    header.hero{padding:26px 0 4px}
+  }
+</style>
+</head>
+<body>
+<div class="topbar"><div class="row">
+  <a class="brand" href="/"><img src="/social-card.png" alt=""/><span>A2A.FUN</span></a>
+  <div class="langtoggle" id="langtoggle">
+    <button data-l="en">EN</button><button data-l="zh">中文</button>
+  </div>
+</div></div>
+
+<div class="wrap" id="app"></div>
+
+<script>
+(function(){
+  var params = new URLSearchParams(location.search);
+  var q = params.get('lang');
+  var lang = (q === 'zh' || q === 'en') ? q
+    : ((navigator.language||navigator.userLanguage||'').toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en');
+
+  function L(en, zh){ return lang === 'zh' ? zh : en; }
+  var I = function(name, s){ return '<img class="ic" src="/2D/'+name+'" width="'+(s||46)+'" height="'+(s||46)+'" alt="">'; };
+  var FLAME = '<img class="ic" src="/2D/eternal_flame.png" alt="">';
+
+  document.documentElement.lang = lang;
+  document.body.classList.toggle('zh', lang === 'zh');
+  document.title = L('A2A.FUN — Player Guide', 'A2A.FUN — 玩法指南');
+
+  // ---- language toggle ----
+  var tg = document.getElementById('langtoggle');
+  tg.querySelectorAll('button').forEach(function(b){
+    if(b.dataset.l === lang) b.classList.add('on');
+    b.addEventListener('click', function(){
+      var u = new URL(location.href); u.searchParams.set('lang', b.dataset.l); location.href = u.toString();
+    });
+  });
+
+  var veh = [
+    { ic:'icon_biplane.svg', name:L('Biplane','双翼机'), free:true,
+      lv:L('Ready at start','开局即用'),
+      p:L('Nimble and easy. Deliver <b>packages</b>, run <b>races</b>, and splat sky gremlins with the paint cannon. Great for quick XP.',
+          '灵活好上手。可<b>投递包裹</b>、<b>跑竞速</b>，用喷漆炮打天空小精灵。适合快速刷经验升级。'),
+      role:L('▶ Team role: the "Holder"','▶ 团队角色：「续命工」') },
+    { ic:'icon_carpet.svg', name:L('Magic Carpet','魔毯'), free:false,
+      lv:L('Unlocks at Level 2','达到 2 级解锁'),
+      p:L('The <b>only</b> craft that can enter cosmic-void portals — so the only one that can earn <b>Eternal Flames</b> and truly stop the moon. Also collects jellyfish.',
+          '唯一能进<b>宇宙虚空传送门</b>的载具——也就是唯一能挣到<b>永恒火焰</b>、真正终结月亮的关键角色。还能收集水母。'),
+      role:L('▶ Team role: the "Finisher"','▶ 团队角色：「终结者」') },
+    { ic:'icon_boat.svg', name:L('Boat','小船'), free:false,
+      lv:L('Plane/Carpet reach Lv 4','飞机/魔毯 4 级解锁'),
+      p:L('Go <b>fishing</b>, fill the Fishdex, and — with a second boat — hunt the giant <b>Leviathan</b> together. The relaxed pick.',
+          '在海上<b>钓鱼</b>、收集图鉴。两艘船同场还能合力围猎巨型<b>利维坦</b>。悠闲党最爱。'),
+      role:L('▶ Team role: the "Explorer"','▶ 团队角色：「探索家」') }
+  ];
+
+  var flow = [
+    { ic:I('icon_carpet.svg'), h:L('Ride the carpet','骑魔毯'), p:L('Switch craft with ⇄','飞机→魔毯（⇄ 换乘）') },
+    { ic:I('icon_portal.svg'), h:L('Enter the void','钻进虚空'), p:L('Fly into a glowing portal; hold the shield through 3 moth waves','撞入发光传送门，守住护盾撑过 3 波飞蛾') },
+    { ic:FLAME, h:L('Bring back a Flame','带回永恒火焰'), p:L('Survive → 1 Eternal Flame','幸存即获得 1 枚永恒火焰') },
+    { ic:I('icon_brazier.svg'), h:L('Light a brazier','点亮火盆'), p:L('Fly close to light it permanently','飞近古老火盆永久点燃') },
+    { ic:'<span class="em">🌙❄️</span>', h:L('Freeze the moon','冻结月亮'), p:L('All 5 lit → world saved','集齐 5 座 → 世界永久得救') }
+  ];
+
+  var acts = [
+    { ic:I('icon_package.svg'), h:L('Package delivery','包裹投递'), xp:L('≈50 XP ×3','≈50 XP ×3'),
+      p:L('Fly into the GOLD beam to grab it; hover ~2s in the CYAN down-arrow beam to drop.','飞进金色光柱取件，运到青色下箭头光柱悬停约 2 秒放下。') },
+    { ic:I('icon_race.svg'), h:L('Time-trial race','竞速时间赛'), xp:L('High XP','高 XP'),
+      p:L('Hover at the banner to start the countdown, then fly through 12 rings in order before time runs out.','飞到横幅前悬停倒计时开始，限时依次穿过 12 个光环。') },
+    { ic:I('icon_gremlin.svg'), h:L('Sky gremlins','天空小精灵'), xp:L('≈30 XP','≈30 XP'), only:L('Plane','飞机'),
+      p:L('Press FIRE — 3 hits each. After 7 kills a Gremlin King appears (10 hits). Fly through the ❤️ they drop to heal.','按开火键喷漆，每只 3 发。杀 7 只出精灵王（10 发）。吃它们掉的 ❤️ 回血。') },
+    { ic:I('icon_jellyfish.svg'), h:L('Sky jellyfish','天空水母'), xp:L('≈30 XP ×6','≈30 XP ×6'), only:L('Carpet','魔毯'),
+      p:L('Hover ~1.5s next to a drifting jellyfish to collect it — six colours trail behind you in a pod.','贴近漂浮的水母悬停约 1.5 秒收集，六种颜色会跟在身后成群。') },
+    { ic:I('icon_fish.svg'), h:L('Fishing + Fishdex','钓鱼 + 图鉴'), xp:L('15–90 XP','15~90 XP'), only:L('Boat','小船'),
+      p:L('Sail over fish shadows; hover ~2s to reel in. Glowing fish = RARE (blue) / EPIC (gold). Quick catches build a combo.','驶过鱼影，圈中悬停约 2 秒收线。发光鱼=稀有(蓝)/史诗(金)，连钓有连击加成。') },
+    { ic:'<span class="em">🌈</span>', h:L('Explore extras','探索彩蛋'), xp:L('Quick XP','快速 XP'),
+      p:L('Fly in a bird flock, through rainbow arches, over a volcano, grab holo-diamonds… cosy, not required to win.','穿彩虹拱门、编队伴飞鸟群、掠过火山、收集全息钻石……惬意小惊喜，非必需。') }
+  ];
+
+  var social = [
+    { em:'🤝', h:L('Befriend & pair','结伴 & 配对'),
+      p:L('Say hi, send a little gift, pair into lasting A2A friends, then start a "fly together" duo.','飞近打招呼、送小礼物，配对成为长期 A2A 好友，还能发起「同飞」二人挑战。') },
+    { em:'🚩', h:L('Flag & skirmish','抢旗 & 对战'),
+      p:L('With 2+ pilots a flag appears to chase and steal; biplanes can paintball each other.','2 人以上会刷出旗子互相抢夺；双翼机之间还能喷漆嬉戏。') },
+    { em:'🔥', h:L('Gift an Eternal Flame','赠送永恒火焰'), _new:L('Carpet co-op','飞毯协作'),
+      p:L('A carpet pilot can hand a hard-earned flame to a plane/boat teammate to light a brazier — a generous bond-builder.','魔毯玩家可把辛苦挣来的火焰送给飞机/船队友去点火盆，慷慨之举收获羁绊。') },
+    { em:'📷', h:L('Two-carpet photo','双飞毯合影'), _new:L('Carpet co-op','飞毯协作'),
+      p:L('Two carpets flying close auto-snap a shared capybara keepsake — a sweet little moment.','两张魔毯靠近会自动抓拍一张水豚合影纪念，甜甜的小瞬间。') },
+    { em:'🌙', h:L('Moonstone union','月光石合璧'), _new:L('Carpet co-op','飞毯协作'),
+      p:L('Two buried moonstones must float AT ONCE to unite — split up, one carpet each, raise them together within ~15s.','两块埋藏的月光石需同时升起才能合璧——分头一人一块，约 15 秒内一起举起。') },
+    { em:'🛡️', h:L('Co-op void','协作虚空'), _new:L('Carpet co-op','飞毯协作'),
+      p:L('Two carpets in the void share one thicker flame-shield: break it and you fail together; hold it and each earns a flame.','两张魔毯同时在虚空里，共享一个更厚的火焰护盾一起防守，破了一起失败，守住各得火焰。') },
+    { em:'🐙', h:L('Hunt the Leviathan','围猎利维坦'), _new:L('Boat co-op','小船协作'),
+      p:L('Two boats make a giant surface; at least two must HOLD the 🎣 haul together to beat it. Shared spoils.','两艘船同场会浮现巨兽，至少两船一起按住「🎣 拉拽」才能击退，共享战利品。') },
+    { em:'👻', h:L('Echoes of the world','世界的回响'),
+      p:L('You will meet ghosts of past pilots — recognise them, then go find a LIVE player to pair with.','会遇到曾经飞过这里的玩家「幽灵」——认出他们，然后去找线上的活人配对吧。') }
+  ];
+
+  var qs = [
+    { step:'STEP 1', t:L('Take off','起飞'), h:L('Earn a little XP','先攒一点经验'),
+      p:L('Start on the biplane, do 2 deliveries or 1 race to hit Level 2. Paste your Pouchy companion token in the lobby.','开局用双翼机，做 2 单包裹或跑 1 场竞速，很快到 2 级。别忘了在 lobby 贴上 Pouchy 伴侣令牌。') },
+    { step:'STEP 2', t:L('Switch to carpet','换魔毯'), h:L('Earn a Flame in the void','去虚空挣火焰'),
+      p:L('Tap ⇄ "change craft" to the carpet (progress kept), fly into a portal, and steer so moths are shot down before the shield. Survive 3 waves.','点右上角 ⇄「换乘」切魔毯（进度不丢），撞进传送门，转向让飞蛾在身前被击落，撑过 3 波。') },
+    { step:'STEP 3', t:L('Save the world','救世界'), h:L('Light all 5 braziers','点亮 5 座火盆'),
+      p:L('Plant flames at braziers. With others around: split up, pair up, freeze the moon together — that\'s the heart of A2A.','带火焰飞近火盆永久点燃。人多就分头、配对好友、一起冻结月亮——这才是 A2A 的乐趣所在。') }
+  ];
+
+  var bad = [
+    L('"Light every brazier and you win." — No. Normal fire is temporary and only PAUSES the moon; you must use <b>Eternal Flames</b> on all 5.','「点亮所有火盆就赢了」——错。普通火是临时火，只让月亮暂停；必须用<b>永恒火焰</b>点满 5 座。'),
+    L('"The plane can save the world." — Planes can\'t earn Eternal Flames. You need at least one carpet in the void.','「用飞机就能救世界」——飞机挣不到永恒火焰，至少要有一张魔毯进虚空。'),
+    L('"Switching craft loses progress." — It doesn\'t. ⇄ keeps all shared progress and returns to the same world.','「换载具会丢进度」——不会。⇄ 换乘保留全部共享进度，回到同一世界。'),
+    L('"You press FIRE in the void." — No. Your capybara auto-fires; you only STEER to keep moths off the shield.','「虚空里要按开火」——不用。水豚自动开火，你只负责转向把飞蛾挡在护盾前。')
+  ];
+  var good = [
+    L('No carpet yet? Spam <b>temporary</b> fire to pause the moon while you level up toward the carpet.','缺魔毯先别硬刚：飞机/船狂点<b>临时火</b>把月亮暂停住，边拖边升级去换魔毯。'),
+    L('In the void, protect the shield — pick moths off right in front of you instead of chasing wildly.','虚空里<b>别贪</b>：让飞蛾在你正前方被逐一点掉，别到处乱飞漏蛾。'),
+    L('Keep the fishing <b>combo</b> alive (up to x3) and chase the glowing rare/epic fish.','钓鱼<b>连击</b>别断（最高 x3），优先追发光的稀有/史诗鱼。'),
+    L('Say hi to everyone — pairing, gifting, duos, unions and co-op void all deepen your bond, unlocking more to do together.','见人就打招呼——配对、送礼、同飞、合璧、共守虚空都能加深羁绊，羁绊越深能一起做的越多。')
+  ];
+
+  function vehCard(v){
+    return '<div class="vcard">'+I(v.ic,64)+
+      '<h3>'+v.name+'</h3><div class="lv'+(v.free?' free':'')+'">'+v.lv+'</div><p>'+v.p+'</p><div class="role">'+v.role+'</div></div>';
+  }
+  function flowStep(f){
+    return '<div class="fstep">'+f.ic+'<div class="txt"><h4>'+f.h+'</h4><p>'+f.p+'</p></div></div>';
+  }
+  function actCard(a){
+    var b='<span class="badge xp">'+a.xp+'</span>'+(a.only?'<span class="badge only">'+a.only+'</span>':'');
+    return '<div class="act">'+a.ic+'<div><h4>'+a.h+b+'</h4><p>'+a.p+'</p></div></div>';
+  }
+  function socRow(s){
+    var n=s._new?'<span class="new">'+s._new+'</span>':'';
+    return '<div class="srow"><div class="em">'+s.em+'</div><div><h4>'+s.h+n+'</h4><p>'+s.p+'</p></div></div>';
+  }
+  function qCard(q){
+    return '<div class="qcard"><div class="step">'+q.step+' · '+q.t+'</div><h4>'+q.h+'</h4><p>'+q.p+'</p></div>';
+  }
+
+  var socialCoop = social.slice(2, social.length-1); // co-op items only (exclude ghosts)
+  var socialGeneral = social.slice(0,2).concat(social[social.length-1]); // befriend, flag, ghosts
+
+  var html =
+  '<header class="hero"><img class="logo" src="/social-card.png" alt="A2A.FUN">'+
+    '<h1>'+L('Player Guide','玩法指南')+'</h1>'+
+    '<div class="tag">'+L('A cosy multiplayer flight game — bring your <b>AI companion</b> and save a tiny world together.',
+      '一款惬意的多人探索飞行游戏 · 带上你的 <b>AI 伴侣</b>，一起拯救小小世界。')+'</div>'+
+  '</header><div class="rule"></div>'+
+
+  '<section><h2><span class="n">1</span>'+L('Three vehicles, three specialties','三种载具，各有专长')+'</h2>'+
+    '<div class="veh">'+veh.map(vehCard).join('')+'</div></section>'+
+
+  '<section><h2><span class="n">2</span>'+L('The goal: stop the falling moon','核心目标：阻止月亮坠落')+'</h2>'+
+    '<div class="flow"><div class="steps">'+
+      flow.map(function(f,i){ return flowStep(f)+(i<flow.length-1?'<div class="arr">→</div>':''); }).join('')+
+    '</div><div class="note">⚠️ <b>'+L('Key difference','关键区别')+'</b>: '+
+      L('any craft can light a brazier, but a normal light is a <b>temporary</b> flame (~45s) that only PAUSES the moon (~1 min). To WIN you must light all five with an <b>Eternal Flame</b> — and Eternal Flames are earned <b>only</b> in the void, <b>only</b> on the carpet.',
+        '任何载具飞近火盆都能点火，但普通火只是<b>临时火</b>（约 45 秒），只能让月亮<b>暂停</b>约 1 分钟拖时间；只有用<b>永恒火焰</b>点亮全部 5 座才算真正获胜。永恒火焰<b>只能</b>由魔毯在虚空里挣到。')+
+    '</div></div></section>'+
+
+  '<section><h2><span class="n">3</span>'+L('Activities & leveling up','日常活动与升级')+'</h2>'+
+    '<div class="acts">'+acts.map(actCard).join('')+'</div></section>'+
+
+  '<section><h2><span class="n">4</span>'+L('Your AI companion & A2A co-op','AI 伴侣与 A2A 协作')+'</h2>'+
+    '<div class="social"><div class="lead">'+
+      L('Bring your <b>AI companion (Pouchy)</b> — it reads the situation live, guides you, and can even fly for you. When you meet another player, your two AI companions <b>greet each other in front of you</b> — that\'s A2A. The moon and five braziers are <b>shared by the whole world</b>, so saving it is a team win.',
+        '带上你的 <b>AI 伴侣（Pouchy）</b>，它实时读懂局势、给你导航，还能替你开飞机。遇到别的玩家时，两个 AI 伴侣会<b>当着主人的面互相打招呼</b>——这就是 A2A。月亮和 5 座火盆是<b>全世界共享</b>的，救世界是一起赢！')+
+    '</div>'+
+    '<div class="sub">'+L('Social with anyone','通用社交')+'</div>'+
+    '<div class="sgrid">'+socialGeneral.map(socRow).join('')+'</div>'+
+    '<div class="sub">'+L('Co-op with teammates','团队协作')+'</div>'+
+    '<div class="sgrid">'+socialCoop.map(socRow).join('')+'</div></div></section>'+
+
+  '<section><h2><span class="n">5</span>'+L('Get started in 3 steps','三步快速上手')+'</h2>'+
+    '<div class="qs">'+qs.map(qCard).join('')+'</div></section>'+
+
+  '<section><h2><span class="n">6</span>'+L('Pitfalls & pro tips','误区 & 小技巧')+'</h2>'+
+    '<div class="tips">'+
+      '<div class="tipbox bad"><h3>'+L('Common mistakes','常见误区')+'</h3><ul>'+bad.map(function(x){return '<li>'+x+'</li>';}).join('')+'</ul></div>'+
+      '<div class="tipbox good"><h3>'+L('Pro tips','高手技巧')+'</h3><ul>'+good.map(function(x){return '<li>'+x+'</li>';}).join('')+'</ul></div>'+
+    '</div></section>'+
+
+  '<footer>🌍 <a href="https://a2a.fun">a2a.fun</a> · '+
+    L('A cosy world where an AI companion flies at your side. See another pilot? Say hi 👋',
+      '一个 AI 伴侣与你并肩飞行的惬意世界 · 见到别的飞行员，别忘了打个招呼 👋')+'</footer>';
+
+  document.getElementById('app').innerHTML = html;
+})();
+</script>
+</body>
+</html>
