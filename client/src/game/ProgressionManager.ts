@@ -489,6 +489,18 @@ export class ProgressionManager {
     return { firstCatch, distinctCaught: Object.keys(dex).length };
   }
 
+  /** QA-only: seed the plane to level 4 so the boat unlocks (for Leviathan testing). */
+  static qaUnlockBoat() {
+    const all = ProgressionManager.loadAll();
+    const prev = all.plane ?? { xp: 0, level: 1, appliedUpgradeIds: [] };
+    all.plane = {
+      ...prev,
+      xp: Math.max(prev.xp ?? 0, LEVEL_THRESHOLDS[3] ?? 600),
+      level: Math.max(prev.level ?? 1, 4),
+    };
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(all)); } catch {}
+  }
+
   static loadPlayerWorldState(): SavedPlayerWorldState {
     try {
       const raw = localStorage.getItem(PLAYER_WORLD_STATE_KEY);
