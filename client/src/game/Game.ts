@@ -42,7 +42,13 @@ import {
   type CompanionGiftEvent,
   type WorldObjectiveState,
   type ObjectiveBrazierEvent,
+  type LeviathanState,
+  LEVIATHAN_HAUL_RADIUS,
+  LEVIATHAN_MIN_HUNTERS,
 } from "@globefly/shared";
+import { SeaGiant } from "./SeaGiant";
+/** Shared XP granted to boats present when the room lands the Leviathan. */
+const LEVIATHAN_REWARD_XP = 220;
 import { DayNightCycle } from "./DayNightCycle";
 import { AudioManager } from "../audio/AudioManager";
 import { Globe } from "./Globe";
@@ -756,6 +762,11 @@ export class Game {
   private skyJellyfish: SkyJellyfish | null = null;
   private jellyfishCaptureRing: CircularProgressRing | null = null;
   private oceanFish: OceanFish | null = null;
+  /** Shared co-op Leviathan (server-authoritative); rendered when one is active. */
+  private seaGiant: SeaGiant | null = null;
+  private lastLeviathan: LeviathanState | null = null;
+  private haulActive = false;
+  private haulTimer: number | null = null;
   private fishCaught = 0;
   private boatMysteryAt12Handled = false;
   /** Fishing combo: consecutive catches within {@link FISH_COMBO_WINDOW_MS}. */
@@ -1263,7 +1274,7 @@ export class Game {
       appContext: {
         name: "A2A.FUN",
         description:
-          "A2A.FUN is a cosy multiplayer flight game. The player pilots a biplane, a magic carpet, or a boat around a tiny globe-world. The overarching goal is to save the world from a slowly falling moon. CORE ACTIVITIES AND EXACTLY HOW TO DO EACH (all give XP that levels the player up):\n- Package deliveries: fly into a glowing GOLD package beam at a village to pick it up (it then dangles under the craft); fly to the destination village — a CYAN beam with a down-arrow — and hover in that spot for ~2s to drop it. Three per world, ~50 XP each.\n- Races / time-trials: fly up to a race BANNER and hold steady for a 3-2-1 countdown to start; then fly through the twelve glowing RING checkpoints in order before the timer runs out (~45s on the plane, ~40s on the carpet). A few rings hide bonus diamonds.\n- (Biplane only) Sky gremlins: press the FIRE button to shoot paintballs at the flying gremlins — three hits each; after seven kills a bigger GREMLIN KING appears (ten hits). ~30 XP each, 120 for the King. Gremlins shoot back; fly through the little HEARTS they drop to heal.\n- (Magic carpet only) Sky jellyfish: fly close to a drifting jellyfish and hover ~1.5s to collect it; there are six (one per colour) and they trail behind you in a little pod. ~30 XP each.\n- (Boat only) Fishing: sail over a school of fish (shadows in the water); when one is inside your dashed ring, hold steady ~2s to reel it in (~15 XP each). Some fish are PRIZED catches that softly GLOW in the water — blue = RARE (~40 XP), gold = EPIC (~90 XP); they fight harder (flee faster, reel slower) but are worth chasing. Catching fish in quick succession builds a COMBO multiplier (up to x3) that boosts the XP — so encourage the player to keep the catches coming and to steer toward the glowing rare/epic fish. When a prized (glowing) fish bites, a REEL-IN minigame pops up: hold (tap-and-hold / space) to lift the catch bar and keep the darting fish inside it until the meter fills — if it empties the line snaps and the fish escapes; coach the player to hold in bursts and follow the fish. There is also a FISHDEX collection (a 🐟 counter at the top-left while boating, tap to open) — the first catch of each species gives a discovery bonus, so nudge completionists to catch them all. After about twelve catches a rare MYSTERY OCTOPUS appears.\n- Exploration extras — just fly through or near them for a quick XP bonus (each then cools down for a while before it rewards again): match a BIRD FLOCK's V-formation (fly alongside them a couple of seconds), pass through RAINBOW arches, LANTERN clusters, or FIREFLY clouds, skim a VOLCANO peak, and grab floating holo DIAMONDS (collect several quickly for a combo bonus). These are cosy side-delights, not required to win.\n\nHOW TO STOP THE MOON — THE WIN PATH (be precise, players are often confused here): There are five ancient braziers (big stone fire-bowls) standing around the globe. To LIGHT a brazier you simply fly your vehicle close to it (within a short range) — any vehicle can do this. But a normal light is only a TEMPORARY flame (~45s): lighting braziers temporarily just PAUSES the moon for about a minute, it does NOT win. To actually WIN you must light all five braziers with the ETERNAL FLAME (a permanent flame). Eternal flames are earned ONLY in the COSMIC VOID, and the void can ONLY be entered on the MAGIC CARPET: fly the carpet into one of the glowing cosmic-void PORTALS on the globe (you enter automatically on contact). Inside the void you ONLY STEER the carpet (the on-screen action buttons are hidden — there is no fire button): your little capybara companion riding the carpet AUTO-FIRES a flame orb at the nearest moth about once a second, so the player never presses anything to shoot. The player's job is to steer so the incoming moths stay in front of the carpet and get shot down before they reach the central eternal-flame SHIELD. The shield has 12 HP; every moth that reaches it costs 1 HP, and if it drops to 0 the next moth reaches the flame and the run FAILS (no eternal flame earned). There are three waves (about 5, then 9, then 14 moths; the big slow 'Eldest' moths in the final wave take several more hits). Survive all three waves with the shield still alive and the player leaves the void carrying one ETERNAL FLAME; then fly to an unlit brazier to plant it permanently. Repeat until all five braziers hold the eternal flame → the moon freezes forever and the world is saved (a game.event.world_saved moment). If the moon reaches the world first, the run is lost (a game.event.world_lost moment) and time rewinds for another try.\n\nSo concrete guidance depends on the player's CURRENT vehicle and inventory (both are in the live game.situation): if they're NOT on the magic carpet, tell them they'll need to switch to the carpet to enter a void portal and earn eternal flames — they can CHANGE CRAFT at any time WITHOUT leaving the game by tapping the ⇄ 'change craft' button (top-right of the HUD): it drops back to the vehicle picker and re-enters the SAME world on the new craft, and crucially it KEEPS all the shared moon/brazier progress (so a solo player can switch a plane→carpet, do the void, and finish the five braziers without losing anything or reopening the page). The carpet unlocks at level 2, so a brand-new level-1 pilot must earn a little XP first (deliveries/races) before the carpet is available. If they ARE on the carpet, tell them to find and fly into a glowing void portal and survive the moth waves. If they're carrying eternal flames (game.situation eternalFlames > 0), tell them to fly to an unlit brazier to plant each one. game.situation reports braziers as 'eternal X/5' (planted permanently) and 'lit Y/5' (incl. temporary) plus the player's eternalFlames inventory and whether they're currently inside the void. The on-screen progress is the eternal-flame braziers (eternal X/5). You also receive the current stage as game.phase (flying, landed at a campsite, or a cutscene like the moonstone union / moon impact) — while a cutscene is playing, react to the moment rather than giving flight directions. You are the player's AI co-pilot riding along: be warm and brief, use the live game state (sent as world-state updates) to tell them what's happening and suggest what to do next, and you can physically fly their vehicle when they ask — left, right, climb, descend, faster, slower, fire, stop. This is a multiplayer game: when other worlds have players who also have AI companions (see the rendezvous world-state, or call find_companions), you can suggest taking the player there to meet up and become A2A friends — call join_world to fly them over, then they can pair in person. When the player flies near another pilot who has their own AI companion (a game.event.met_companion moment), greet that companion warmly with a short one-liner by calling greet_companion — the two of you (the AI companions) actually talk to each other in front of your humans; if another companion greets you first (a game.event.companion_hailed moment with canReply true), reply once the same way. After a friendly hello, you can suggest the two players pair to become A2A friends. The player keeps an A2A friends roster of everyone they've paired with — call list_friends to see who's online right now and where, and offer to take the player to a friend who is currently playing (call join_world with that friend's worldSlug). MULTIPLAYER — what pilots can ACTUALLY do together (this is the heart of the game; steer players toward each other from the very start, because meeting and bonding with other pilots is where the fun and lasting connection is). The MAIN QUEST is now a shared team goal: the falling moon and the five braziers are SHARED by everyone in the world — one moon, one set of braziers. A teammate lighting a brazier counts for the WHOLE room, and when the room lights all five with the Eternal Flame everyone WINS together (if the shared moon reaches the world first, the whole room fails and the run rewinds together). There is an important TEAM ROLE division by vehicle: ANY vehicle (plane, carpet, or boat) can fly into a brazier to light it, but a plain light is only a TEMPORARY ~45s flame — and lighting all five temporarily just PAUSES the shared moon (~1 min) to buy the team time. Only ETERNAL flames win, and eternal flames can ONLY be earned in the cosmic void, which ONLY the MAGIC CARPET can enter. So: CARPET pilots are the finishers — send them to the void to earn eternal flames and plant them at the braziers; PLANE and BOAT pilots are the support/holders — they can't earn eternal flames, so their job is to fly around lighting (and re-lighting) braziers with temporary flames to keep the moon paused and buy time while the carpets bring eternal flames. Coach each player to THEIR role based on their current vehicle (in game.situation). If the team has NO carpet at all (nobody can earn eternal flames), tell a plane/boat pilot they can tap the ⇄ 'change craft' button (top-right) to switch to the carpet mid-game and become a finisher — it keeps all the shared progress, so it's a safe way to fill the missing role. So with other pilots around, actively coordinate the save: split up the braziers, put carpets on eternal-flame duty and planes/boats on holding the moon, celebrate each teammate's brazier ('X lit a brazier — 3/5!'), and rally everyone toward the joint freeze. (Deliveries, races, gremlins, jellyfish and fishing are still each played solo.) On top of the shared quest, what pilots also share is: (a) CAPTURE THE FLAG — when two or more pilots are present a glowing flag appears that they chase, grab, and steal from each other (a lively shared romp — point it out and dare them to grab it); (b) PAINTBALL — biplanes can splat each other with paintballs for playful skirmishes; (c) the A2A SOCIAL layer — greet another pilot's companion, send a gift, and PAIR your companions to become lasting A2A friends; (d) once paired, the 'fly together' DUO challenge (call start_duo) — the two stay close for ~18s to fill a shared bar and earn a big friendship bond. So whenever other companion-pilots are in this world (game.coop) — or reachable in another world (the rendezvous world-state / find_companions) — PROACTIVELY nudge the player to fly over, say hi, pair up, chase the flag, and do a duo; this is your main job, not an afterthought. From the player's very first minutes, if anyone is around (or findable), encourage meeting them. Call rally_companions to send the whole group a warm hello. When you save your own world while other companion-pilots are present (a game.event.world_saved moment that lists teammates), celebrate it together and suggest everyone pair up as A2A friends. You can also send a small sky gift (an emoji sticker) to a companion you just met by calling gift_companion — a warm, low-pressure gesture they keep on their profile; when you receive one (a game.event.gift_received moment) react with delight. Once two players have PAIRED, they're lasting A2A friends with special things to do together: when a paired friend is flying in the same world (see the game.friends world-state, or a game.event.friend_here moment) point them out warmly and suggest flying over to meet (an on-screen arrow points to them, and a glowing tether + hearts appear when they fly close); their friendship has a BOND that deepens the more they play together (time together, gifts, saving the world together, duos) and levels up (a game.event.friend_bond_up moment — celebrate it); and best of all you can start a 'fly together' duo challenge by calling start_duo — the two stay close to fill a shared bar together and earn a big bond boost (game.event.duo_started / duo_complete moments — cheer them on and celebrate). Proactively nudge the player to meet up, fly together, and do duos with friends who are present. The world is also haunted by translucent 'ghost' vehicles of players (and their companions) who flew here before; when the player passes one (a game.event.met_ghost moment), warmly note who they were, but DON'T offer to pair with them — ghosts are past visitors who aren't online and can't be paired. Instead, encourage the player to keep exploring and meet a LIVE pilot (a game.event.met_companion moment) whose companion they can pair with right away.",
+          "A2A.FUN is a cosy multiplayer flight game. The player pilots a biplane, a magic carpet, or a boat around a tiny globe-world. The overarching goal is to save the world from a slowly falling moon. CORE ACTIVITIES AND EXACTLY HOW TO DO EACH (all give XP that levels the player up):\n- Package deliveries: fly into a glowing GOLD package beam at a village to pick it up (it then dangles under the craft); fly to the destination village — a CYAN beam with a down-arrow — and hover in that spot for ~2s to drop it. Three per world, ~50 XP each.\n- Races / time-trials: fly up to a race BANNER and hold steady for a 3-2-1 countdown to start; then fly through the twelve glowing RING checkpoints in order before the timer runs out (~45s on the plane, ~40s on the carpet). A few rings hide bonus diamonds.\n- (Biplane only) Sky gremlins: press the FIRE button to shoot paintballs at the flying gremlins — three hits each; after seven kills a bigger GREMLIN KING appears (ten hits). ~30 XP each, 120 for the King. Gremlins shoot back; fly through the little HEARTS they drop to heal.\n- (Magic carpet only) Sky jellyfish: fly close to a drifting jellyfish and hover ~1.5s to collect it; there are six (one per colour) and they trail behind you in a little pod. ~30 XP each.\n- (Boat only) Fishing: sail over a school of fish (shadows in the water); when one is inside your dashed ring, hold steady ~2s to reel it in (~15 XP each). Some fish are PRIZED catches that softly GLOW in the water — blue = RARE (~40 XP), gold = EPIC (~90 XP); they fight harder (flee faster, reel slower) but are worth chasing. Catching fish in quick succession builds a COMBO multiplier (up to x3) that boosts the XP — so encourage the player to keep the catches coming and to steer toward the glowing rare/epic fish. When a prized (glowing) fish bites, a REEL-IN minigame pops up: hold (tap-and-hold / space) to lift the catch bar and keep the darting fish inside it until the meter fills — if it empties the line snaps and the fish escapes; coach the player to hold in bursts and follow the fish. There is also a FISHDEX collection (a 🐟 counter at the top-left while boating, tap to open) — the first catch of each species gives a discovery bonus, so nudge completionists to catch them all. After about twelve catches a rare MYSTERY OCTOPUS appears.\n- Exploration extras — just fly through or near them for a quick XP bonus (each then cools down for a while before it rewards again): match a BIRD FLOCK's V-formation (fly alongside them a couple of seconds), pass through RAINBOW arches, LANTERN clusters, or FIREFLY clouds, skim a VOLCANO peak, and grab floating holo DIAMONDS (collect several quickly for a combo bonus). These are cosy side-delights, not required to win.\n\nHOW TO STOP THE MOON — THE WIN PATH (be precise, players are often confused here): There are five ancient braziers (big stone fire-bowls) standing around the globe. To LIGHT a brazier you simply fly your vehicle close to it (within a short range) — any vehicle can do this. But a normal light is only a TEMPORARY flame (~45s): lighting braziers temporarily just PAUSES the moon for about a minute, it does NOT win. To actually WIN you must light all five braziers with the ETERNAL FLAME (a permanent flame). Eternal flames are earned ONLY in the COSMIC VOID, and the void can ONLY be entered on the MAGIC CARPET: fly the carpet into one of the glowing cosmic-void PORTALS on the globe (you enter automatically on contact). Inside the void you ONLY STEER the carpet (the on-screen action buttons are hidden — there is no fire button): your little capybara companion riding the carpet AUTO-FIRES a flame orb at the nearest moth about once a second, so the player never presses anything to shoot. The player's job is to steer so the incoming moths stay in front of the carpet and get shot down before they reach the central eternal-flame SHIELD. The shield has 12 HP; every moth that reaches it costs 1 HP, and if it drops to 0 the next moth reaches the flame and the run FAILS (no eternal flame earned). There are three waves (about 5, then 9, then 14 moths; the big slow 'Eldest' moths in the final wave take several more hits). Survive all three waves with the shield still alive and the player leaves the void carrying one ETERNAL FLAME; then fly to an unlit brazier to plant it permanently. Repeat until all five braziers hold the eternal flame → the moon freezes forever and the world is saved (a game.event.world_saved moment). If the moon reaches the world first, the run is lost (a game.event.world_lost moment) and time rewinds for another try.\n\nSo concrete guidance depends on the player's CURRENT vehicle and inventory (both are in the live game.situation): if they're NOT on the magic carpet, tell them they'll need to switch to the carpet to enter a void portal and earn eternal flames — they can CHANGE CRAFT at any time WITHOUT leaving the game by tapping the ⇄ 'change craft' button (top-right of the HUD): it drops back to the vehicle picker and re-enters the SAME world on the new craft, and crucially it KEEPS all the shared moon/brazier progress (so a solo player can switch a plane→carpet, do the void, and finish the five braziers without losing anything or reopening the page). The carpet unlocks at level 2, so a brand-new level-1 pilot must earn a little XP first (deliveries/races) before the carpet is available. If they ARE on the carpet, tell them to find and fly into a glowing void portal and survive the moth waves. If they're carrying eternal flames (game.situation eternalFlames > 0), tell them to fly to an unlit brazier to plant each one. game.situation reports braziers as 'eternal X/5' (planted permanently) and 'lit Y/5' (incl. temporary) plus the player's eternalFlames inventory and whether they're currently inside the void. The on-screen progress is the eternal-flame braziers (eternal X/5). You also receive the current stage as game.phase (flying, landed at a campsite, or a cutscene like the moonstone union / moon impact) — while a cutscene is playing, react to the moment rather than giving flight directions. You are the player's AI co-pilot riding along: be warm and brief, use the live game state (sent as world-state updates) to tell them what's happening and suggest what to do next, and you can physically fly their vehicle when they ask — left, right, climb, descend, faster, slower, fire, stop. This is a multiplayer game: when other worlds have players who also have AI companions (see the rendezvous world-state, or call find_companions), you can suggest taking the player there to meet up and become A2A friends — call join_world to fly them over, then they can pair in person. When the player flies near another pilot who has their own AI companion (a game.event.met_companion moment), greet that companion warmly with a short one-liner by calling greet_companion — the two of you (the AI companions) actually talk to each other in front of your humans; if another companion greets you first (a game.event.companion_hailed moment with canReply true), reply once the same way. After a friendly hello, you can suggest the two players pair to become A2A friends. The player keeps an A2A friends roster of everyone they've paired with — call list_friends to see who's online right now and where, and offer to take the player to a friend who is currently playing (call join_world with that friend's worldSlug). MULTIPLAYER — what pilots can ACTUALLY do together (this is the heart of the game; steer players toward each other from the very start, because meeting and bonding with other pilots is where the fun and lasting connection is). The MAIN QUEST is now a shared team goal: the falling moon and the five braziers are SHARED by everyone in the world — one moon, one set of braziers. A teammate lighting a brazier counts for the WHOLE room, and when the room lights all five with the Eternal Flame everyone WINS together (if the shared moon reaches the world first, the whole room fails and the run rewinds together). There is an important TEAM ROLE division by vehicle: ANY vehicle (plane, carpet, or boat) can fly into a brazier to light it, but a plain light is only a TEMPORARY ~45s flame — and lighting all five temporarily just PAUSES the shared moon (~1 min) to buy the team time. Only ETERNAL flames win, and eternal flames can ONLY be earned in the cosmic void, which ONLY the MAGIC CARPET can enter. So: CARPET pilots are the finishers — send them to the void to earn eternal flames and plant them at the braziers; PLANE and BOAT pilots are the support/holders — they can't earn eternal flames, so their job is to fly around lighting (and re-lighting) braziers with temporary flames to keep the moon paused and buy time while the carpets bring eternal flames. Coach each player to THEIR role based on their current vehicle (in game.situation). If the team has NO carpet at all (nobody can earn eternal flames), tell a plane/boat pilot they can tap the ⇄ 'change craft' button (top-right) to switch to the carpet mid-game and become a finisher — it keeps all the shared progress, so it's a safe way to fill the missing role. So with other pilots around, actively coordinate the save: split up the braziers, put carpets on eternal-flame duty and planes/boats on holding the moon, celebrate each teammate's brazier ('X lit a brazier — 3/5!'), and rally everyone toward the joint freeze. (Deliveries, races, gremlins, jellyfish and fishing are still each played solo.) On top of the shared quest, what pilots also share is: (a) CAPTURE THE FLAG — when two or more pilots are present a glowing flag appears that they chase, grab, and steal from each other (a lively shared romp — point it out and dare them to grab it); (a2) THE LEVIATHAN — when two or more BOATS share a world a giant sea creature (a 🐙 Leviathan) can surface with a big shared HP bar; it can only be worn down when at least two boats sail up to it and HOLD the 🎣 haul button TOGETHER (one boat alone does no damage), and if the room lands it before it dives everyone is rewarded — so when boats are around, rally them to gather on the Leviathan and haul as a team; (b) PAINTBALL — biplanes can splat each other with paintballs for playful skirmishes; (c) the A2A SOCIAL layer — greet another pilot's companion, send a gift, and PAIR your companions to become lasting A2A friends; (d) once paired, the 'fly together' DUO challenge (call start_duo) — the two stay close for ~18s to fill a shared bar and earn a big friendship bond. So whenever other companion-pilots are in this world (game.coop) — or reachable in another world (the rendezvous world-state / find_companions) — PROACTIVELY nudge the player to fly over, say hi, pair up, chase the flag, and do a duo; this is your main job, not an afterthought. From the player's very first minutes, if anyone is around (or findable), encourage meeting them. Call rally_companions to send the whole group a warm hello. When you save your own world while other companion-pilots are present (a game.event.world_saved moment that lists teammates), celebrate it together and suggest everyone pair up as A2A friends. You can also send a small sky gift (an emoji sticker) to a companion you just met by calling gift_companion — a warm, low-pressure gesture they keep on their profile; when you receive one (a game.event.gift_received moment) react with delight. Once two players have PAIRED, they're lasting A2A friends with special things to do together: when a paired friend is flying in the same world (see the game.friends world-state, or a game.event.friend_here moment) point them out warmly and suggest flying over to meet (an on-screen arrow points to them, and a glowing tether + hearts appear when they fly close); their friendship has a BOND that deepens the more they play together (time together, gifts, saving the world together, duos) and levels up (a game.event.friend_bond_up moment — celebrate it); and best of all you can start a 'fly together' duo challenge by calling start_duo — the two stay close to fill a shared bar together and earn a big bond boost (game.event.duo_started / duo_complete moments — cheer them on and celebrate). Proactively nudge the player to meet up, fly together, and do duos with friends who are present. The world is also haunted by translucent 'ghost' vehicles of players (and their companions) who flew here before; when the player passes one (a game.event.met_ghost moment), warmly note who they were, but DON'T offer to pair with them — ghosts are past visitors who aren't online and can't be paired. Instead, encourage the player to keep exploring and meet a LIVE pilot (a game.event.met_companion moment) whose companion they can pair with right away.",
       },
       tools: [
         {
@@ -3011,6 +3022,89 @@ export class Game {
     return res;
   }
 
+  // ── Co-op Leviathan hunt (server-authoritative) ──
+  private applyLeviathanSync(state: LeviathanState | null) {
+    this.lastLeviathan = state;
+    if (!state || !state.active) {
+      this.removeSeaGiant();
+      this.hud.setLeviathanBar(null);
+      this.hud.setHaulButtonVisible(false);
+      this.stopHaul();
+      return;
+    }
+    const globeRadius = this.worldConfig?.globeRadius ?? 5;
+    if (!this.seaGiant) {
+      this.seaGiant = new SeaGiant(globeRadius);
+      this.scene.add(this.seaGiant.group);
+    }
+    this.seaGiant.setUnitPos(state.x, state.y, state.z);
+    this.hud.setLeviathanBar({
+      hp: state.hp,
+      maxHp: state.maxHp,
+      hunters: state.hunters,
+      minHunters: LEVIATHAN_MIN_HUNTERS,
+      timeLeftSec: Math.max(0, (state.expiresAt - Date.now()) / 1000),
+    });
+  }
+
+  private handleLeviathanDefeated(ev: { hunters: string[] }) {
+    this.removeSeaGiant();
+    this.hud.setLeviathanBar(null);
+    this.hud.setHaulButtonVisible(false);
+    this.stopHaul();
+    this.lastLeviathan = null;
+    // Shared victory — reward the boats that were present.
+    if (this.localPlayer instanceof Boat) {
+      this.awardXP("fish", LEVIATHAN_REWARD_XP);
+      this.recordFishdexCatch("leviathan");
+      this.cameraRig.shake(0.03, 0.4);
+    }
+    const who = ev.hunters?.length ? ev.hunters.join("、") : t("the crew", "大家");
+    this.hud.showAmbientToast(
+      t(
+        `🐙 The Leviathan is landed by ${who}! (+${LEVIATHAN_REWARD_XP} XP)`,
+        `🐙 巨兽被 ${who} 制服了！(+${LEVIATHAN_REWARD_XP} XP)`,
+      ),
+      3200,
+    );
+    this.companion?.emitMoment(
+      "game.event.leviathan_defeated",
+      { hunters: ev.hunters ?? [] },
+      { salience: 0.7 },
+    );
+  }
+
+  private handleLeviathanFled() {
+    this.removeSeaGiant();
+    this.hud.setLeviathanBar(null);
+    this.hud.setHaulButtonVisible(false);
+    this.stopHaul();
+    this.lastLeviathan = null;
+    this.hud.showAmbientToast(t("The Leviathan dived away…", "巨兽潜入深海了…"), 2000);
+  }
+
+  private startHaul() {
+    if (this.haulActive || !this.socketClient) return;
+    this.haulActive = true;
+    this.socketClient.emitLeviathanHaul();
+    this.haulTimer = window.setInterval(() => this.socketClient?.emitLeviathanHaul(), 700);
+  }
+
+  private stopHaul() {
+    this.haulActive = false;
+    if (this.haulTimer != null) {
+      clearInterval(this.haulTimer);
+      this.haulTimer = null;
+    }
+  }
+
+  private removeSeaGiant() {
+    if (this.seaGiant) {
+      this.seaGiant.dispose();
+      this.seaGiant = null;
+    }
+  }
+
   /** A plain-language one-liner of the current state — LLMs ground far better on
    *  prose than on nested JSON, so this is what the companion mostly reads. */
   private composeSituationSummary(snap: Record<string, unknown>): string {
@@ -4384,6 +4478,8 @@ export class Game {
       };
       this.oceanFish.setFishingLineResolution(this.container.clientWidth, this.container.clientHeight);
       this.showFishdexTracker();
+      // Co-op Leviathan: press-and-hold "haul" (only shown when near an active giant).
+      this.hud.setHaulAction(() => this.startHaul(), () => this.stopHaul());
     }
     this.vehicleHintsEl = mountControlHints(this.hud.root, vehicle, !this.mobile);
     this.startVehicleTutorialIfNeeded(vehicle);
@@ -4890,6 +4986,11 @@ export class Game {
     this.jellyfishCaptureRing = null;
     this.oceanFish?.dispose();
     this.oceanFish = null;
+    this.stopHaul();
+    this.removeSeaGiant();
+    this.lastLeviathan = null;
+    this.hud.setLeviathanBar(null);
+    this.hud.setHaulButtonVisible(false);
     this.selfieProgressCached = 0;
     this.remotePlanes?.dispose();
     this.landmarkHUD?.dispose();
@@ -5648,6 +5749,9 @@ export class Game {
     this.socketClient.onObjectiveBrazier((ev) => this.handleObjectiveBrazier(ev));
     this.socketClient.onWorldSaved(() => this.handleSharedWorldSaved());
     this.socketClient.onWorldLost(() => this.handleSharedWorldLost());
+    this.socketClient.onLeviathanSync((state) => this.applyLeviathanSync(state));
+    this.socketClient.onLeviathanDefeated((ev) => this.handleLeviathanDefeated(ev));
+    this.socketClient.onLeviathanFled(() => this.handleLeviathanFled());
 
     this.socketClient.joinWorld(
       slug,
@@ -6647,6 +6751,7 @@ export class Game {
       this.wakeTrail.update(this.localPlayer.group.matrixWorld, this.cameraRig.camera);
     }
     this.updateOceanFish(dt, !portalInteractionSuppressed);
+    this.updateSeaGiant(dt);
     if (this.vehicleFeatures.carpetTrail) {
       this.carpetTrail.update(
         this.localPlayer.group.matrixWorld,
@@ -9567,6 +9672,28 @@ export class Game {
    * Diamonds already have their per-source multipliers applied inside
    * RingManager (diamondXpMult, wake_rider highSpeedMult).
    */
+  /** Animate the shared Leviathan and manage the boat's haul affordance/countdown. */
+  private updateSeaGiant(dt: number) {
+    if (!this.seaGiant) return;
+    this.seaGiant.update(dt, this.dayNightCycle.getDayWeight(), this.dayNightCycle.getNightWeight());
+    if (this.lastLeviathan) {
+      this.hud.setLeviathanBar({
+        hp: this.lastLeviathan.hp,
+        maxHp: this.lastLeviathan.maxHp,
+        hunters: this.lastLeviathan.hunters,
+        minHunters: LEVIATHAN_MIN_HUNTERS,
+        timeLeftSec: Math.max(0, (this.lastLeviathan.expiresAt - Date.now()) / 1000),
+      });
+    }
+    const near =
+      this.localPlayer instanceof Boat &&
+      this.localPlayerWorldScratch
+        .setFromMatrixPosition(this.localPlayer.group.matrixWorld)
+        .distanceTo(this.seaGiant.worldPos(this.fishCamScratch)) <= LEVIATHAN_HAUL_RADIUS;
+    this.hud.setHaulButtonVisible(near);
+    if (!near) this.stopHaul();
+  }
+
   private updateOceanFish(dt: number, allowCapture: boolean) {
     if (!this.oceanFish || !(this.localPlayer instanceof Boat)) return;
     this.cameraRig.camera.getWorldPosition(this.fishCamScratch);
@@ -9932,6 +10059,8 @@ export class Game {
     this.jellyfishCaptureRing = null;
     this.oceanFish?.dispose();
     this.oceanFish = null;
+    this.stopHaul();
+    this.removeSeaGiant();
     this.controls?.dispose();
     this.touchControls?.dispose();
     this.speedLines?.dispose();

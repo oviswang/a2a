@@ -114,6 +114,39 @@ export interface ObjectiveBrazierEvent {
   by?: string;
 }
 
+/** Co-op Leviathan hunt — a shared sea giant that needs several boats hauling
+ *  together. Server-authoritative, like the moon/brazier objective. */
+export const LEVIATHAN_MAX_HP_BASE = 100;
+/** Extra shared HP added per player present when it spawns. */
+export const LEVIATHAN_HP_PER_PLAYER = 40;
+/** It dives (flees) if the room doesn't land it within this window. */
+export const LEVIATHAN_DURATION_MS = 180_000;
+/** A hauler counts as "engaged" for this long after their last haul tick. */
+export const LEVIATHAN_ENGAGE_WINDOW_MS = 4_000;
+/** Damage applied per accepted haul tick (only while enough boats haul together). */
+export const LEVIATHAN_HIT_DAMAGE = 4;
+/** Minimum distinct boats hauling at once for the giant to actually take damage. */
+export const LEVIATHAN_MIN_HUNTERS = 2;
+/** Server rate-limits each hauler to at most one damaging tick per this interval. */
+export const LEVIATHAN_HIT_COOLDOWN_MS = 700;
+/** Chord distance (world units) within which a boat may haul the giant. */
+export const LEVIATHAN_HAUL_RADIUS = 1.1;
+
+/** The shared Leviathan state, owned by the server and mirrored to the room. */
+export interface LeviathanState {
+  active: boolean;
+  hp: number;
+  maxHp: number;
+  /** Position on the unit sphere (multiply by globeRadius for world position). */
+  x: number;
+  y: number;
+  z: number;
+  /** How many distinct boats are hauling right now (for the "needs teamwork" UI). */
+  hunters: number;
+  /** Epoch ms it dives if not yet defeated. */
+  expiresAt: number;
+}
+
 /** Matches client `Globe` moonstone ruin placement count. */
 export const MOONSTONE_RUIN_COUNT = 2;
 /** Carpet-near activation raises a ruin over this many ms. */
@@ -295,6 +328,13 @@ export interface ServerToClientEvents {
   /** Shared co-op objective: the shared moon reached the world — the whole room
    *  fails together and the objective rewinds. */
   "world:lost": () => void;
+  /** Co-op Leviathan: the shared giant's current state (on join, on change, and
+   *  periodically), or null when none is active. */
+  "leviathan:sync": (state: LeviathanState | null) => void;
+  /** Co-op Leviathan: the room landed it together — everyone present is rewarded. */
+  "leviathan:defeated": (ev: { hunters: string[] }) => void;
+  /** Co-op Leviathan: it dived away (timed out) before the room could land it. */
+  "leviathan:fled": () => void;
 }
 
 /** A2A duo challenge handshake between two co-present friends. */
@@ -410,4 +450,8 @@ export interface ClientToServerEvents {
    *  shared state and acks whether it was accepted (rejected if already eternal, so
    *  the client can refund a wasted flame on a simultaneous-light race). */
   "brazier:light": (index: number, eternal: boolean, ack: (res: { accepted: boolean }) => void) => void;
+  /** Co-op Leviathan: "I'm hauling on the giant right now" — sent ~once/second by a
+   *  boat within haul range. The server validates range + rate + the min-hunters
+   *  co-op rule before applying any damage. */
+  "leviathan:haul": () => void;
 }

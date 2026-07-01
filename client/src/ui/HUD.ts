@@ -58,6 +58,10 @@ export class HUD {
   private vehicleBtn!: HTMLButtonElement;
   private fishdexPill: HTMLButtonElement | null = null;
   private onFishdexOpen: (() => void) | null = null;
+  private leviathanBar: HTMLDivElement | null = null;
+  private haulBtn: HTMLButtonElement | null = null;
+  private onHaulDown: (() => void) | null = null;
+  private onHaulUp: (() => void) | null = null;
   private onSwitchVehicle: (() => void) | null = null;
   private entranceDone = false;
   private campsitePromptEl: HTMLDivElement | null = null;
@@ -752,6 +756,75 @@ export class HUD {
     this.fishdexPill.textContent = `🐟 ${opts.caught}/${opts.total}`;
   }
 
+  /** Shared Leviathan HP bar (top-center). Pass null to hide. */
+  setLeviathanBar(
+    opts: { hp: number; maxHp: number; hunters: number; minHunters: number; timeLeftSec: number } | null,
+  ) {
+    if (!opts) {
+      if (this.leviathanBar) this.leviathanBar.style.display = "none";
+      return;
+    }
+    if (!this.leviathanBar) {
+      const el = document.createElement("div");
+      el.className = "hud-leviathan";
+      el.innerHTML =
+        `<div class="hud-lev-top"><span class="hud-lev-name">🐙 <span class="hud-lev-title"></span></span>` +
+        `<span class="hud-lev-time"></span></div>` +
+        `<div class="hud-lev-track"><div class="hud-lev-fill"></div></div>` +
+        `<div class="hud-lev-hint"></div>`;
+      this.el.appendChild(el);
+      this.leviathanBar = el;
+    }
+    const el = this.leviathanBar;
+    el.style.display = "";
+    const pct = Math.max(0, Math.min(1, opts.hp / Math.max(1, opts.maxHp)));
+    el.querySelector<HTMLElement>(".hud-lev-fill")!.style.width = `${pct * 100}%`;
+    el.querySelector<HTMLElement>(".hud-lev-title")!.textContent = t("Leviathan", "巨兽海妖");
+    el.querySelector<HTMLElement>(".hud-lev-time")!.textContent = `${Math.ceil(opts.timeLeftSec)}s`;
+    const hint = el.querySelector<HTMLElement>(".hud-lev-hint")!;
+    if (opts.hunters < opts.minHunters) {
+      hint.textContent = t(
+        `Needs ${opts.minHunters}+ boats hauling together`,
+        `需要 ${opts.minHunters}+ 条船一起拉`,
+      );
+      hint.style.color = "rgba(255,186,120,0.95)";
+    } else {
+      hint.textContent = t(`${opts.hunters} boats hauling!`, `${opts.hunters} 条船一起拉！`);
+      hint.style.color = "rgba(150,240,180,0.95)";
+    }
+  }
+
+  /** Wire the press-and-hold "haul" button (shown only near the Leviathan). */
+  setHaulAction(onDown: () => void, onUp: () => void) {
+    this.onHaulDown = onDown;
+    this.onHaulUp = onUp;
+  }
+  setHaulButtonVisible(visible: boolean) {
+    if (!this.haulBtn) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "hud-haul-btn";
+      b.textContent = "🎣";
+      b.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        b.classList.add("hud-haul-btn--active");
+        this.onHaulDown?.();
+      });
+      window.addEventListener("pointerup", () => {
+        if (!b.classList.contains("hud-haul-btn--active")) return;
+        b.classList.remove("hud-haul-btn--active");
+        this.onHaulUp?.();
+      });
+      this.el.appendChild(b);
+      this.haulBtn = b;
+    }
+    if (!visible && this.haulBtn.classList.contains("hud-haul-btn--active")) {
+      this.haulBtn.classList.remove("hud-haul-btn--active");
+      this.onHaulUp?.();
+    }
+    this.haulBtn.style.display = visible ? "" : "none";
+  }
+
   setCampsiteButtonVisible(visible: boolean) {
     if (!CAMPSITE_HOME_ENABLED) return;
     this.campsiteBtn.style.display = visible ? "" : "none";
@@ -876,6 +949,32 @@ export class HUD {
         background: rgba(255, 255, 255, 0.16);
         color: #fff;
       }
+      .hud-leviathan {
+        position: absolute; top: 64px; left: 50%; transform: translateX(-50%);
+        width: min(340px, 76vw); z-index: 5; pointer-events: none;
+        text-align: center; color: #eaf2ff; text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+      }
+      .hud-lev-top { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+      .hud-lev-time { opacity: 0.75; font-variant-numeric: tabular-nums; }
+      .hud-lev-track {
+        height: 12px; border-radius: 7px; overflow: hidden;
+        background: rgba(10,18,34,0.7); border: 1px solid rgba(255,255,255,0.2);
+      }
+      .hud-lev-fill {
+        height: 100%; width: 100%;
+        background: linear-gradient(90deg, #7b4bd8, #d8489a);
+        transition: width 0.25s ease;
+      }
+      .hud-lev-hint { font-size: 11px; margin-top: 4px; font-weight: 600; }
+      .hud-haul-btn {
+        position: absolute; bottom: 22%; left: 50%; transform: translateX(-50%);
+        z-index: 6; pointer-events: auto;
+        width: 76px; height: 76px; border-radius: 50%;
+        background: rgba(216, 72, 154, 0.32); border: 2px solid rgba(255,180,220,0.75);
+        color: #fff; font-size: 32px; cursor: pointer;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+      }
+      .hud-haul-btn--active { background: rgba(216, 72, 154, 0.6); transform: translateX(-50%) scale(0.94); }
       #hud.hud--mobile-session.hud--quest-suppressed-dialogue .hud-quest-trackers {
         display: none !important;
       }

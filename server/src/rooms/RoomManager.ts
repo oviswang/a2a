@@ -188,6 +188,10 @@ export class RoomManager {
       if (typeof ack === "function") ack(res);
     });
 
+    socket.on("leviathan:haul", () => {
+      room.haulLeviathan(socket.id);
+    });
+
     socket.on("disconnect", () => {
       room.removePlayer(socket.id);
       if (room.isEmpty) {

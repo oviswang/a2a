@@ -18,6 +18,7 @@ import type {
   WorldObjectiveState,
   BrazierSlot,
   ObjectiveBrazierEvent,
+  LeviathanState,
 } from "@globefly/shared";
 
 // Shared co-op objective constants — keep in sync with shared/types.ts (the server
@@ -27,6 +28,17 @@ const BRAZIER_COUNT = 5;
 const BRAZIER_BURN_MS = 45_000;
 const BRAZIER_MOON_PAUSE_MS = 60_000;
 const MOON_DURATION_MS = 300_000;
+// Co-op Leviathan hunt (keep in sync with shared/types.ts).
+const LEVIATHAN_MAX_HP_BASE = 100;
+const LEVIATHAN_HP_PER_PLAYER = 40;
+const LEVIATHAN_DURATION_MS = 180_000;
+const LEVIATHAN_ENGAGE_WINDOW_MS = 4_000;
+const LEVIATHAN_HIT_DAMAGE = 4;
+const LEVIATHAN_MIN_HUNTERS = 2;
+const LEVIATHAN_HIT_COOLDOWN_MS = 700;
+const LEVIATHAN_HAUL_RADIUS = 1.1;
+/** Wait this long after a giant leaves before another may surface. */
+const LEVIATHAN_COOLDOWN_MS = 60_000;
 import {
   FLAG_AUTO_RESPAWN_MS,
   FLAG_CAPTURE_DURATION_MS,
@@ -94,10 +106,20 @@ const _qFlag = new Quaternion();
 const _vFlag = new Vector3();
 const _vCarrier = new Vector3();
 const _vOtherPlayer = new Vector3();
+/** Scratch reserved for Leviathan math (never aliased with the flag scratch). */
+const _qLev = new Quaternion();
+const _vLevA = new Vector3();
+const _vLevB = new Vector3();
 
 function playerWorldPos(state: PlayerState, globeRadius: number, out: Vector3): Vector3 {
   _qFlag.set(state.qx, state.qy, state.qz, state.qw);
   return out.copy(cartesianFromSpherical(_qFlag, state.altitude, globeRadius));
+}
+
+/** A player's position projected onto the unit sphere (altitude ignored). */
+function playerUnitPos(state: PlayerState, out: Vector3): Vector3 {
+  _qLev.set(state.qx, state.qy, state.qz, state.qw);
+  return out.copy(REF_UP).applyQuaternion(_qLev).normalize();
 }
 
 // Soft per-room cap. The relay broadcasts each player's full state to every other
@@ -146,6 +168,21 @@ export class Room {
   private lastObjectiveSyncMs = 0;
   private static readonly OBJECTIVE_TICK_MS = 1000;
   private static readonly OBJECTIVE_SYNC_MS = 3000;
+
+  // ── Co-op Leviathan hunt (server-authoritative shared sea giant) ──
+  private leviathanActive = false;
+  private leviathanHp = 0;
+  private leviathanMaxHp = 0;
+  /** Unit-sphere position (multiply by globeRadius for world position). */
+  private readonly leviathanPos = new Vector3(0, 1, 0);
+  private leviathanExpiresAt = 0;
+  private leviathanCooldownUntil = 0;
+  private lastLeviathanSyncMs = 0;
+  private lastLeviathanHunters = 0;
+  /** socketId → epoch ms of that boat's most recent haul (for engaged-hunter count). */
+  private leviathanHaulers = new Map<string, number>();
+  /** Display names that landed a hit this fight (for the victory shout-out). */
+  private leviathanContributors = new Set<string>();
 
   constructor(slug: string, globeRadius: number, worldSeed: number, terrainType: string) {
     this.slug = slug;
@@ -336,6 +373,7 @@ export class Room {
   private tickObjective() {
     if (this.players.size === 0) return;
     const now = Date.now();
+    this.tickLeviathan(now);
     let changed = false;
 
     // Expire temporary brazier flames.
@@ -404,6 +442,124 @@ export class Room {
     }
     this.broadcastObjectiveSync();
     return { accepted: true };
+  }
+
+  // ── Co-op Leviathan hunt ──────────────────────────────────────────────────
+  private buildLeviathanState(): LeviathanState | null {
+    if (!this.leviathanActive) return null;
+    return {
+      active: true,
+      hp: this.leviathanHp,
+      maxHp: this.leviathanMaxHp,
+      x: this.leviathanPos.x,
+      y: this.leviathanPos.y,
+      z: this.leviathanPos.z,
+      hunters: this.leviathanHaulers.size,
+      expiresAt: this.leviathanExpiresAt,
+    };
+  }
+
+  private broadcastLeviathanSync() {
+    this.lastLeviathanSyncMs = Date.now();
+    this.lastLeviathanHunters = this.leviathanHaulers.size;
+    const state = this.buildLeviathanState();
+    for (const [, p] of this.players) p.socket.emit("leviathan:sync", state);
+  }
+
+  /** Runs each objective tick; spawns / expires / re-syncs the shared giant. */
+  private tickLeviathan(now: number) {
+    if (this.leviathanActive) {
+      for (const [id, t] of this.leviathanHaulers) {
+        if (now - t > LEVIATHAN_ENGAGE_WINDOW_MS) this.leviathanHaulers.delete(id);
+      }
+      if (now >= this.leviathanExpiresAt) {
+        this.fleeLeviathan();
+        return;
+      }
+      if (
+        this.leviathanHaulers.size !== this.lastLeviathanHunters ||
+        now - this.lastLeviathanSyncMs >= Room.OBJECTIVE_SYNC_MS
+      ) {
+        this.broadcastLeviathanSync();
+      }
+    } else {
+      this.maybeSpawnLeviathan(now);
+    }
+  }
+
+  private maybeSpawnLeviathan(now: number) {
+    if (now < this.leviathanCooldownUntil) return;
+    const boats = Array.from(this.players.values()).filter((p) => p.state.vehicle === "boat");
+    if (boats.length < LEVIATHAN_MIN_HUNTERS) return;
+
+    // Surface next to a random boat (guaranteed reachable ocean), nudged off the hull.
+    const anchor = boats[Math.floor(Math.random() * boats.length)]!;
+    playerUnitPos(anchor.state, _vLevA);
+    randomUnitQuaternion(_qLev);
+    _vLevB.copy(REF_UP).applyQuaternion(_qLev);
+    _vLevB.addScaledVector(_vLevA, -_vLevB.dot(_vLevA)); // project to tangent plane
+    if (_vLevB.lengthSq() < 1e-6) _vLevB.set(1, 0, 0);
+    _vLevB.normalize();
+    this.leviathanPos.copy(_vLevA).addScaledVector(_vLevB, 0.25).normalize();
+
+    this.leviathanMaxHp = LEVIATHAN_MAX_HP_BASE + LEVIATHAN_HP_PER_PLAYER * boats.length;
+    this.leviathanHp = this.leviathanMaxHp;
+    this.leviathanActive = true;
+    this.leviathanExpiresAt = now + LEVIATHAN_DURATION_MS;
+    this.leviathanHaulers.clear();
+    this.leviathanContributors.clear();
+    this.broadcastLeviathanSync();
+  }
+
+  /** A boat reports it's hauling the giant. Server validates range + the co-op
+   *  min-hunters rule + a per-boat rate limit before applying any damage. */
+  haulLeviathan(socketId: string) {
+    if (!this.leviathanActive) return;
+    const player = this.players.get(socketId);
+    if (!player) return;
+    if (player.state.vehicle !== "boat") return;
+    playerUnitPos(player.state, _vLevA);
+    const chord = _vLevA.distanceTo(this.leviathanPos) * this.globeRadius;
+    if (chord > LEVIATHAN_HAUL_RADIUS) return;
+
+    const now = Date.now();
+    const last = this.leviathanHaulers.get(socketId) ?? 0;
+    this.leviathanHaulers.set(socketId, now);
+    const hunters = this.leviathanHaulers.size;
+
+    if (hunters >= LEVIATHAN_MIN_HUNTERS && now - last >= LEVIATHAN_HIT_COOLDOWN_MS) {
+      this.leviathanHp = Math.max(0, this.leviathanHp - LEVIATHAN_HIT_DAMAGE);
+      const nm = player.state.name;
+      if (nm) this.leviathanContributors.add(nm);
+      if (this.leviathanHp <= 0) {
+        this.defeatLeviathan();
+        return;
+      }
+      this.broadcastLeviathanSync();
+    } else if (hunters !== this.lastLeviathanHunters) {
+      this.broadcastLeviathanSync();
+    }
+  }
+
+  private defeatLeviathan() {
+    const hunters = Array.from(this.leviathanContributors);
+    for (const [, p] of this.players) p.socket.emit("leviathan:defeated", { hunters });
+    this.clearLeviathan(true);
+  }
+
+  private fleeLeviathan() {
+    for (const [, p] of this.players) p.socket.emit("leviathan:fled");
+    this.clearLeviathan(true);
+  }
+
+  private clearLeviathan(withCooldown: boolean) {
+    this.leviathanActive = false;
+    this.leviathanHp = 0;
+    this.leviathanHaulers.clear();
+    this.leviathanContributors.clear();
+    this.lastLeviathanHunters = 0;
+    if (withCooldown) this.leviathanCooldownUntil = Date.now() + LEVIATHAN_COOLDOWN_MS;
+    this.broadcastLeviathanSync();
   }
 
   forceFlagSpawn() {
@@ -623,6 +779,7 @@ export class Room {
     // Shared co-op objective: hand the joiner the room's current moon + brazier state
     // (so a late joiner inherits the in-progress countdown), and run the moon timer.
     socket.emit("objective:sync", this.buildObjectiveState());
+    socket.emit("leviathan:sync", this.buildLeviathanState());
     this.startObjectiveTimerIfNeeded();
 
     this.scheduleHotFlagSpawnIfNeeded();
@@ -647,6 +804,9 @@ export class Room {
     this.paintballShotHistory.delete(socketId);
     this.paintballUpgrades.delete(socketId);
     this.flagSuppressedPlayers.delete(socketId);
+    this.leviathanHaulers.delete(socketId);
+    // Drop an active giant when the world empties so a future session starts clean.
+    if (this.players.size === 0 && this.leviathanActive) this.clearLeviathan(false);
 
     for (const [, p] of this.players) {
       p.socket.emit("player:left", socketId);

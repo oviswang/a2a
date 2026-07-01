@@ -15,6 +15,7 @@ import type {
   DuoAnswerEvent,
   GhostPairInvite,
   WorldObjectiveState,
+  LeviathanState,
   ObjectiveBrazierEvent,
   PaintballFiredEvent,
   PaintballHitEvent,
@@ -231,6 +232,21 @@ export class SocketClient {
   }
   onWorldLost(cb: () => void) {
     this.socket.on("world:lost", cb);
+  }
+
+  // ── Co-op Leviathan hunt ──
+  /** Tell the server this boat is hauling the shared giant right now. */
+  emitLeviathanHaul() {
+    this.socket.emit("leviathan:haul");
+  }
+  onLeviathanSync(cb: (state: LeviathanState | null) => void) {
+    this.socket.on("leviathan:sync", cb);
+  }
+  onLeviathanDefeated(cb: (ev: { hunters: string[] }) => void) {
+    this.socket.on("leviathan:defeated", cb);
+  }
+  onLeviathanFled(cb: () => void) {
+    this.socket.on("leviathan:fled", cb);
   }
 
   disconnect() {

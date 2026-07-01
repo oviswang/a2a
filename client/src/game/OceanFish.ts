@@ -79,12 +79,16 @@ export const FISH_SPECIES: readonly FishSpecies[] = [
   { key: "abyss_dragonfish", en: "Abyss Dragonfish", zh: "深海龙鱼", rarity: "epic" },
   { key: "starmark_ray", en: "Starmark Ray", zh: "星纹魟", rarity: "epic" },
   { key: "mystery_octopus", en: "Mystery Octopus", zh: "神秘章鱼", rarity: "epic" },
+  { key: "leviathan", en: "Leviathan", zh: "巨兽海妖", rarity: "epic" },
 ];
+
+/** Species that never spawn as ordinary fish (earned via special encounters). */
+const NON_SPAWNING = new Set(["mystery_octopus", "leviathan"]);
 
 const SPECIES_BY_RARITY: Record<FishRarity, FishSpecies[]> = {
   common: FISH_SPECIES.filter((s) => s.rarity === "common"),
   rare: FISH_SPECIES.filter((s) => s.rarity === "rare"),
-  epic: FISH_SPECIES.filter((s) => s.rarity === "epic" && s.key !== "mystery_octopus"),
+  epic: FISH_SPECIES.filter((s) => s.rarity === "epic" && !NON_SPAWNING.has(s.key)),
 };
 
 /** Localized display name for a catalog species. */
