@@ -948,6 +948,9 @@ export class Game {
          *  expiresAt }` or null. Use it to assert the shared giant syncs across the
          *  boats and that HP only drops when 2+ boats haul together. */
         get leviathan() { return g.lastLeviathan; },
+        /** Read-only carpet co-op void state: `{ coop, shieldHp, shieldMax }` or null.
+         *  Use it to assert the shared shield when two carpets are in the void. */
+        get voidCoop() { return g.voidCoopState; },
         /** This player's Eternal Flame inventory (earned solo in the void, spent into
          *  the shared braziers). */
         get eternalFlames() { return ProgressionManager.loadPlayerWorldState().eternalFlameCount ?? 0; },
