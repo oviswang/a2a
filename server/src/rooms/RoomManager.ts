@@ -192,6 +192,10 @@ export class RoomManager {
       room.haulLeviathan(socket.id);
     });
 
+    socket.on("debug:forceLeviathan", () => {
+      room.debugForceLeviathan(socket.id);
+    });
+
     socket.on("disconnect", () => {
       room.removePlayer(socket.id);
       if (room.isEmpty) {

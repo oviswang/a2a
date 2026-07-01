@@ -1100,6 +1100,19 @@ export class Game {
             g.eternalFlameUI?.syncFromSave();
             return `eternalFlameCount=${next}`;
           },
+          /** LEVIATHAN: seed the plane to L4 so the boat unlocks. Then use the ⇄
+           *  change-craft button (or reload) and pick the boat. */
+          unlockBoat: () => {
+            ProgressionManager.qaUnlockBoat();
+            return "boat unlocked (level-4 seeded) — switch craft (⇄) or reload, then pick the boat";
+          },
+          /** LEVIATHAN: ask the server to force-surface a giant near you (ignores the
+           *  2-boat spawn gate; the min-2-hunters DAMAGE gate still applies). */
+          spawnLeviathan: () => {
+            if (!g.socketClient) return "no-socket (join a world first)";
+            g.socketClient.emitDebugForceLeviathan();
+            return "leviathan:forced — watch window.__a2a.leviathan";
+          },
         };
       }
 

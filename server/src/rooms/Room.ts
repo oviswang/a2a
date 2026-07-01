@@ -491,10 +491,13 @@ export class Room {
     if (now < this.leviathanCooldownUntil) return;
     const boats = Array.from(this.players.values()).filter((p) => p.state.vehicle === "boat");
     if (boats.length < LEVIATHAN_MIN_HUNTERS) return;
-
-    // Surface next to a random boat (guaranteed reachable ocean), nudged off the hull.
     const anchor = boats[Math.floor(Math.random() * boats.length)]!;
-    playerUnitPos(anchor.state, _vLevA);
+    this.spawnLeviathanNear(anchor.state, boats.length);
+  }
+
+  /** Surface a giant next to `anchor` (guaranteed reachable ocean), nudged off the hull. */
+  private spawnLeviathanNear(anchor: PlayerState, boatCount: number) {
+    playerUnitPos(anchor, _vLevA);
     randomUnitQuaternion(_qLev);
     _vLevB.copy(REF_UP).applyQuaternion(_qLev);
     _vLevB.addScaledVector(_vLevA, -_vLevB.dot(_vLevA)); // project to tangent plane
@@ -502,13 +505,22 @@ export class Room {
     _vLevB.normalize();
     this.leviathanPos.copy(_vLevA).addScaledVector(_vLevB, 0.25).normalize();
 
-    this.leviathanMaxHp = LEVIATHAN_MAX_HP_BASE + LEVIATHAN_HP_PER_PLAYER * boats.length;
+    this.leviathanMaxHp = LEVIATHAN_MAX_HP_BASE + LEVIATHAN_HP_PER_PLAYER * Math.max(1, boatCount);
     this.leviathanHp = this.leviathanMaxHp;
     this.leviathanActive = true;
-    this.leviathanExpiresAt = now + LEVIATHAN_DURATION_MS;
+    this.leviathanExpiresAt = Date.now() + LEVIATHAN_DURATION_MS;
     this.leviathanHaulers.clear();
     this.leviathanContributors.clear();
     this.broadcastLeviathanSync();
+  }
+
+  /** QA/debug: force-surface a giant near the requester (ignores the 2-boat spawn
+   *  gate + cooldown). The min-hunters damage gate still applies. */
+  debugForceLeviathan(socketId: string) {
+    const player = this.players.get(socketId);
+    if (!player || this.leviathanActive) return;
+    const boats = Array.from(this.players.values()).filter((p) => p.state.vehicle === "boat").length;
+    this.spawnLeviathanNear(player.state, boats);
   }
 
   /** A boat reports it's hauling the giant. Server validates range + the co-op
