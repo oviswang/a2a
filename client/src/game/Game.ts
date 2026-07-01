@@ -907,6 +907,13 @@ export class Game {
             : { active: false };
         },
         get giftsReceived() { return ProgressionManager.loadReceivedGifts().length; },
+        /** The room's SHARED objective (moon + five braziers) — `{ moonElapsedMs,
+         *  moonDurationMs, paused, frozen, saved, braziers:[{lit,eternal}] }` or null.
+         *  Use it to assert the shared quest syncs across two clients. */
+        get objective() { return g.lastObjective; },
+        /** This player's Eternal Flame inventory (earned solo in the void, spent into
+         *  the shared braziers). */
+        get eternalFlames() { return ProgressionManager.loadPlayerWorldState().eternalFlameCount ?? 0; },
         /** Outcome of the most recent pairing attempt: `{ ok, code, message, withName,
          *  at }` or null. `code` is "paired" | "same_account" | "scope_initiator" |
          *  "scope_visitor" | "network" | "declined" | "no_companion" | "unknown" — so
@@ -1030,6 +1037,37 @@ export class Game {
             g.companionUI?.appendUserMessage(text);
             if (!g.handleVoiceCommand(text)) { g.diag.messagesOut++; void g.companion.sendText(text); }
             return "sent";
+          },
+          /** SHARED objective: light brazier `index` via the SERVER path (bypasses
+           *  flying to it). eternal=true plants an Eternal Flame (spends one from this
+           *  player's inventory — use grantEternalFlame first). Both tabs see the
+           *  change; five eternal → shared world:saved. */
+          lightBrazier: (index = 0, eternal = false) => {
+            const i = Number(index);
+            const useEternal = eternal === true;
+            if (useEternal) {
+              const p = ProgressionManager.loadPlayerWorldState();
+              if ((p.eternalFlameCount ?? 0) <= 0) return "no-eternal-flame (call grantEternalFlame first)";
+              g.savePlayerWorldState({ eternalFlameCount: (p.eternalFlameCount ?? 0) - 1 });
+              g.eternalFlameUI?.syncFromSave();
+            }
+            g.socketClient?.emitBrazierLight(i, useEternal, (res) => {
+              if (!res?.accepted && useEternal) {
+                const p = ProgressionManager.loadPlayerWorldState();
+                g.savePlayerWorldState({ eternalFlameCount: (p.eternalFlameCount ?? 0) + 1 });
+                g.eternalFlameUI?.syncFromSave();
+              }
+            });
+            return `brazier:light index=${i} eternal=${useEternal}`;
+          },
+          /** SHARED objective: grant this player Eternal Flames (normally earned in the
+           *  void) so lightBrazier(i,true) can plant them — for testing the shared win. */
+          grantEternalFlame: (n = 1) => {
+            const p = ProgressionManager.loadPlayerWorldState();
+            const next = Math.max(0, (p.eternalFlameCount ?? 0) + Number(n));
+            g.savePlayerWorldState({ eternalFlameCount: next });
+            g.eternalFlameUI?.syncFromSave();
+            return `eternalFlameCount=${next}`;
           },
         };
       }
@@ -5011,10 +5049,13 @@ export class Game {
 
   private sharedEternalCount = 0;
   private sharedPaused = false;
+  /** Latest shared objective snapshot, surfaced read-only on window.__a2a.objective. */
+  private lastObjective: WorldObjectiveState | null = null;
 
   /** Apply the room's authoritative shared objective: the moon clock + the five
    *  braziers (so a teammate's light shows on your globe and everyone shares one moon). */
   private applyObjectiveSync(state: WorldObjectiveState) {
+    this.lastObjective = state;
     this.moonThreat?.syncFromServer({
       elapsedMs: state.moonElapsedMs,
       paused: state.paused,
