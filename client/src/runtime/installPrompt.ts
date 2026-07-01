@@ -70,7 +70,29 @@ function recentlyDismissed(): boolean {
 export function initInstallPrompt(): void {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register(SW_PATH).catch(() => {});
+      // If a service worker already controls this page, a later controllerchange means
+      // a NEW build has activated (skipWaiting + clients.claim) — reload ONCE so the
+      // page runs the fresh deploy instead of the stale cached shell. (Skipped on the
+      // first-ever install, where there is no prior controller, to avoid a needless
+      // reload.) This is the fix for "new features are deployed but the client keeps
+      // serving an old cached build until a manual hard-refresh."
+      if (navigator.serviceWorker.controller) {
+        let reloaded = false;
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          if (reloaded) return;
+          reloaded = true;
+          window.location.reload();
+        });
+      }
+      navigator.serviceWorker
+        .register(SW_PATH)
+        .then((reg) => {
+          // Proactively check for a newer SW now and hourly, so a deploy is picked up
+          // without waiting for the browser's own (up to 24h) update check.
+          reg.update().catch(() => {});
+          setInterval(() => reg.update().catch(() => {}), 60 * 60 * 1000);
+        })
+        .catch(() => {});
     });
   }
 
