@@ -49,10 +49,47 @@ export const FISH_RARITY_XP: Record<FishRarity, number> = {
 export interface FishCatchInfo {
   variant: FishVariant;
   rarity: FishRarity;
-  /** Localized species name (for the catch banner + future Fishdex). */
+  /** Stable catalog key (for the Fishdex). */
+  speciesKey: string;
+  /** Localized species name (for the catch banner). */
   species: string;
   /** Base XP for this rarity (game applies the combo multiplier on top). */
   baseXp: number;
+}
+
+/** A fish species in the Fishdex catalog. */
+export interface FishSpecies {
+  /** Stable id used as the Fishdex storage key — never localize this. */
+  key: string;
+  en: string;
+  zh: string;
+  rarity: FishRarity;
+}
+
+/** The full species catalog, grouped by rarity (order = Fishdex display order). */
+export const FISH_SPECIES: readonly FishSpecies[] = [
+  { key: "sardine", en: "Sardine", zh: "沙丁鱼", rarity: "common" },
+  { key: "mackerel", en: "Mackerel", zh: "鲭鱼", rarity: "common" },
+  { key: "anchovy", en: "Anchovy", zh: "凤尾鱼", rarity: "common" },
+  { key: "herring", en: "Herring", zh: "青鳞鱼", rarity: "common" },
+  { key: "silverscale", en: "Silverscale", zh: "银鳞鱼", rarity: "rare" },
+  { key: "moonperch", en: "Moonperch", zh: "月光鲷", rarity: "rare" },
+  { key: "rainbowfin", en: "Rainbow Fin", zh: "虹鳍鱼", rarity: "rare" },
+  { key: "golden_marlin", en: "Golden Marlin", zh: "黄金旗鱼", rarity: "epic" },
+  { key: "abyss_dragonfish", en: "Abyss Dragonfish", zh: "深海龙鱼", rarity: "epic" },
+  { key: "starmark_ray", en: "Starmark Ray", zh: "星纹魟", rarity: "epic" },
+  { key: "mystery_octopus", en: "Mystery Octopus", zh: "神秘章鱼", rarity: "epic" },
+];
+
+const SPECIES_BY_RARITY: Record<FishRarity, FishSpecies[]> = {
+  common: FISH_SPECIES.filter((s) => s.rarity === "common"),
+  rare: FISH_SPECIES.filter((s) => s.rarity === "rare"),
+  epic: FISH_SPECIES.filter((s) => s.rarity === "epic" && s.key !== "mystery_octopus"),
+};
+
+/** Localized display name for a catalog species. */
+export function fishSpeciesName(s: FishSpecies): string {
+  return t(s.en, s.zh);
 }
 
 /** Rolls a rarity for a fish; large silhouettes skew toward the prized tiers. */
@@ -61,25 +98,9 @@ function rollFishRarity(isLarge: boolean, r: number): FishRarity {
   return r < 0.03 ? "epic" : r < 0.18 ? "rare" : "common";
 }
 
-/** Deterministic localized species name from a rarity + roll. */
-function pickSpecies(rarity: FishRarity, r: number): string {
-  const common = [
-    t("Sardine", "沙丁鱼"),
-    t("Mackerel", "鲭鱼"),
-    t("Anchovy", "凤尾鱼"),
-    t("Herring", "青鳞鱼"),
-  ];
-  const rare = [
-    t("Silverscale", "银鳞鱼"),
-    t("Moonperch", "月光鲷"),
-    t("Rainbow Fin", "虹鳍鱼"),
-  ];
-  const epic = [
-    t("Golden Marlin", "黄金旗鱼"),
-    t("Abyss Dragonfish", "深海龙鱼"),
-    t("Starmark Ray", "星纹魟"),
-  ];
-  const list = rarity === "epic" ? epic : rarity === "rare" ? rare : common;
+/** Deterministic species pick from a rarity + roll. */
+function pickSpecies(rarity: FishRarity, r: number): FishSpecies {
+  const list = SPECIES_BY_RARITY[rarity];
   return list[Math.floor(r * list.length) % list.length]!;
 }
 /** After this many catches in a session, mystery octopuses may appear (eternal flame reward, once per save). */
@@ -148,6 +169,8 @@ interface Fish {
   phase: number;
   variant: FishVariant;
   rarity: FishRarity;
+  /** Stable catalog key, chosen at spawn. */
+  speciesKey: string;
   /** Localized species name, chosen at spawn. */
   species: string;
   visual: OceanFishVisual;
@@ -354,7 +377,7 @@ export class OceanFish {
       const seed = worldSeed + sessionSalt * 7919 + i * 982451653 + 901;
       const rnd = seededRandom(seed);
       const rarity = rollFishRarity(variant === "large", rnd());
-      const species = pickSpecies(rarity, rnd());
+      const sp = pickSpecies(rarity, rnd());
       const visual = createFishVisual(variant, rarity);
       this.group.add(visual.group);
 
@@ -373,7 +396,8 @@ export class OceanFish {
         phase: (i * 2.17) % (Math.PI * 2),
         variant,
         rarity,
-        species,
+        speciesKey: sp.key,
+        species: fishSpeciesName(sp),
         visual,
         respawnT: 0,
         respawnMoved: false,
@@ -443,6 +467,7 @@ export class OceanFish {
         phase: 9.11 + n * 0.77,
         variant: "octopus",
         rarity: "epic",
+        speciesKey: "mystery_octopus",
         species: t("Mystery Octopus", "神秘章鱼"),
         visual,
         respawnT: 0,
@@ -792,6 +817,7 @@ export class OceanFish {
             this.onCatch?.({
               variant: f.variant,
               rarity: f.rarity,
+              speciesKey: f.speciesKey,
               species: f.species,
               baseXp: FISH_RARITY_XP[f.rarity],
             });

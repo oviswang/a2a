@@ -35,6 +35,17 @@ export function friendBondLevel(bond: number | undefined): number {
 
 /** A2A sky gifts received from other companions (kept on the player's profile). */
 const GIFTS_KEY = "globefly_a2a_gifts_v1";
+/** Fishdex: lifetime, cross-world record of every fish species caught. */
+const FISHDEX_KEY = "globefly_fishdex_v1";
+
+/** Per-species Fishdex entry. */
+export interface FishdexEntry {
+  /** Total lifetime catches of this species. */
+  count: number;
+  /** Epoch ms of the first catch. */
+  firstAt: number;
+}
+export type Fishdex = Record<string, FishdexEntry>;
 
 export interface ReceivedGift {
   gift: string;
@@ -286,6 +297,7 @@ export class ProgressionManager {
       localStorage.removeItem(COMPANION_TOKEN_KEY);
       localStorage.removeItem(FRIENDS_KEY);
       localStorage.removeItem(GIFTS_KEY);
+      localStorage.removeItem(FISHDEX_KEY);
     } catch {}
   }
 
@@ -446,6 +458,35 @@ export class ProgressionManager {
       all.unshift(g);
       ProgressionManager.idStore().setItem(GIFTS_KEY, JSON.stringify(all.slice(0, 200)));
     } catch {}
+  }
+
+  // ── Fishdex (lifetime species collection, cross-world) ──
+
+  static loadFishdex(): Fishdex {
+    try {
+      const raw = localStorage.getItem(FISHDEX_KEY);
+      if (raw) return JSON.parse(raw) as Fishdex;
+    } catch {}
+    return {};
+  }
+
+  /**
+   * Record a caught species. Returns whether this was the first-ever catch of
+   * that species (for a discovery bonus) plus the running distinct-species total.
+   */
+  static recordFishCatch(speciesKey: string, now: number): {
+    firstCatch: boolean;
+    distinctCaught: number;
+  } {
+    const dex = ProgressionManager.loadFishdex();
+    const existing = dex[speciesKey];
+    const firstCatch = !existing;
+    dex[speciesKey] = {
+      count: (existing?.count ?? 0) + 1,
+      firstAt: existing?.firstAt ?? now,
+    };
+    try { localStorage.setItem(FISHDEX_KEY, JSON.stringify(dex)); } catch {}
+    return { firstCatch, distinctCaught: Object.keys(dex).length };
   }
 
   static loadPlayerWorldState(): SavedPlayerWorldState {

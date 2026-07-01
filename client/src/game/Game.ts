@@ -150,12 +150,16 @@ import { SkyJellyfish, JELLY_CAPTURE_XP, JELLY_COUNT } from "./SkyJellyfish";
 import {
   OceanFish,
   FISH_COUNT_BEFORE_MYSTERY_OCTOPUS,
+  FISH_SPECIES,
   type FishRarity,
 } from "./OceanFish";
+import { showFishdexPanel } from "../ui/FishdexPanel";
 /** Consecutive catches within this window keep the fishing combo alive. */
 const FISH_COMBO_WINDOW_MS = 8000;
 /** Cap on the combo XP multiplier. */
 const FISH_COMBO_MAX_MULT = 3;
+/** Bonus XP the first time each species is added to the Fishdex. */
+const FISH_DISCOVERY_BONUS_XP = 25;
 import { CircularProgressRing } from "../ui/CircularProgressRing";
 
 /**
@@ -2987,6 +2991,25 @@ export class Game {
     return `${head}${species} +${xp} XP${comboStr}`;
   }
 
+  /** Show/refresh the boat-only Fishdex progress pill with current counts. */
+  private showFishdexTracker() {
+    const dex = ProgressionManager.loadFishdex();
+    const caught = FISH_SPECIES.filter((sp) => dex[sp.key]).length;
+    this.hud.setFishdexTracker({
+      caught,
+      total: FISH_SPECIES.length,
+      onOpen: () => showFishdexPanel(),
+    });
+  }
+
+  /** Record a catch in the Fishdex and refresh the tracker. Returns the
+   *  first-catch result so the caller can award the discovery bonus. */
+  private recordFishdexCatch(speciesKey: string): { firstCatch: boolean } {
+    const res = ProgressionManager.recordFishCatch(speciesKey, Date.now());
+    this.showFishdexTracker();
+    return res;
+  }
+
   /** A plain-language one-liner of the current state — LLMs ground far better on
    *  prose than on nested JSON, so this is what the companion mostly reads. */
   private composeSituationSummary(snap: Record<string, unknown>): string {
@@ -4249,6 +4272,8 @@ export class Game {
     // moon/brazier progress lives on the server, so re-entering the same world keeps it.
     this.hud.setSwitchVehicleAction(() => void this.promptSwitchVehicle());
     this.hud.setSwitchVehicleButtonVisible(true);
+    // Fishdex tracker is boat-only; hide by default, the boat branch re-shows it.
+    this.hud.setFishdexTracker(null);
     this.hud.setVehicle(vehicle, {
       showXpProgression: this.vehicleFeatures.xpProgressionUI,
     });
@@ -4263,10 +4288,11 @@ export class Game {
       this.fishComboCount = 0;
       this.fishComboExpiresAt = 0;
       this.oceanFish.onCatch = (info) => {
-        const { variant, rarity, species, baseXp } = info;
+        const { variant, rarity, speciesKey, species, baseXp } = info;
         if (variant === "octopus") {
           this.fishCaught += 1;
           this.completeVehicleTutorialStep("fish");
+          this.recordFishdexCatch(speciesKey);
           this.audioManager.resumeContextIfNeeded();
           this.cameraRig.shake(0.02, 0.14);
           this.vehicleFlashTimer = Math.max(this.vehicleFlashTimer, 0.18);
@@ -4305,8 +4331,17 @@ export class Game {
         this.cameraRig.shake(0.015, 0.12);
         this.vehicleFlashTimer = Math.max(this.vehicleFlashTimer, 0.15);
 
-        // Announce prized catches or a building combo; stay quiet on plain singles.
-        if (rarity !== "common" || this.fishComboCount >= 2) {
+        // Fishdex: record the species; a first-ever catch grants a discovery bonus.
+        const { firstCatch } = this.recordFishdexCatch(speciesKey);
+        if (firstCatch) {
+          this.awardXP("fish", FISH_DISCOVERY_BONUS_XP);
+          this.hud.showAmbientToast(
+            t("🎉 New species! ", "🎉 新发现！") +
+              `${species} +${FISH_DISCOVERY_BONUS_XP} XP`,
+            2200,
+          );
+        } else if (rarity !== "common" || this.fishComboCount >= 2) {
+          // Announce prized catches or a building combo; stay quiet on plain singles.
           this.hud.showAmbientToast(
             this.composeFishCatchBanner(rarity, species, xp, this.fishComboCount),
             1800,
@@ -4329,6 +4364,7 @@ export class Game {
         }
       };
       this.oceanFish.setFishingLineResolution(this.container.clientWidth, this.container.clientHeight);
+      this.showFishdexTracker();
     }
     this.vehicleHintsEl = mountControlHints(this.hud.root, vehicle, !this.mobile);
     this.startVehicleTutorialIfNeeded(vehicle);

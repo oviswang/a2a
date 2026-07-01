@@ -56,6 +56,8 @@ export class HUD {
   private onCampsiteClick: (() => void) | null = null;
   private campsiteBtn!: HTMLButtonElement;
   private vehicleBtn!: HTMLButtonElement;
+  private fishdexPill: HTMLButtonElement | null = null;
+  private onFishdexOpen: (() => void) | null = null;
   private onSwitchVehicle: (() => void) | null = null;
   private entranceDone = false;
   private campsitePromptEl: HTMLDivElement | null = null;
@@ -729,6 +731,27 @@ export class HUD {
     if (this.vehicleBtn) this.vehicleBtn.style.display = visible ? "" : "none";
   }
 
+  /** Boat-only Fishdex progress pill (top-left, below the world name). Pass null to hide. */
+  setFishdexTracker(
+    opts: { caught: number; total: number; onOpen: () => void } | null,
+  ) {
+    if (!opts) {
+      if (this.fishdexPill) this.fishdexPill.style.display = "none";
+      return;
+    }
+    if (!this.fishdexPill) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "hud-fishdex-pill";
+      btn.addEventListener("click", () => this.onFishdexOpen?.());
+      this.el.querySelector(".hud-top")?.appendChild(btn);
+      this.fishdexPill = btn;
+    }
+    this.onFishdexOpen = opts.onOpen;
+    this.fishdexPill.style.display = "";
+    this.fishdexPill.textContent = `🐟 ${opts.caught}/${opts.total}`;
+  }
+
   setCampsiteButtonVisible(visible: boolean) {
     if (!CAMPSITE_HOME_ENABLED) return;
     this.campsiteBtn.style.display = visible ? "" : "none";
@@ -834,6 +857,24 @@ export class HUD {
         font-size: 0.75rem;
         font-weight: 400;
         color: rgba(255, 255, 255, 0.45);
+      }
+      .hud-fishdex-pill {
+        margin-top: 5px;
+        align-self: flex-start;
+        pointer-events: auto;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 999px;
+        color: rgba(255, 255, 255, 0.82);
+        font-size: 0.72rem;
+        font-weight: 600;
+        padding: 3px 10px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .hud-fishdex-pill:hover {
+        background: rgba(255, 255, 255, 0.16);
+        color: #fff;
       }
       #hud.hud--mobile-session.hud--quest-suppressed-dialogue .hud-quest-trackers {
         display: none !important;
