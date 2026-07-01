@@ -658,9 +658,11 @@ export class Room {
       this.hotFlagHolderId = null;
       this.hotFlagImmuneUntilMs = 0;
       this.clearAllChallengersWithBroadcast();
-      // Stop the moon and reset the shared objective so the next session starts fresh.
+      // Stop the moon while empty, but KEEP the shared objective state: a player who
+      // briefly leaves and rejoins within the room's TTL (e.g. switching vehicle) keeps
+      // their moon/brazier progress. The state is discarded only when the empty room is
+      // deleted (RoomManager EMPTY_ROOM_TTL) — a fresh Room then starts a fresh objective.
       this.clearObjectiveTimer();
-      this.resetObjective();
       return;
     }
 

@@ -3468,6 +3468,69 @@ export class Game {
     }
   }
 
+  private switchingVehicle = false;
+
+  /** In-game "change craft": confirm, then drop back to the lobby's vehicle picker in
+   *  the SAME world. The shared moon/brazier progress lives on the server (and the room
+   *  lingers through the switch), so it's preserved — this lets a solo player switch to
+   *  the carpet to do the void without losing progress or reopening the page. */
+  private async promptSwitchVehicle() {
+    if (this.gamePhase !== "flying" || this.inCosmicVoid || this.switchingVehicle) return;
+    const ok = await this.showPairingCard({
+      title: t("Change craft ✈︎", "切换载具 ✈︎"),
+      message: t(
+        "Switch your vehicle — e.g. to the magic carpet so you can enter a cosmic-void portal. You'll pick a craft and drop back into THIS world; the shared moon & braziers progress is kept.",
+        "切换你的载具——比如换成魔法飞毯,就能进入宇宙虚空传送门。你会重新选择载具并回到当前这个世界;共享的月亮和火盆进度会保留。",
+      ),
+      acceptLabel: t("Change craft", "换载具"),
+      declineLabel: t("Cancel", "取消"),
+    });
+    if (ok) void this.beginVehicleSwitch();
+  }
+
+  /** Tear the session down and return to the in-game lobby (same world preserved) so
+   *  the player picks a new vehicle and rejoins — no page reload. Mirrors the
+   *  player-downed return, minus the death message. */
+  private async beginVehicleSwitch() {
+    if (this.switchingVehicle) return;
+    this.switchingVehicle = true;
+    this.running = false;
+    try {
+      if (!this.transitionOverlay) this.transitionOverlay = new TransitionOverlay(this.container);
+      await this.transitionOverlay.fadeOut({
+        durationSec: 0.9,
+        message: t("Changing craft…", "切换载具中…"),
+        holdAtFullSec: 0.15,
+      });
+      this.teardownGameplaySession("switch_vehicle");
+      this.dayNightCycle.moonProgress = 0;
+      this.moonThreat?.reset();
+      this.shouldShowBrazierMoonResume = false;
+      this.applyDayNightPreset();
+      this.gamePhase = "flying";
+      this.moonCinematicStep = "done";
+      this.moonCinematicCamera = null;
+      this.introActive = false;
+      this.vehicleHintsEl = null;
+      this.campsiteHintsEl = null;
+      this.mountLobby();
+      this.previewActive = true;
+      window.addEventListener("resize", this.onPreviewResize);
+      this.onPreviewResize();
+      this.resetPreviewAnimationClock();
+      this.stepPreview(this.consumePreviewFrameDt());
+      await new Promise<void>((r) => requestAnimationFrame(() => r()));
+      requestAnimationFrame(this.previewTick);
+      if (this.transitionOverlay) {
+        await this.transitionOverlay.fadeIn();
+        this.transitionOverlay.dispose();
+        this.transitionOverlay = null;
+      }
+    } finally {
+      this.switchingVehicle = false;
+    }
+  }
+
   /** Gremlin damage emptied the plane HP: fade to black, tear down session, main menu. */
   private async returnToMainMenuAfterPlayerDowned() {
     if (this.playerGremlinDeathReturnInProgress) return;
@@ -4153,6 +4216,10 @@ export class Game {
     this.hud.setCampsiteAction(() => {
       if (this.gamePhase === "flying") this.doLanding();
     });
+    // In-game "change craft": switch vehicle without reopening the page. The shared
+    // moon/brazier progress lives on the server, so re-entering the same world keeps it.
+    this.hud.setSwitchVehicleAction(() => void this.promptSwitchVehicle());
+    this.hud.setSwitchVehicleButtonVisible(true);
     this.hud.setVehicle(vehicle, {
       showXpProgression: this.vehicleFeatures.xpProgressionUI,
     });
