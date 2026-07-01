@@ -115,16 +115,33 @@ export class VoidFlameShield {
     this.group.scale.setScalar(COLLISION_RADIUS);
   }
 
+  // ── Co-op mode: when active, HP mirrors the room's SHARED shield (server-driven)
+  //    and impacts are reported to the server instead of decrementing locally.
+  //    Off by default, so solo play is completely unchanged. ──
+  private coopActive = false;
+  private coopHp = 0;
+  private coopMax = SHIELD_MAX_HP;
+  private onCoopHit: (() => void) | null = null;
+
+  setCoop(active: boolean, onHit: (() => void) | null) {
+    this.coopActive = active;
+    this.onCoopHit = active ? onHit : null;
+  }
+  setCoopHp(hp: number, max: number) {
+    this.coopHp = hp;
+    this.coopMax = Math.max(1, max);
+  }
+
   canBlock(): boolean {
-    return this.hitPoints > 0;
+    return this.getHitPoints() > 0;
   }
 
   getHitPoints(): number {
-    return this.hitPoints;
+    return this.coopActive ? this.coopHp : this.hitPoints;
   }
 
   getMaxHitPoints(): number {
-    return SHIELD_MAX_HP;
+    return this.coopActive ? this.coopMax : SHIELD_MAX_HP;
   }
 
   /** Restore up to `amount` HP, capped at max. */
@@ -147,15 +164,22 @@ export class VoidFlameShield {
   }
 
   registerMothImpact() {
-    if (this.hitPoints <= 0) return;
-    this.hitPoints -= 1;
+    if (!this.canBlock()) return;
     this.hitBoost = 1.55;
     this.hitFlash = 1;
     this.audio?.playSFX(this.shieldHitSfxId, this.shieldHitSfxVolume);
+    if (this.coopActive) {
+      // Server owns the shared HP; report the hit and let void:sync update coopHp.
+      this.onCoopHit?.();
+    } else {
+      this.hitPoints -= 1;
+    }
   }
 
   update(dt: number) {
-    this.mesh.visible = this.hitPoints > 0.01;
+    const hp = this.getHitPoints();
+    const max = this.getMaxHitPoints();
+    this.mesh.visible = hp > 0.01;
     this.shaderTime += dt * SHIELD_TIME_SCALE;
     this.mat.uniforms.time.value = this.shaderTime;
     this.hitBoost += (1 - this.hitBoost) * (1 - Math.exp(-HIT_BOOST_SMOOTH * dt));
@@ -172,14 +196,13 @@ export class VoidFlameShield {
 
     // HP 1 or 2: breathing fade; 3+ full opacity when visible
     let pulse = 1;
-    if (this.hitPoints > 0 && this.hitPoints < 3) {
+    if (hp > 0 && hp < 3) {
       pulse = 0.22 + 0.78 * (0.5 + 0.5 * Math.sin(
         this.shaderTime * (Math.PI * 2) * LOW_HP_PULSE_HZ + this.phaseOffset,
       ));
     }
     (this.mat.uniforms.uLowHpPulse as { value: number }).value = pulse;
-    (this.mat.uniforms.uHpRatio as { value: number }).value =
-      SHIELD_MAX_HP > 0 ? this.hitPoints / SHIELD_MAX_HP : 0;
+    (this.mat.uniforms.uHpRatio as { value: number }).value = max > 0 ? hp / max : 0;
 
     this.mesh.rotation.y += dt * 0.55 * SHIELD_TIME_SCALE;
     this.mesh.rotation.x += dt * 0.12 * SHIELD_TIME_SCALE;
