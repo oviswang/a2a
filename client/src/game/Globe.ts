@@ -3640,6 +3640,17 @@ transformed.z += sway2;`,
     state.cycleStartAt = cycleStartAt;
   }
 
+  /** Raise a moonstone only if it's currently idle — used for a teammate's relayed
+   *  lift, so a co-present carpet raising the OTHER stone syncs onto this client.
+   *  Returns true if it actually started a fresh raise. */
+  startMoonstoneRuinCycleIfIdle(index: number, now = Date.now()): boolean {
+    const state = this.moonstoneRuins[index];
+    if (!state || this.moonstonePostUnionActive) return false;
+    if (this.getMoonstonePhase(state.cycleStartAt, now) !== "idle") return false;
+    state.cycleStartAt = now;
+    return true;
+  }
+
   /**
    * Returns true the first frame both moonstones are in `floating` simultaneously.
    * Re-arms only when both have returned to `idle`, so a single pair-lift triggers

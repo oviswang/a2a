@@ -216,6 +216,10 @@ export class RoomManager {
       room.haulLeviathan(socket.id);
     });
 
+    socket.on("moonstone:lift", (index) => {
+      room.relayMoonstoneLift(socket.id, Number(index));
+    });
+
     socket.on("disconnect", () => {
       room.removePlayer(socket.id);
       if (room.isEmpty) {

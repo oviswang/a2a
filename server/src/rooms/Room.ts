@@ -25,6 +25,7 @@ import type {
 // imports shared TYPES but, like the flag/paintball constants, keeps its own value
 // copies so it never runtime-imports values from the shared source package).
 const BRAZIER_COUNT = 5;
+const MOONSTONE_RUIN_COUNT = 2;
 const BRAZIER_BURN_MS = 45_000;
 const BRAZIER_MOON_PAUSE_MS = 60_000;
 const MOON_DURATION_MS = 300_000;
@@ -563,6 +564,16 @@ export class Room {
     this.lastLeviathanHunters = 0;
     if (withCooldown) this.leviathanCooldownUntil = Date.now() + LEVIATHAN_COOLDOWN_MS;
     this.broadcastLeviathanSync();
+  }
+
+  /** Carpet co-op: relay a moonstone lift to the rest of the room so a teammate
+   *  raising the other stone can trigger the shared union on both clients. */
+  relayMoonstoneLift(fromSocketId: string, index: number) {
+    if (!Number.isInteger(index) || index < 0 || index >= MOONSTONE_RUIN_COUNT) return;
+    for (const [id, p] of this.players) {
+      if (id === fromSocketId) continue;
+      p.socket.emit("moonstone:lifted", { index, fromId: fromSocketId });
+    }
   }
 
   forceFlagSpawn() {

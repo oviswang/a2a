@@ -193,6 +193,13 @@ export class SocketClient {
   onCarpetPhotoed(cb: (ev: { fromId: string; fromName: string; fromCompanionName?: string }) => void) {
     this.socket.on("carpet:photoed", cb);
   }
+  // ── Carpet co-op: shared moonstone union ──
+  emitMoonstoneLift(index: number) {
+    this.socket.emit("moonstone:lift", index);
+  }
+  onMoonstoneLifted(cb: (ev: { index: number; fromId: string }) => void) {
+    this.socket.on("moonstone:lifted", cb);
+  }
   // ── A2A duo challenge ("fly together") ──
   emitDuoInvite(toId: string) {
     this.socket.emit("duo:invite", toId);

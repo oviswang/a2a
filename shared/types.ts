@@ -317,6 +317,9 @@ export interface ServerToClientEvents {
   "flame:received": (ev: { fromId: string; fromName: string; fromCompanionName?: string }) => void;
   /** A2A: two magic carpets flew close — a shared capybara photo keepsake moment. */
   "carpet:photoed": (ev: { fromId: string; fromName: string; fromCompanionName?: string }) => void;
+  /** Carpet co-op: a teammate started raising moonstone `index` — raise it on this
+   *  client too, so two carpets each lifting one triggers the shared union. */
+  "moonstone:lifted": (ev: { index: number; fromId: string }) => void;
   /** A2A duo challenge ("fly together"): a friend invited you / answered / finished. */
   "duo:incoming": (ev: DuoPeerEvent) => void;
   "duo:answered": (ev: DuoAnswerEvent) => void;
@@ -450,6 +453,9 @@ export interface ClientToServerEvents {
   "flame:gift": (toId: string) => void;
   /** A2A: two carpets flew close — tell peer `toId` to play the shared photo moment. */
   "carpet:photo": (toId: string) => void;
+  /** Carpet co-op: I started raising moonstone `index` — relay to the room so a
+   *  teammate raising the other stone can trigger the shared union. */
+  "moonstone:lift": (index: number) => void;
   /** A2A duo challenge ("fly together"): invite / answer / report completion. */
   "duo:invite": (toId: string) => void;
   "duo:respond": (toId: string, accept: boolean) => void;
