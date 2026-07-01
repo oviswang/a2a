@@ -514,15 +514,6 @@ export class Room {
     this.broadcastLeviathanSync();
   }
 
-  /** QA/debug: force-surface a giant near the requester (ignores the 2-boat spawn
-   *  gate + cooldown). The min-hunters damage gate still applies. */
-  debugForceLeviathan(socketId: string) {
-    const player = this.players.get(socketId);
-    if (!player || this.leviathanActive) return;
-    const boats = Array.from(this.players.values()).filter((p) => p.state.vehicle === "boat").length;
-    this.spawnLeviathanNear(player.state, boats);
-  }
-
   /** A boat reports it's hauling the giant. Server validates range + the co-op
    *  min-hunters rule + a per-boat rate limit before applying any damage. */
   haulLeviathan(socketId: string) {

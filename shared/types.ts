@@ -423,9 +423,6 @@ export interface ClientToServerEvents {
   /** True while the local player is in a non-world scene where flag play is suspended. */
   "flag:setSuppressed": (suppressed: boolean) => void;
   "debug:forceFlagSpawn": () => void;
-  /** QA/debug: force-surface a Leviathan near me (bypasses the 2-boat spawn gate;
-   *  the min-hunters DAMAGE gate still applies, so it can't be soloed to a win). */
-  "debug:forceLeviathan": () => void;
   /** A2A companion pairing: ask `toId` to pair (relayed, same room only). Carries
    *  the requester's non-secret visitorId + companion name for the friends roster. */
   "pair:request": (toId: string, fromVisitorId?: string, fromCompanionName?: string) => void;
