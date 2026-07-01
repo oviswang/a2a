@@ -1,5 +1,5 @@
 import { t } from "../i18n";
-import { FISH_SPECIES, fishSpeciesName, type FishRarity } from "../game/OceanFish";
+import { FISH_SPECIES, fishSpeciesName, type FishRarity, type FishSpecies } from "../game/OceanFish";
 import { ProgressionManager } from "../game/ProgressionManager";
 
 const RARITY_COLOR: Record<FishRarity, string> = {
@@ -12,6 +12,15 @@ const RARITY_LABEL: Record<FishRarity, string> = {
   rare: t("Rare", "稀有"),
   epic: t("Epic", "史诗"),
 };
+
+/** How to catch a species — shown as a grey hint on undiscovered entries. */
+function speciesHint(sp: FishSpecies): string {
+  if (sp.key === "mystery_octopus") return t("Appears after ~12 catches", "钓满约 12 条后出现");
+  if (sp.key === "leviathan") return t("Defeat the co-op Leviathan", "协作击败巨兽海妖");
+  if (sp.rarity === "epic") return t("Glows gold in the water", "水里发金光");
+  if (sp.rarity === "rare") return t("Glows blue in the water", "水里发蓝光");
+  return t("Found while fishing", "海面钓到");
+}
 
 let stylesInjected = false;
 function injectStyles() {
@@ -50,13 +59,25 @@ function injectStyles() {
     .fishdex-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .fishdex-item {
       display: flex; align-items: center; gap: 10px;
-      padding: 9px 11px; border-radius: 10px;
+      padding: 8px 11px; border-radius: 10px;
       background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06);
     }
-    .fishdex-item--locked { opacity: 0.5; }
-    .fishdex-dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
-    .fishdex-name { font-size: 14px; font-weight: 600; flex: 1 1 auto; }
-    .fishdex-num { font-size: 12px; color: rgba(255,255,255,0.55); }
+    .fishdex-item--locked { background: rgba(255,255,255,0.02); }
+    .fishdex-icon {
+      width: 18px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+      font-size: 15px; line-height: 1;
+    }
+    .fishdex-icon--locked { opacity: 0.32; filter: grayscale(1) brightness(0.7); }
+    .fishdex-dot { width: 10px; height: 10px; border-radius: 50%; display: block; }
+    .fishdex-text { flex: 1 1 auto; min-width: 0; }
+    .fishdex-name { font-size: 14px; font-weight: 600; }
+    .fishdex-name--locked { color: rgba(255,255,255,0.55); }
+    .fishdex-hint { font-size: 11px; color: rgba(255,255,255,0.42); margin-top: 1px; }
+    .fishdex-num { font-size: 12px; color: rgba(255,255,255,0.55); flex: 0 0 auto; }
+    .fishdex-progress {
+      text-align: center; font-size: 12px; color: rgba(255,255,255,0.6);
+      margin-top: 16px; font-weight: 600;
+    }
     .fishdex-close {
       margin-top: 18px; width: 100%; padding: 12px; border: none; border-radius: 12px;
       background: rgba(255,255,255,0.12); color: #fff; font-size: 15px; font-weight: 600;
@@ -116,23 +137,50 @@ export function showFishdexPanel() {
       const item = document.createElement("div");
       item.className = "fishdex-item" + (entry ? "" : " fishdex-item--locked");
 
-      const dot = document.createElement("div");
-      dot.className = "fishdex-dot";
-      dot.style.background = entry ? RARITY_COLOR[rarity] : "rgba(255,255,255,0.2)";
+      const icon = document.createElement("div");
+      icon.className = "fishdex-icon";
+      if (entry) {
+        const dot = document.createElement("span");
+        dot.className = "fishdex-dot";
+        dot.style.background = RARITY_COLOR[rarity];
+        icon.appendChild(dot);
+      } else {
+        // Dim silhouette instead of a blank dot, so locked entries read as "to collect".
+        icon.textContent = "🐟";
+        icon.classList.add("fishdex-icon--locked");
+      }
 
+      const text = document.createElement("div");
+      text.className = "fishdex-text";
       const name = document.createElement("div");
-      name.className = "fishdex-name";
+      name.className = "fishdex-name" + (entry ? "" : " fishdex-name--locked");
       name.textContent = entry ? fishSpeciesName(sp) : "？？？";
+      text.appendChild(name);
+      if (!entry) {
+        const hint = document.createElement("div");
+        hint.className = "fishdex-hint";
+        hint.textContent = speciesHint(sp);
+        text.appendChild(hint);
+      }
 
       const num = document.createElement("div");
       num.className = "fishdex-num";
       num.textContent = entry ? `×${entry.count}` : "";
 
-      item.append(dot, name, num);
+      item.append(icon, text, num);
       grid.appendChild(item);
     }
     card.appendChild(grid);
   }
+
+  const remaining = total - caught;
+  const progress = document.createElement("div");
+  progress.className = "fishdex-progress";
+  progress.textContent =
+    remaining > 0
+      ? t(`${remaining} more to complete the Fishdex`, `再捕 ${remaining} 种即可集齐图鉴`)
+      : t("Fishdex complete! 🎉", "图鉴已集齐！🎉");
+  card.appendChild(progress);
 
   const close = document.createElement("button");
   close.className = "fishdex-close";
