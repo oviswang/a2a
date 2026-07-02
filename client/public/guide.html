@@ -85,6 +85,8 @@
   .arr{align-self:center;color:var(--gold);font-size:26px;font-weight:900}
   .flow .note{margin-top:18px;font-size:15px;background:rgba(255,255,255,.08);border-radius:12px;padding:13px 16px}
   .flow .note b{color:var(--gold)}
+  .flow .note.first{margin-top:0;margin-bottom:18px;background:rgba(34,184,166,.18);border:1px solid rgba(34,184,166,.5)}
+  .flow .note.first b{color:#7ff0df}
 
   /* activities */
   .acts{display:grid;grid-template-columns:1fr 1fr;gap:13px}
@@ -232,7 +234,7 @@
     { em:'📷', h:L('Two-carpet photo','双飞毯合影'), _new:L('Carpet co-op','飞毯协作'),
       p:L('Two carpets flying close auto-snap a shared capybara keepsake — a sweet little moment.','两张魔毯靠近会自动抓拍一张水豚合影纪念，甜甜的小瞬间。') },
     { em:'🌙', h:L('Moonstone union','月光石合璧'), _new:L('Carpet co-op','飞毯协作'),
-      p:L('Two buried moonstones must float AT ONCE to unite — split up, one carpet each, raise them together within ~15s.','两块埋藏的月光石需同时升起才能合璧——分头一人一块，约 15 秒内一起举起。') },
+      p:L('Raise both moonstones at once to unite them — this is what makes the five braziers rise. Solo-doable in ~15s; with two carpets, split up (one each).','让两块月光石同时升起合璧——这正是让 5 个火盆现身的关键。单人约 15 秒内可完成，两张飞毯则分头一人一块。') },
     { em:'🛡️', h:L('Co-op void','协作虚空'), _new:L('Carpet co-op','飞毯协作'),
       p:L('Two carpets in the void share one thicker flame-shield: break it and you fail together; hold it and each earns a flame.','两张魔毯同时在虚空里，共享一个更厚的火焰护盾一起防守，破了一起失败，守住各得火焰。') },
     { em:'🐙', h:L('Hunt the Leviathan','围猎利维坦'), _new:L('Boat co-op','小船协作'),
@@ -296,7 +298,12 @@
     '<div class="veh">'+veh.map(vehCard).join('')+'</div></section>'+
 
   '<section><h2><span class="n">2</span>'+L('The goal: stop the falling moon','核心目标：阻止月亮坠落')+'</h2>'+
-    '<div class="flow"><div class="steps">'+
+    '<div class="flow">'+
+    '<div class="note first">🔓 <b>'+L('First — raise the braziers','第一步 —— 先让火盆现身')+'</b>: '+
+      L('the five braziers start BURIED and invisible. On the carpet, fly close to the TWO ancient moonstone ruins so both float at once (each floats ~15s, so lift one then reach the other in time) — the "Moonstone Union" cutscene then raises the braziers around the globe, and they stay visible for good. Until you do this, there are no braziers to find.',
+        '五个火盆一开始<b>埋在地下、隐形</b>。骑魔毯飞近地上那<b>两座古老月光石遗迹</b>，让它们同时悬浮（各浮约 15 秒，举起一座后及时赶到另一座）——触发「月光石合璧」过场，5 个火盆就会从地里升起，之后永久可见。<b>在这之前，世界里根本没有火盆可找。</b>')+
+    '</div>'+
+    '<div class="steps">'+
       flow.map(function(f,i){ return flowStep(f)+(i<flow.length-1?'<div class="arr">→</div>':''); }).join('')+
     '</div><div class="note">⚠️ <b>'+L('Key difference','关键区别')+'</b>: '+
       L('any craft can light a brazier, but a normal light is a <b>temporary</b> flame (~45s) that only PAUSES the moon (~1 min). To WIN you must light all five with an <b>Eternal Flame</b> — and Eternal Flames are earned <b>only</b> in the void, <b>only</b> on the carpet.',
