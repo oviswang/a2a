@@ -70,8 +70,28 @@ function injectStyles() {
       background: linear-gradient(#8affc0, #38d98a);
     }
     .reel-hint {
-      color: rgba(255,255,255,0.85); font-size: 14px; text-align: right;
-      text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+      color: rgba(255,255,255,0.9); font-size: 13.5px; line-height: 1.5; text-align: right;
+      text-shadow: 0 2px 6px rgba(0,0,0,0.6); max-width: 62vw;
+    }
+    .reel-hint b { color: #baf7d4; font-weight: 800; }
+    /* A can't-miss "hold" affordance so first-timers know it's interactive. */
+    .reel-hold-cue {
+      position: fixed; top: 50%; left: 7%; right: auto; transform: translateY(-50%);
+      z-index: 46; display: flex; justify-content: flex-start; pointer-events: none;
+    }
+    .reel-hold-cue span {
+      padding: 11px 20px; border-radius: 999px;
+      background: rgba(120,230,160,0.24); border: 1.5px solid rgba(140,245,175,0.85);
+      color: #eafff2; font-size: 16px; font-weight: 800; white-space: nowrap;
+      text-shadow: 0 2px 6px rgba(0,0,0,0.55);
+      animation: reelHoldPulse 0.95s ease-in-out infinite;
+    }
+    @keyframes reelHoldPulse { 0%,100%{transform:scale(1);opacity:.82} 50%{transform:scale(1.09);opacity:1} }
+    .reel-hold-cue--gone { opacity: 0; transition: opacity 0.25s ease; }
+    /* Top cap on the catch meter = the goal line ("fill to here"). */
+    .reel-progress-goal {
+      position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
+      font-size: 15px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
     }
   `;
   document.head.appendChild(s);
@@ -93,7 +113,7 @@ export function startReelMinigame(opts: ReelOptions) {
   title.className = "reel-title";
   title.innerHTML =
     `<div class="reel-title-main" style="color:${tune.color}">${opts.species}</div>` +
-    `<div class="reel-title-sub">${t("It's biting — reel it in!", "上钩了 —— 起竿！")}</div>`;
+    `<div class="reel-title-sub">${t("It's biting — hold to keep the green bar on the fish!", "上钩了 —— 按住让绿框套住鱼！")}</div>`;
   overlay.appendChild(title);
 
   const stage = document.createElement("div");
@@ -101,6 +121,10 @@ export function startReelMinigame(opts: ReelOptions) {
 
   const progTrack = document.createElement("div");
   progTrack.className = "reel-progress-track";
+  const progGoal = document.createElement("div");
+  progGoal.className = "reel-progress-goal";
+  progGoal.textContent = "🎣";
+  progTrack.appendChild(progGoal);
   const progFill = document.createElement("div");
   progFill.className = "reel-progress-fill";
   progTrack.appendChild(progFill);
@@ -119,10 +143,21 @@ export function startReelMinigame(opts: ReelOptions) {
 
   const hint = document.createElement("div");
   hint.className = "reel-hint";
-  hint.textContent = t("Hold to reel · release to give line", "按住起竿 · 松开放线");
+  hint.innerHTML = t(
+    "<b>Hold</b> anywhere to lift the green bar, release to drop — keep the fish 🐟 inside it.<br>The left meter fills while it's inside; fill it to the 🎣 to land the catch.",
+    "<b>按住</b>屏幕任意处抬升绿框、松手下落 —— 让鱼 🐟 一直待在绿框里。<br>左侧细条会随之上涨，涨满到 🎣 就把鱼钓上来。",
+  );
   overlay.appendChild(hint);
 
   document.body.appendChild(overlay);
+
+  // A pulsing "hold" prompt so it's obvious the minigame is interactive; it
+  // disappears the first time the player presses down.
+  const holdCue = document.createElement("div");
+  holdCue.className = "reel-hold-cue";
+  holdCue.innerHTML = `<span>${t("👆 Press &amp; hold", "👆 按住不放")}</span>`;
+  overlay.appendChild(holdCue);
+
   requestAnimationFrame(() => overlay.classList.add("reel-overlay--in"));
 
   // ── State (normalized 0..1 along the track; 0 = bottom, 1 = top) ──
@@ -132,16 +167,18 @@ export function startReelMinigame(opts: ReelOptions) {
   let fishPos = 0.5;
   let fishTarget = 0.5;
   let retargetIn = 0;
-  let progress = 0.35; // start with a little slack so a miss isn't instant-loss
+  let progress = 0.4; // start with a little slack so a miss isn't instant-loss
+  let elapsed = 0; // time since the reel began (drives the grace window)
   let holding = false;
   let resolved = false;
   let raf = 0;
   let last = performance.now();
 
-  const onDown = (e: Event) => { e.preventDefault(); holding = true; };
+  const dismissCue = () => holdCue.classList.add("reel-hold-cue--gone");
+  const onDown = (e: Event) => { e.preventDefault(); holding = true; dismissCue(); };
   const onUp = () => { holding = false; };
   const onKey = (e: KeyboardEvent) => {
-    if (e.code === "Space" || e.code === "ArrowUp") { e.preventDefault(); holding = true; }
+    if (e.code === "Space" || e.code === "ArrowUp") { e.preventDefault(); holding = true; dismissCue(); }
   };
   const onKeyUp = (e: KeyboardEvent) => {
     if (e.code === "Space" || e.code === "ArrowUp") holding = false;
@@ -175,6 +212,7 @@ export function startReelMinigame(opts: ReelOptions) {
     const now = performance.now();
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
+    elapsed += dt;
 
     // Fish picks a new target every so often; darts more for rarer fish.
     retargetIn -= dt;
@@ -192,9 +230,12 @@ export function startReelMinigame(opts: ReelOptions) {
     if (barPos < barH / 2) { barPos = barH / 2; barVel = 0; }
     if (barPos > 1 - barH / 2) { barPos = 1 - barH / 2; barVel = 0; }
 
-    // In-bar test → fill or drain the catch meter.
+    // In-bar test → fill or drain the catch meter. The first ~1.6s is a grace
+    // window with no draining, so a first-timer has time to realize they must
+    // hold and find the fish before the line can ever snap.
     const inBar = Math.abs(fishPos - barPos) <= barH / 2;
-    progress += (inBar ? tune.fillRate : -tune.drainRate) * dt;
+    const drainRate = elapsed < 1.6 ? 0 : tune.drainRate;
+    progress += (inBar ? tune.fillRate : -drainRate) * dt;
     progress = Math.max(0, Math.min(1, progress));
 
     // Render (top = high value).
