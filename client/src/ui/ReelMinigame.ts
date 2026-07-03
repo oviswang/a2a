@@ -19,10 +19,10 @@ interface ReelTuning {
 function tuningFor(rarity: FishRarity): ReelTuning {
   // Rarer fish: smaller catch bar, darts faster, fills slower, drains faster.
   if (rarity === "epic")
-    return { barFrac: 0.16, fishSpeed: 3.2, fillRate: 0.34, drainRate: 0.39, color: "#ffcc33" };
+    return { barFrac: 0.18, fishSpeed: 2.9, fillRate: 0.38, drainRate: 0.35, color: "#ffcc33" };
   if (rarity === "rare")
-    return { barFrac: 0.22, fishSpeed: 2.4, fillRate: 0.42, drainRate: 0.31, color: "#66ccff" };
-  return { barFrac: 0.3, fishSpeed: 1.8, fillRate: 0.5, drainRate: 0.26, color: "#cfe3ff" };
+    return { barFrac: 0.25, fishSpeed: 2.2, fillRate: 0.46, drainRate: 0.28, color: "#66ccff" };
+  return { barFrac: 0.32, fishSpeed: 1.7, fillRate: 0.54, drainRate: 0.24, color: "#cfe3ff" };
 }
 
 let stylesInjected = false;
@@ -171,7 +171,7 @@ export function startReelMinigame(opts: ReelOptions) {
   let fishPos = 0.86;
   let fishTarget = 0.86;
   let retargetIn = 0.55;
-  let progress = 0.3; // a little slack so a fumble isn't an instant loss
+  let progress = 0.35; // a little slack so a fumble isn't an instant loss
   let elapsed = 0; // time since the reel began (drives the grace window)
   let holding = false;
   let resolved = false;
@@ -238,7 +238,7 @@ export function startReelMinigame(opts: ReelOptions) {
     // softened (not disabled) so orienting isn't an instant loss, but it's no
     // longer a free win — you still have to actually track the fish.
     const inBar = Math.abs(fishPos - barPos) <= barH / 2;
-    const drainRate = elapsed < 0.8 ? tune.drainRate * 0.4 : tune.drainRate;
+    const drainRate = elapsed < 1.0 ? tune.drainRate * 0.35 : tune.drainRate;
     progress += (inBar ? tune.fillRate : -drainRate) * dt;
     progress = Math.max(0, Math.min(1, progress));
 
