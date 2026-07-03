@@ -17,11 +17,12 @@ interface ReelTuning {
   color: string;
 }
 function tuningFor(rarity: FishRarity): ReelTuning {
+  // Rarer fish: smaller catch bar, darts faster, fills slower, drains faster.
   if (rarity === "epic")
-    return { barFrac: 0.2, fishSpeed: 2.6, fillRate: 0.42, drainRate: 0.3, color: "#ffcc33" };
+    return { barFrac: 0.16, fishSpeed: 3.2, fillRate: 0.34, drainRate: 0.39, color: "#ffcc33" };
   if (rarity === "rare")
-    return { barFrac: 0.28, fishSpeed: 1.9, fillRate: 0.5, drainRate: 0.26, color: "#66ccff" };
-  return { barFrac: 0.34, fishSpeed: 1.5, fillRate: 0.58, drainRate: 0.22, color: "#cfe3ff" };
+    return { barFrac: 0.22, fishSpeed: 2.4, fillRate: 0.42, drainRate: 0.31, color: "#66ccff" };
+  return { barFrac: 0.3, fishSpeed: 1.8, fillRate: 0.5, drainRate: 0.26, color: "#cfe3ff" };
 }
 
 let stylesInjected = false;
@@ -162,12 +163,15 @@ export function startReelMinigame(opts: ReelOptions) {
 
   // ── State (normalized 0..1 along the track; 0 = bottom, 1 = top) ──
   const barH = tune.barFrac; // fraction of track height
-  let barPos = 0.5; // center of the player bar (0..1)
+  let barPos = 0.42; // center of the player bar (0..1)
   let barVel = 0;
-  let fishPos = 0.5;
-  let fishTarget = 0.5;
-  let retargetIn = 0;
-  let progress = 0.4; // start with a little slack so a miss isn't instant-loss
+  // Start the fish AWAY from the bar (near the top) so it isn't a free in-bar
+  // fill at t=0 — the player has to lift and chase it first. It holds briefly,
+  // then starts wandering.
+  let fishPos = 0.86;
+  let fishTarget = 0.86;
+  let retargetIn = 0.55;
+  let progress = 0.3; // a little slack so a fumble isn't an instant loss
   let elapsed = 0; // time since the reel began (drives the grace window)
   let holding = false;
   let resolved = false;
@@ -230,11 +234,11 @@ export function startReelMinigame(opts: ReelOptions) {
     if (barPos < barH / 2) { barPos = barH / 2; barVel = 0; }
     if (barPos > 1 - barH / 2) { barPos = 1 - barH / 2; barVel = 0; }
 
-    // In-bar test → fill or drain the catch meter. The first ~1.6s is a grace
-    // window with no draining, so a first-timer has time to realize they must
-    // hold and find the fish before the line can ever snap.
+    // In-bar test → fill or drain the catch meter. For the first ~0.8s drain is
+    // softened (not disabled) so orienting isn't an instant loss, but it's no
+    // longer a free win — you still have to actually track the fish.
     const inBar = Math.abs(fishPos - barPos) <= barH / 2;
-    const drainRate = elapsed < 1.6 ? 0 : tune.drainRate;
+    const drainRate = elapsed < 0.8 ? tune.drainRate * 0.4 : tune.drainRate;
     progress += (inBar ? tune.fillRate : -drainRate) * dt;
     progress = Math.max(0, Math.min(1, progress));
 
