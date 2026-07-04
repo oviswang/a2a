@@ -8,6 +8,12 @@ export interface ReelOptions {
   onResult: (win: boolean) => void;
 }
 
+/** Max bar travel speed (track fractions per second) when held/released. */
+const BAR_SPEED = 1.2;
+/** How fast the bar's velocity snaps to the hold direction — higher = snappier,
+ *  more direct press/release response (with only slight smoothing). */
+const BAR_RESPONSE = 18;
+
 /** Tuning per rarity — rarer fish move faster and give a smaller catch bar. */
 interface ReelTuning {
   barFrac: number; // player bar height as fraction of track
@@ -19,10 +25,10 @@ interface ReelTuning {
 function tuningFor(rarity: FishRarity): ReelTuning {
   // Rarer fish: smaller catch bar, darts faster, fills slower, drains faster.
   if (rarity === "epic")
-    return { barFrac: 0.18, fishSpeed: 2.9, fillRate: 0.38, drainRate: 0.35, color: "#ffcc33" };
+    return { barFrac: 0.2, fishSpeed: 2.6, fillRate: 0.4, drainRate: 0.32, color: "#ffcc33" };
   if (rarity === "rare")
-    return { barFrac: 0.25, fishSpeed: 2.2, fillRate: 0.46, drainRate: 0.28, color: "#66ccff" };
-  return { barFrac: 0.32, fishSpeed: 1.7, fillRate: 0.54, drainRate: 0.24, color: "#cfe3ff" };
+    return { barFrac: 0.28, fishSpeed: 2.0, fillRate: 0.48, drainRate: 0.26, color: "#66ccff" };
+  return { barFrac: 0.34, fishSpeed: 1.6, fillRate: 0.56, drainRate: 0.22, color: "#cfe3ff" };
 }
 
 let stylesInjected = false;
@@ -226,10 +232,12 @@ export function startReelMinigame(opts: ReelOptions) {
     }
     fishPos += (fishTarget - fishPos) * Math.min(1, tune.fishSpeed * dt);
 
-    // Player bar: hold = lift (up), release = gravity (down).
-    const accel = holding ? 1.7 : -1.5;
-    barVel += accel * dt;
-    barVel *= 0.86; // damping
+    // Player bar: hold = drive up, release = drive down. Target-velocity control
+    // (not acceleration-with-momentum) so it responds to press/release almost
+    // immediately — only a touch of smoothing to avoid jitter — instead of the
+    // old floaty lag that made it impossible to sync with a darting fish.
+    const targetVel = holding ? BAR_SPEED : -BAR_SPEED;
+    barVel += (targetVel - barVel) * Math.min(1, BAR_RESPONSE * dt);
     barPos += barVel * dt;
     if (barPos < barH / 2) { barPos = barH / 2; barVel = 0; }
     if (barPos > 1 - barH / 2) { barPos = 1 - barH / 2; barVel = 0; }
