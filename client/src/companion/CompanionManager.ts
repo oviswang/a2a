@@ -97,7 +97,12 @@ function classifyPairError(err: unknown): PairFailReason {
 }
 
 export interface CompanionManagerOptions {
+  /** Initial bearer token (a short-lived Pouchy session token minted by our backend). */
   token: string;
+  /** Mint a FRESH session token — called when the current one is reported expired /
+   *  unauthorized, so the session can transparently recover. Returns null if the
+   *  companion is (now) unavailable. */
+  mintToken?: () => Promise<string | null>;
   locale: "en" | "zh";
   appContext: { name: string; description: string };
   tools: CompanionToolDecl[];
@@ -164,9 +169,14 @@ export class CompanionManager {
   /** Last sent value + time per retained `type`, for dedupe + throttle. */
   private readonly retained = new Map<string, { json: string; at: number }>();
   private readonly unsubs: Array<() => void> = [];
+  /** The live bearer token — starts as opts.token, replaced by a fresh mint if
+   *  the session is reported unauthorized. */
+  private currentToken: string;
+  private remintInFlight = false;
 
   constructor(opts: CompanionManagerOptions) {
     this.opts = opts;
+    this.currentToken = opts.token;
   }
 
   /** Handshake + open the reply stream. Resolves to whether it connected. */
@@ -182,7 +192,7 @@ export class CompanionManager {
     try {
       this.client = createCompanion({
         baseUrl: POUCHY_BASE_URL,
-        token: this.opts.token,
+        token: this.currentToken,
         surface: SURFACE,
         modalities: ["text", "call"],
         contextKinds: [
@@ -218,7 +228,7 @@ export class CompanionManager {
         ),
         this.client.onToolCall(async (call) => this.handleToolCall(call)),
         this.client.onError((err) => {
-          if (err.code === "stream_unauthorized") this.disable(err.message);
+          if (err.code === "stream_unauthorized") void this.handleUnauthorized(err.message);
         }),
       );
       if (this.opts.onConfirmRequest) {
@@ -267,6 +277,24 @@ export class CompanionManager {
     this.disabled = true;
     this.ready = false;
     this.opts.onStatus?.({ state: "disabled", reason });
+  }
+
+  /** The session token was rejected (expired / revoked). Try ONE transparent
+   *  re-mint + reconnect before giving up. */
+  private async handleUnauthorized(reason: string) {
+    if (this.remintInFlight) return;
+    if (!this.opts.mintToken) { this.disable(reason); return; }
+    this.remintInFlight = true;
+    try {
+      const fresh = await this.opts.mintToken();
+      if (!fresh) { this.disable(reason); return; }
+      this.currentToken = fresh;
+      await this.refreshSession();
+    } catch {
+      this.disable(reason);
+    } finally {
+      this.remintInFlight = false;
+    }
   }
 
   get isReady(): boolean {
@@ -572,7 +600,7 @@ export class CompanionManager {
     try {
       rep = createCompanion({
         baseUrl: POUCHY_BASE_URL,
-        token: this.opts.token,
+        token: this.currentToken,
         surface: `${SURFACE}-pair`,
         appContext: this.opts.appContext,
         visitor: { id: visitorId, displayName: visitorName },

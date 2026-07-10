@@ -13,6 +13,7 @@ import { createWorldsRouter } from "./routes/worlds.js";
 import { createLanternsRouter } from "./routes/lanterns.js";
 import { createSaveFeedRouter } from "./routes/saveFeed.js";
 import { createEventsRouter } from "./routes/events.js";
+import { createPouchySessionRouter } from "./routes/pouchySession.js";
 import { generateUniqueWorldName } from "./utils/worldNames.js";
 
 const PORT = Number(process.env.PORT) || 3001;
@@ -104,6 +105,7 @@ app.use("/api/worlds", createWorldsRouter(prisma, roomManager));
 app.use("/api/lanterns", createLanternsRouter(prisma));
 app.use("/api/save-feed", createSaveFeedRouter(prisma));
 app.use("/api/events", createEventsRouter(prisma));
+app.use("/api/pouchy-session", createPouchySessionRouter());
 
 app.get("/api/dashboard/worlds", async (_req, res) => {
   try {
