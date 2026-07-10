@@ -18,6 +18,21 @@ interface CachedSession {
 let cached: CachedSession | null = null;
 let inflight: Promise<string | null> | null = null;
 
+/** Last mint attempt outcome — surfaced on window.__a2a.companion for debugging
+ *  "why is there no companion?" (http 404 = server route not deployed, 503 =
+ *  env not configured, 502 = upstream mint failed, network = fetch threw). */
+export interface PouchySessionStatus {
+  ok: boolean;
+  /** "ok" | "not_configured" | "mint_failed" | "http" | "network" | "no_token" | "pending" */
+  reason: string;
+  httpStatus: number | null;
+  at: number | null;
+}
+let lastStatus: PouchySessionStatus = { ok: false, reason: "pending", httpStatus: null, at: null };
+export function getPouchySessionStatus(): PouchySessionStatus {
+  return lastStatus;
+}
+
 /** Refresh a bit before the real expiry so a call never starts on a dead token. */
 const EXPIRY_SKEW_MS = 60_000;
 
@@ -50,24 +65,33 @@ export async function getPouchySessionToken(
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ visitorId }),
       });
-      // 503 = companion not configured (no env); 4xx/5xx = mint failed → no companion.
+      // 404 = route not deployed; 503 = env not configured; 502 = upstream mint
+      // failed; other 4xx/5xx = mint failed → no companion.
       if (!res.ok) {
         cached = null;
+        const reason =
+          res.status === 404 ? "http" : res.status === 503 ? "not_configured" : "mint_failed";
+        lastStatus = { ok: false, reason, httpStatus: res.status, at: Date.now() };
+        console.warn(`[companion] session mint failed: HTTP ${res.status} at ${serverUrl}/api/pouchy-session`);
         return null;
       }
       const data = (await res.json()) as { token?: string; expiresIn?: number };
       if (!data.token) {
         cached = null;
+        lastStatus = { ok: false, reason: "no_token", httpStatus: res.status, at: Date.now() };
         return null;
       }
       const ttlMs = Math.max(60_000, (data.expiresIn ?? 3600) * 1000);
       cached = { token: data.token, expiresAt: Date.now() + ttlMs };
+      lastStatus = { ok: true, reason: "ok", httpStatus: res.status, at: Date.now() };
       // Mirror into ProgressionManager so the existing token gates + pairing
       // (which read loadCompanionToken()) see the live session token.
       ProgressionManager.saveCompanionToken(data.token);
       return data.token;
-    } catch {
+    } catch (err) {
       cached = null;
+      lastStatus = { ok: false, reason: "network", httpStatus: null, at: Date.now() };
+      console.warn(`[companion] session mint request failed (network) at ${serverUrl}/api/pouchy-session`, err);
       return null;
     } finally {
       inflight = null;

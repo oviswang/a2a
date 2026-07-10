@@ -26,7 +26,7 @@ import { cartesianFromSpherical, tangentFrame } from "./SphericalMath";
 import { t, IS_ZH } from "../i18n";
 import { localizeWorldName } from "../i18nNames";
 import { CompanionManager } from "../companion/CompanionManager";
-import { getPouchySessionToken, invalidatePouchySession } from "../companion/pouchySession";
+import { getPouchySessionToken, invalidatePouchySession, getPouchySessionStatus } from "../companion/pouchySession";
 import { CompanionUI } from "../companion/CompanionUI";
 import { emotifyCompanionText } from "../companion/emoteText";
 import { WaypointBeacon } from "./WaypointBeacon";
@@ -959,6 +959,11 @@ export class Game {
          *  game.player.profile (level/XP, unlocks, Fishdex per-species counts,
          *  eternal flames, milestones, friends). Read-only view for verification. */
         get profile() { return g.buildPlayerProfile(); },
+        /** Why the AI companion did / didn't load: the last /api/pouchy-session
+         *  mint outcome. reason "not_configured"=server env missing (503),
+         *  "http"=route not deployed (404), "mint_failed"=upstream (502),
+         *  "network"=fetch threw, "ok"=token minted. */
+        get companion() { return getPouchySessionStatus(); },
         /** Outcome of the most recent pairing attempt: `{ ok, code, message, withName,
          *  at }` or null. `code` is "paired" | "same_account" | "scope_initiator" |
          *  "scope_visitor" | "network" | "declined" | "no_companion" | "unknown" — so
