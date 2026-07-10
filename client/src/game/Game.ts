@@ -26,6 +26,7 @@ import { cartesianFromSpherical, tangentFrame } from "./SphericalMath";
 import { t, IS_ZH } from "../i18n";
 import { localizeWorldName } from "../i18nNames";
 import { CompanionManager } from "../companion/CompanionManager";
+import { getPouchySessionToken, invalidatePouchySession } from "../companion/pouchySession";
 import { CompanionUI } from "../companion/CompanionUI";
 import { emotifyCompanionText } from "../companion/emoteText";
 import { WaypointBeacon } from "./WaypointBeacon";
@@ -1171,6 +1172,12 @@ export class Game {
     this.serverUrlCache = await resolveServerUrl();
     const serverUrl = this.getServerUrl();
 
+    // Warm the companion session token early (before the player picks a craft and
+    // joins a world) so it's cached by the time initCompanion + world:join run —
+    // this keeps the `hasCompanion` flag sent on join accurate. Fire-and-forget;
+    // getPouchySessionToken caches the result and mirrors it into ProgressionManager.
+    void getPouchySessionToken(serverUrl);
+
     try {
       // A2A deep-link: `?w=<slug>` joins a friend's specific world (from a sky
       // letter); otherwise fall back to auto-join into the best available world.
@@ -1317,9 +1324,11 @@ export class Game {
     }
   }
 
-  /** Create the opt-in Pouchy AI companion if the player has connected a token. */
-  private initCompanion(vehicle: Vehicle) {
-    const token = ProgressionManager.loadCompanionToken();
+  /** Create the Pouchy AI companion. Zero-config: the token is a short-lived
+   *  session minted by our backend (no PAT to paste). Bails quietly when the
+   *  companion isn't configured server-side (mint returns null). */
+  private async initCompanion(vehicle: Vehicle) {
+    const token = await getPouchySessionToken(this.getServerUrl());
     if (!token) return;
     this.companion?.dispose();
     this.companionUI?.dispose();
@@ -1335,6 +1344,9 @@ export class Game {
 
     const manager = new CompanionManager({
       token,
+      // Re-mint a fresh session token if the SDK reports the session expired /
+      // unauthorized (session tokens are ~1h). Returns null if unavailable.
+      mintToken: () => getPouchySessionToken(this.getServerUrl(), true),
       locale: IS_ZH ? "zh" : "en",
       appContext: {
         name: "A2A.FUN",
@@ -3832,13 +3844,6 @@ export class Game {
       mobile: this.mobile,
       deferUnlockModalsUntilMenuReveal: opts?.deferUnlockModalsUntilMenuReveal ?? false,
       onNameChange: (name) => { this.playerName = name; ProgressionManager.savePlayerName(name); },
-      companionToken: ProgressionManager.loadCompanionToken(),
-      onCompanionTokenChange: (token) => {
-        if (token) ProgressionManager.saveCompanionToken(token);
-        else ProgressionManager.clearCompanionToken();
-      },
-      companionAutoVoice: ProgressionManager.loadCompanionAutoVoice(),
-      onCompanionAutoVoiceChange: (on) => ProgressionManager.saveCompanionAutoVoice(on),
       onPlay: (vehicle, options) => {
         if (!ProgressionManager.isVehicleUnlocked(vehicle)) return;
         this.runFreeplayMode = !!options?.freeplay;
@@ -4739,7 +4744,7 @@ export class Game {
       showXpProgression: this.vehicleFeatures.xpProgressionUI,
     });
 
-    this.initCompanion(vehicle);
+    void this.initCompanion(vehicle);
 
     if (this.localPlayer instanceof Boat && this.vehicleFeatures.fishingMiniGame) {
       this.oceanFish = new OceanFish(globeRadius, seed, spawnSessionSalt, terrainType, this.audioManager);

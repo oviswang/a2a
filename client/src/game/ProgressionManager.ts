@@ -8,8 +8,6 @@ const PLAYER_WORLD_STATE_KEY = "globefly_player_world_state_v1";
 /** Campsite bookmark; cleared with `clearAll` for a full local reset. */
 const CAMPSITE_KEY = "globefly_campsite_v2";
 const LEGACY_CAMPSITE_KEY = "globefly_campsite";
-/** Pouchy companion access token (PAT, `pchy_…`). Opt-in; stored locally only. */
-const COMPANION_TOKEN_KEY = "globefly_companion_token";
 /** A2A friends roster (non-secret visitorIds + display info only). */
 const FRIENDS_KEY = "globefly_a2a_friends_v1";
 
@@ -294,7 +292,6 @@ export class ProgressionManager {
       localStorage.removeItem(PLAYER_WORLD_STATE_KEY);
       localStorage.removeItem(CAMPSITE_KEY);
       localStorage.removeItem(LEGACY_CAMPSITE_KEY);
-      localStorage.removeItem(COMPANION_TOKEN_KEY);
       localStorage.removeItem(FRIENDS_KEY);
       localStorage.removeItem(GIFTS_KEY);
       localStorage.removeItem(FISHDEX_KEY);
@@ -338,31 +335,32 @@ export class ProgressionManager {
     catch { return window.localStorage; }
   }
 
-  // ── Pouchy companion token persistence (opt-in; local only) ──
+  // ── Pouchy companion SESSION token ──
+  // Minted by OUR backend (/api/pouchy-session) from the owner's Secret Key, so
+  // the browser never sees a long-lived PAT. Short-lived (~1h) and refreshed on
+  // expiry, so it lives in memory ONLY — never persisted to storage.
+  private static companionSessionToken: string | null = null;
 
   static loadCompanionToken(): string | null {
-    try {
-      const t = ProgressionManager.idStore().getItem(COMPANION_TOKEN_KEY);
-      return t && t.trim() ? t.trim() : null;
-    } catch { return null; }
+    return ProgressionManager.companionSessionToken;
   }
 
   static saveCompanionToken(token: string) {
-    try { ProgressionManager.idStore().setItem(COMPANION_TOKEN_KEY, token.trim()); } catch {}
+    const t = token.trim();
+    ProgressionManager.companionSessionToken = t.length > 0 ? t : null;
   }
 
   static clearCompanionToken() {
-    try { ProgressionManager.idStore().removeItem(COMPANION_TOKEN_KEY); } catch {}
+    ProgressionManager.companionSessionToken = null;
   }
 
   static loadCompanionAutoVoice(): boolean {
     try {
       const v = localStorage.getItem("globefly_companion_autovoice");
       if (v === "1") return true;
-      if (v === "0") return false;
-      // No explicit choice yet: default ON when a companion token is already
-      // bound, so a connected player gets voice auto-connected without opting in.
-      return ProgressionManager.loadCompanionToken() != null;
+      // Default OFF — never auto-open a live voice call at game start; the player
+      // taps the mic button when they want voice.
+      return false;
     } catch { return false; }
   }
 

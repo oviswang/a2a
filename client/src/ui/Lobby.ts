@@ -8,8 +8,6 @@ import {
 import { EpilogueStatuePreview } from "./EpilogueStatuePreview";
 import { VehicleUnlockPreview } from "./VehicleUnlockPreview";
 import { t, IS_ZH } from "../i18n";
-import { pouchyBrandIconUrl } from "@pouchy_ai/companion-sdk";
-import { POUCHY_BASE_URL } from "../companion/CompanionManager";
 
 const VEHICLE_ORDER: Vehicle[] = ["plane", "carpet", "boat"];
 
@@ -115,18 +113,9 @@ interface LobbyOptions {
   deferUnlockModalsUntilMenuReveal?: boolean;
   onPlay: (vehicle: Vehicle, options?: PlayOptions) => void;
   onNameChange?: (name: string) => void;
-  /** Current Pouchy companion token (masked in the UI), or null if not connected. */
-  companionToken?: string | null;
-  /** Player pasted / cleared their Pouchy companion token (opt-in AI co-pilot). */
-  onCompanionTokenChange?: (token: string | null) => void;
-  /** Whether to auto-connect voice when the game starts. */
-  companionAutoVoice?: boolean;
-  onCompanionAutoVoiceChange?: (on: boolean) => void;
 }
 
 export class Lobby {
-  /** Auto-open the companion connect modal only once per page load. */
-  private static companionModalAutoShown = false;
   private container: HTMLElement;
   private el: HTMLDivElement;
   private options: LobbyOptions;
@@ -242,10 +231,6 @@ export class Lobby {
                 <button type="button" class="lobby-edit-btn" aria-label="${t("Edit name", "编辑名字")}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></button>
               </span>
             </div>
-            <div class="lobby-companion-row">
-              <button type="button" class="lobby-companion-btn" id="lobby-companion-btn"></button>
-              <a class="lobby-companion-help" href="https://www.pouchy.ai/sdk" target="_blank" rel="noopener noreferrer">${t("What's this?", "这是什么？")}</a>
-            </div>
           </div>
           <div class="lobby-bar">
             <div class="lobby-vehicles" role="radiogroup" aria-label="${t("Vehicle", "载具")}">
@@ -279,38 +264,6 @@ export class Lobby {
             <h2 class="lobby-unlock-title" id="lobby-unlock-title"></h2>
             <p class="lobby-unlock-body"></p>
             <button type="button" class="lobby-unlock-ok" id="btn-unlock-ok">${t("Got it", "知道了")}</button>
-          </div>
-        </div>
-        <div class="lobby-companion-modal" id="lobby-companion-modal" aria-hidden="true">
-          <div class="lobby-companion-backdrop" id="lobby-companion-backdrop"></div>
-          <div class="lobby-companion-panel" id="lobby-companion-panel" role="dialog" aria-modal="true" aria-labelledby="lobby-companion-modal-title">
-            <div class="lobby-companion-titlerow">
-              <h2 class="lobby-companion-modal-title" id="lobby-companion-modal-title">${t("AI co-pilot · Pouchy companion", "AI 陪玩 · Pouchy 伴侣")}</h2>
-              <span class="lobby-companion-badge" id="lobby-companion-badge"></span>
-            </div>
-            <p class="lobby-companion-status" id="lobby-companion-status"></p>
-            <a class="lobby-companion-open" href="https://www.pouchy.ai/app" target="_blank" rel="noopener noreferrer">${t("Open Pouchy to get your key ↗", "打开 Pouchy 获取令牌 ↗")}</a>
-            <label class="lobby-companion-field-label" id="lobby-companion-field-label">${t("Companion access key (pchy_…)", "伴侣接入令牌（pchy_…）")}</label>
-            <input class="lobby-companion-input" id="lobby-companion-input" type="text" autocomplete="off" spellcheck="false"
-              placeholder="${t("Paste your pchy_… key", "粘贴 pchy_… 令牌")}" />
-            <details class="lobby-companion-help-box" open>
-              <summary>${t("How do I get a key?", "如何获取令牌？")}</summary>
-              <ol class="lobby-companion-steps">
-                <li>${t("Open <strong>Pouchy</strong> (pouchy.ai or the app) and tap the <strong>Wallet</strong> (top-right, the one showing your balance).", "打开 <strong>Pouchy</strong>（pouchy.ai 或 App），点右上角的<strong>钱包</strong>（显示余额的那个）。")}</li>
-                <li>${t("On the wallet page, scroll down to <strong>Companion access keys</strong>.", "在「钱包余额」页向下滚动，找到<strong>「伴侣接入密钥」</strong>。")}</li>
-                <li>${t("(Optional) name the key, e.g. \"A2A.FUN\".", "（可选）填个密钥名称，比如「A2A.FUN」。")}</li>
-                <li>${t("Leave <strong>Allow execution</strong> OFF for basic co-pilot. Turn it ON only for A2A social (inviting friends / pairing).", "基础陪玩<strong>保持「允许执行」关闭</strong>。只有要用 A2A 社交（邀请好友 / 配对）时才打开。")}</li>
-                <li>${t("Tap <strong>Generate</strong>. The pchy_… key is shown <strong>once</strong> — copy it immediately.", "点<strong>「生成密钥」</strong>。令牌 pchy_… <strong>只显示一次</strong>，请立刻复制。")}</li>
-                <li>${t("Come back here, paste it, and tap Save.", "回到这里粘贴，点「保存并绑定」。")}</li>
-              </ol>
-            </details>
-            <p class="lobby-companion-note">${t("The key is stored only on this device (localStorage) and only connects your own Pouchy companion. Voice usage is billed to your Pouchy account.", "令牌只存在你本机（localStorage），只用于连接你自己的 Pouchy 伴侣。语音费用记在你的 Pouchy 账户上。")}</p>
-            <label class="lobby-companion-autovoice"><input type="checkbox" id="lobby-companion-autovoice-cb" /> <span>${t("Auto-connect voice when the game starts", "游戏开始时自动接通语音")}</span></label>
-            <div class="lobby-companion-actions">
-              <button type="button" class="lobby-companion-save" id="lobby-companion-save">${t("Save & connect", "保存并绑定")}</button>
-              <button type="button" class="lobby-companion-later" id="lobby-companion-later">${t("Later", "稍后")}</button>
-            </div>
-            <button type="button" class="lobby-companion-disconnect" id="lobby-companion-disconnect">${t("Disconnect", "断开连接")}</button>
           </div>
         </div>
         <p class="lobby-attribution">${t(
@@ -369,108 +322,8 @@ export class Lobby {
       });
     }
 
-    // ── Pouchy companion token (opt-in AI co-pilot) ──
-    const companionBtn = this.el.querySelector("#lobby-companion-btn") as HTMLButtonElement;
-    const pouchyIconUrl = pouchyBrandIconUrl(POUCHY_BASE_URL, 256);
-    const setCompanionBtn = (label: string) => {
-      companionBtn.innerHTML = `<img class="lobby-companion-icon" alt="Pouchy" /><span class="lobby-companion-label"></span>`;
-      (companionBtn.querySelector(".lobby-companion-icon") as HTMLImageElement).src = pouchyIconUrl;
-      (companionBtn.querySelector(".lobby-companion-label") as HTMLElement).textContent = label;
-    };
-    const refreshCompanionBtn = () => {
-      const tok = this.options.companionToken ?? null;
-      if (tok) {
-        setCompanionBtn(
-          t(`Companion connected (pchy_••${tok.slice(-4)})`, `AI 伙伴已连接（pchy_••${tok.slice(-4)}）`),
-        );
-        companionBtn.classList.add("connected");
-      } else {
-        setCompanionBtn(t("Connect your Pouchy companion", "连接你的 Pouchy AI 伙伴"));
-        companionBtn.classList.remove("connected");
-      }
-    };
-    refreshCompanionBtn();
-
-    // ── Companion connect modal ──
-    const cmpModal = this.el.querySelector("#lobby-companion-modal") as HTMLElement;
-    // Hoist out of the transformed .lobby-header so its position:fixed resolves
-    // to the viewport (otherwise it's mis-placed + painted under .lobby-bar and
-    // can't be clicked/dismissed). #lobby root has no transform.
-    this.el.appendChild(cmpModal);
-    const cmpInput = this.el.querySelector("#lobby-companion-input") as HTMLInputElement;
-    const cmpStatus = this.el.querySelector("#lobby-companion-status") as HTMLElement;
-    const cmpAutoVoice = this.el.querySelector("#lobby-companion-autovoice-cb") as HTMLInputElement;
-    const cmpDisconnect = this.el.querySelector("#lobby-companion-disconnect") as HTMLButtonElement;
-    const cmpPanel = this.el.querySelector("#lobby-companion-panel") as HTMLElement;
-    const cmpBadge = this.el.querySelector("#lobby-companion-badge") as HTMLElement;
-    const cmpFieldLabel = this.el.querySelector("#lobby-companion-field-label") as HTMLElement;
-    const cmpHelp = this.el.querySelector(".lobby-companion-help-box") as HTMLDetailsElement;
-    const cmpSave = this.el.querySelector("#lobby-companion-save") as HTMLButtonElement;
-    const cmpOpen = this.el.querySelector(".lobby-companion-open") as HTMLElement;
-    const refreshModalState = () => {
-      const tok = this.options.companionToken ?? null;
-      const connected = !!tok;
-      // Make the connected state look distinct from a fresh setup.
-      cmpPanel.classList.toggle("connected", connected);
-      cmpBadge.textContent = connected ? t("● Connected", "● 已连接") : t("○ Not connected", "○ 未连接");
-      cmpStatus.textContent = connected
-        ? t(`Your AI companion is connected (pchy_••${tok!.slice(-4)}).`, `你的 AI 伙伴已连接（pchy_••${tok!.slice(-4)}）。`)
-        : t("Paste your key and save to bring your AI co-pilot into the game.", "粘贴令牌并保存，把你的 AI 陪玩带进游戏。");
-      cmpFieldLabel.textContent = connected
-        ? t("Replace key (optional)", "替换令牌（可选）")
-        : t("Companion access key (pchy_…)", "伴侣接入令牌（pchy_…）");
-      cmpSave.textContent = connected ? t("Update key", "更新令牌") : t("Save & connect", "保存并绑定");
-      // First-timers see the guide expanded + the Open-Pouchy CTA; connected users don't need them.
-      if (cmpHelp) cmpHelp.open = !connected;
-      cmpOpen.style.display = connected ? "none" : "block";
-      cmpInput.value = "";
-      cmpAutoVoice.checked = this.options.companionAutoVoice ?? false;
-      cmpDisconnect.style.display = connected ? "block" : "none";
-    };
-    const openCmpModal = () => {
-      refreshModalState();
-      cmpModal.classList.add("open");
-      cmpModal.setAttribute("aria-hidden", "false");
-      setTimeout(() => cmpInput.focus(), 40);
-    };
-    const closeCmpModal = () => {
-      cmpModal.classList.remove("open");
-      cmpModal.setAttribute("aria-hidden", "true");
-    };
-    companionBtn.addEventListener("click", openCmpModal);
-    this.el.querySelector("#lobby-companion-later")!.addEventListener("click", closeCmpModal);
-    this.el.querySelector("#lobby-companion-backdrop")!.addEventListener("click", closeCmpModal);
-    cmpAutoVoice.addEventListener("change", () => {
-      this.options.companionAutoVoice = cmpAutoVoice.checked;
-      this.options.onCompanionAutoVoiceChange?.(cmpAutoVoice.checked);
-    });
-    cmpDisconnect.addEventListener("click", () => {
-      this.options.companionToken = null;
-      this.options.onCompanionTokenChange?.(null);
-      this.options.companionAutoVoice = ProgressionManager.loadCompanionAutoVoice();
-      refreshCompanionBtn();
-      refreshModalState();
-    });
-    this.el.querySelector("#lobby-companion-save")!.addEventListener("click", () => {
-      const trimmed = cmpInput.value.trim();
-      if (!trimmed) { closeCmpModal(); return; }
-      if (!trimmed.startsWith("pchy_")) {
-        cmpStatus.textContent = t("That doesn't look like a pchy_ key.", "这看起来不是 pchy_ 令牌。");
-        return;
-      }
-      this.options.companionToken = trimmed;
-      this.options.onCompanionTokenChange?.(trimmed);
-      // Newly connected with no explicit voice choice → auto-voice defaults on.
-      this.options.companionAutoVoice = ProgressionManager.loadCompanionAutoVoice();
-      refreshCompanionBtn();
-      closeCmpModal();
-    });
-
-    // Auto-open on first lobby visit when no companion is connected yet.
-    if (!this.options.companionToken && !Lobby.companionModalAutoShown) {
-      Lobby.companionModalAutoShown = true;
-      setTimeout(openCmpModal, 650);
-    }
+    // The AI companion is now zero-config (a session token minted by our backend),
+    // so there's no "paste your key" UI in the lobby — it just connects in-game.
 
     const flyBtn = this.el.querySelector("#btn-fly") as HTMLButtonElement;
     const vehiclesEl = this.el.querySelector(".lobby-vehicles") as HTMLElement;
