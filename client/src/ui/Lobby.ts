@@ -879,36 +879,6 @@ export class Lobby {
         flex-wrap: nowrap;
         max-width: calc(100% - 48px);
       }
-      .lobby-companion-row {
-        display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
-        margin-top: 14px;
-      }
-      /* Primary CTA: connecting the AI companion is the hero action. */
-      .lobby-companion-btn {
-        display: inline-flex; align-items: center; gap: 8px;
-        background: linear-gradient(135deg, rgba(96,150,250,0.6), rgba(150,110,245,0.6));
-        border: 1px solid rgba(190,205,255,0.6);
-        color: #fff; border-radius: 999px; padding: 11px 22px;
-        font: inherit; font-size: 0.92rem; font-weight: 600; cursor: pointer;
-        backdrop-filter: blur(8px);
-        text-shadow: 0 1px 3px rgba(0,0,0,0.4);
-        transition: background 0.2s, border-color 0.2s, transform 0.1s;
-        box-shadow: 0 4px 18px rgba(40,60,130,0.4);
-      }
-      .lobby-companion-icon {
-        width: 20px; height: 20px; border-radius: 50%; object-fit: cover;
-        flex: none; display: block; background: rgba(255,255,255,0.15);
-      }
-      .lobby-companion-btn.connected .lobby-companion-icon { width: 18px; height: 18px; }
-      .lobby-companion-btn:hover { background: linear-gradient(135deg, rgba(96,150,250,0.78), rgba(150,110,245,0.78)); }
-      .lobby-companion-btn:active { transform: scale(0.98); }
-      .lobby-companion-btn.connected {
-        background: rgba(16,30,22,0.5); border-color: rgba(90,209,122,0.7);
-        color: #dffbe8; box-shadow: none; backdrop-filter: blur(8px);
-        text-shadow: 0 1px 3px rgba(0,0,0,0.5);
-        font-weight: 600; font-size: 0.82rem; padding: 8px 16px;
-      }
-      .lobby-companion-help { font-size: 0.72rem; color: rgba(255,255,255,0.72); text-decoration: underline; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
       .lobby-guide-link {
         display: inline-flex; align-items: center; gap: 0.32em; margin-top: 0.62em;
         font-family: 'Domine', Georgia, serif; font-size: 0.8rem; font-weight: 600;
@@ -924,75 +894,6 @@ export class Lobby {
       .lobby-greeting-hi, .lobby-name { font-size: 0.95rem; opacity: 1; text-shadow: 0 1px 4px rgba(0,0,0,0.55); }
       .lobby-name { font-weight: 600; }
 
-      /* ── Companion connect modal ── */
-      .lobby-companion-modal {
-        position: fixed; inset: 0; z-index: 10060; display: none;
-        align-items: center; justify-content: center; padding: 16px;
-      }
-      .lobby-companion-modal.open { display: flex; }
-      .lobby-companion-backdrop {
-        position: absolute; inset: 0; background: rgba(6,8,18,0.62); backdrop-filter: blur(4px);
-      }
-      .lobby-companion-panel {
-        position: relative; width: min(440px, 94vw); max-height: 90vh; overflow-y: auto;
-        background: rgba(20,26,42,0.96); border: 1px solid rgba(255,255,255,0.10);
-        border-radius: 18px; padding: 22px; color: rgba(255,255,255,0.92);
-        font-family: 'Domine', Georgia, serif; box-shadow: 0 18px 60px rgba(0,0,0,0.5);
-      }
-      .lobby-companion-titlerow { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
-      .lobby-companion-modal-title { font-size: 1.2rem; font-weight: 700; margin: 0; }
-      .lobby-companion-badge {
-        flex-shrink: 0; font-size: 0.72rem; font-weight: 700; padding: 4px 10px; border-radius: 999px;
-        background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.55); border: 1px solid rgba(255,255,255,0.14);
-      }
-      .lobby-companion-panel.connected .lobby-companion-badge {
-        background: rgba(90,209,122,0.18); color: #8ff0b0; border-color: rgba(90,209,122,0.55);
-      }
-      /* Green accent rail on the connected panel so it reads as "managing", not "setting up". */
-      .lobby-companion-panel.connected { border-color: rgba(90,209,122,0.4); box-shadow: 0 18px 60px rgba(0,0,0,0.5), inset 3px 0 0 rgba(90,209,122,0.7); }
-      .lobby-companion-panel.connected .lobby-companion-status { color: #aee9c2; }
-      .lobby-companion-panel.connected .lobby-companion-disconnect {
-        display: block; width: 100%; margin-top: 12px; padding: 10px; border-radius: 10px;
-        border: 1px solid rgba(255,120,120,0.4); background: rgba(255,120,120,0.08); color: #ffb3b3; text-decoration: none;
-      }
-      .lobby-companion-status { font-size: 0.84rem; color: rgba(255,255,255,0.62); margin: 0 0 14px; line-height: 1.45; }
-      .lobby-companion-open {
-        display: block; text-align: center; text-decoration: none;
-        background: rgba(154,209,255,0.14); border: 1px solid rgba(154,209,255,0.4);
-        color: #cfe6ff; border-radius: 10px; padding: 11px; font-size: 0.86rem; font-weight: 600;
-        margin-bottom: 16px; transition: background 0.2s;
-      }
-      .lobby-companion-open:hover { background: rgba(154,209,255,0.24); }
-      .lobby-companion-field-label { display: block; font-size: 0.78rem; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 6px; }
-      .lobby-companion-input {
-        width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.07);
-        border: 1px solid rgba(255,255,255,0.14); border-radius: 10px; padding: 11px 13px;
-        color: #fff; font: inherit; font-size: 0.9rem; outline: none; margin-bottom: 14px;
-      }
-      .lobby-companion-help-box { margin-bottom: 12px; }
-      .lobby-companion-help-box summary {
-        cursor: pointer; font-size: 0.86rem; font-weight: 600; color: #9ad1ff; list-style: revert;
-      }
-      .lobby-companion-steps { margin: 10px 0 0; padding-left: 22px; }
-      .lobby-companion-steps li { font-size: 0.82rem; line-height: 1.5; margin-bottom: 7px; color: rgba(255,255,255,0.85); }
-      .lobby-companion-steps strong { color: #fff; }
-      .lobby-companion-note { font-size: 0.74rem; color: rgba(255,255,255,0.45); line-height: 1.5; margin: 6px 0 14px; }
-      .lobby-companion-note code { font-family: ui-monospace, monospace; font-size: 0.92em; }
-      .lobby-companion-autovoice { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: rgba(255,255,255,0.8); margin-bottom: 18px; cursor: pointer; }
-      .lobby-companion-actions { display: flex; gap: 10px; }
-      .lobby-companion-save {
-        flex: 1; background: linear-gradient(135deg, #5b8cf0, #7a5bf0); color: #fff;
-        border: none; border-radius: 10px; padding: 13px; font: inherit; font-size: 0.92rem;
-        font-weight: 700; cursor: pointer;
-      }
-      .lobby-companion-later {
-        background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.8); border: none;
-        border-radius: 10px; padding: 13px 20px; font: inherit; font-size: 0.9rem; cursor: pointer;
-      }
-      .lobby-companion-disconnect {
-        display: none; width: 100%; margin-top: 12px; background: none; border: none;
-        color: rgba(255,140,140,0.8); font: inherit; font-size: 0.78rem; cursor: pointer; text-decoration: underline;
-      }
       .lobby-greeting-hi { flex-shrink: 0; white-space: nowrap; }
       .lobby-name-wrap {
         position: relative;
