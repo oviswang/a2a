@@ -472,6 +472,29 @@ interface GreetActivity {
   carrying: boolean;
 }
 
+/** Home-screen hooks the AI co-pilot cycles through — each sells a different draw:
+ *  live multiplayer, the A2A companion novelty, the breadth of things to do, and the
+ *  shared save-the-world stakes. Kept short and warm so they read as the companion
+ *  talking, not marketing. */
+const LOBBY_COMPANION_HOOKS: readonly string[] = [
+  t(
+    "You're not alone up here — meet real pilots and save the world from a falling moon, together. 🌙",
+    "天上不止你一个——认识真实的飞行员，一起从坠落的月亮手里救回世界。🌙",
+  ),
+  t(
+    "I'm your AI co-pilot: I fly and chat with you — and I can even befriend other players' AI companions. ✨",
+    "我是你的 AI 副驾：会开口陪你飞，还能和别的玩家的 AI 陪伴交朋友。✨",
+  ),
+  t(
+    "Fishing, deliveries, races, lighting ancient braziers… tap GO and I'll show you around.",
+    "钓鱼、送快递、竞速、点亮古老火盆……点「出发」，我带你逛。",
+  ),
+  t(
+    "Meet a pilot mid-air and our two AIs will actually talk to each other. Come find them with me?",
+    "空中遇到别的飞行员，我俩的 AI 会当面聊起来——一起去找他们吗？",
+  ),
+];
+
 export class Game {
   private container: HTMLElement;
   private renderer!: WebGLRenderer;
@@ -554,6 +577,8 @@ export class Game {
   private companionCtxVehicle: Vehicle | null = null;
   /** True while the lobby pre-warm connect is in flight (dedupe). */
   private companionPrewarming = false;
+  /** Rotates the home-screen companion hooks; cleared when leaving the lobby. */
+  private lobbyHookTimer: ReturnType<typeof setInterval> | null = null;
   /** Timed control override set by the companion's `control_vehicle` tool; merged
    *  into the per-frame control state in {@link tick} until `remaining` elapses. */
   private voiceControl: {
@@ -1529,6 +1554,7 @@ export class Game {
         // button off so the player can re-tap, and tell them gently. (The HUD may
         // not exist yet if a lobby-started call drops before the world loads.)
         this.companionUI?.setVoiceActive(false);
+        this.lobby?.setCompanionTalking(false);
         this.companionCallContextTimer = 0;
         if (this.hud) {
           this.hud.showAmbientToast(
@@ -1659,9 +1685,72 @@ export class Game {
       this.companionCtxVehicle = null;
       const ok = await manager.connect();
       this.lobby?.setCompanionStatus(ok ? "ready" : "unavailable");
+      if (ok) this.startLobbyCompanionHook();
     } finally {
       this.companionPrewarming = false;
     }
+  }
+
+  /** Bring the co-pilot to life ON the home screen: cycle enticing hooks (multiplayer,
+   *  A2A, things to do) and, in parallel, ask the agent for a personalized opener to
+   *  pin to the front. Tapping the hook (a user gesture) opens live voice right here. */
+  private startLobbyCompanionHook(): void {
+    this.stopLobbyCompanionHook();
+    if (!this.lobby || !this.companion?.isReady) return;
+    void this.companion.getAvatarImageUrl().then((url) => {
+      this.lobby?.setCompanionHookAvatar(url ?? this.companion?.brandIconUrl() ?? null);
+    });
+    const hooks: string[] = [...LOBBY_COMPANION_HOOKS];
+    let i = 0;
+    const show = () => this.lobby?.showCompanionHook(hooks[i % hooks.length]!, { canTalk: true });
+    show();
+    this.lobbyHookTimer = setInterval(() => {
+      // Don't swap the line out from under a live voice call.
+      if (this.companion?.inCall) return;
+      i += 1;
+      show();
+    }, 5200);
+    // Personalize: a warm, enticing opener composed by the agent, pinned to the front.
+    void this.companion
+      .composeLine(this.buildLobbyHookPrompt(), 9000)
+      .then((line) => {
+        if (line && this.lobby && this.lobbyHookTimer != null) {
+          hooks.unshift(line);
+          i = 0;
+          if (!this.companion?.inCall) show();
+        }
+      })
+      .catch(() => {});
+  }
+
+  private stopLobbyCompanionHook(): void {
+    if (this.lobbyHookTimer != null) {
+      clearInterval(this.lobbyHookTimer);
+      this.lobbyHookTimer = null;
+    }
+  }
+
+  private buildLobbyHookPrompt(): string {
+    const lang = IS_ZH ? "Chinese" : "English";
+    return (
+      `The player is on the HOME screen of A2A.FUN, about to fly. In ONE short, warm, enticing sentence in ${lang}, ` +
+      `hook them: this is a cosy MULTIPLAYER world where they meet real pilots (and their AI companions — you can ` +
+      `befriend other players' AIs, "A2A") and together save the world from a falling moon, and you are their AI ` +
+      `co-pilot who flies and talks with them. Make them want to tap GO. ` +
+      `Reply with ONLY the one line: no quotes, no preamble.`
+    );
+  }
+
+  /** The player tapped the home-screen hook to talk — the tap is the gesture that
+   *  unlocks mic/audio, so open the live voice call right here on the lobby. */
+  private async talkToCompanionFromLobby(): Promise<void> {
+    if (!this.companion?.isReady) return;
+    if (this.companion.inCall) {
+      this.lobby?.setCompanionTalking(true);
+      return;
+    }
+    const ok = await this.startCompanionVoice();
+    this.lobby?.setCompanionTalking(ok);
   }
 
   /** Opening greeting: ask the companion to compose ONE warm welcome line grounded
@@ -4015,12 +4104,14 @@ export class Game {
       mobile: this.mobile,
       deferUnlockModalsUntilMenuReveal: opts?.deferUnlockModalsUntilMenuReveal ?? false,
       onNameChange: (name) => { this.playerName = name; ProgressionManager.savePlayerName(name); },
+      onCompanionTalk: () => void this.talkToCompanionFromLobby(),
       onPlay: (vehicle, options) => {
         if (!ProgressionManager.isVehicleUnlocked(vehicle)) return;
         this.runFreeplayMode = !!options?.freeplay;
         this.pendingCampsiteAfterIntro =
           CAMPSITE_HOME_ENABLED && (options?.startAtCampsite ?? false);
         this.playerVehicle = vehicle;
+        this.stopLobbyCompanionHook();
         // GO is a real user gesture — open the live voice call NOW, while we hold
         // audio/mic activation (a browser only grants them inside a gesture). The
         // companion session was pre-warmed on this screen, so the call goes live as
@@ -5458,6 +5549,7 @@ export class Game {
     this.reportSessionEnded(reason);
     // Consolidate the companion's run into memory, then release it.
     void this.companion?.endSession();
+    this.stopLobbyCompanionHook();
     this.companion?.dispose();
     this.companion = null;
     this.companionCtxVehicle = null;

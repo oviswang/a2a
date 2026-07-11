@@ -113,6 +113,9 @@ interface LobbyOptions {
   deferUnlockModalsUntilMenuReveal?: boolean;
   onPlay: (vehicle: Vehicle, options?: PlayOptions) => void;
   onNameChange?: (name: string) => void;
+  /** The player tapped the companion hook to start talking by voice on the home
+   *  screen (the tap is the user gesture that unlocks mic/audio). */
+  onCompanionTalk?: () => void;
 }
 
 export class Lobby {
@@ -189,26 +192,68 @@ export class Lobby {
     if (!el) return;
     const textEl = el.querySelector(".lobby-companion-status__text") as HTMLElement | null;
     const dotEl = el.querySelector(".lobby-companion-status__dot") as HTMLElement | null;
+    const hook = this.el.querySelector(".lobby-companion-hook") as HTMLElement | null;
     if (state === "unavailable") {
       el.style.display = "none";
       el.classList.remove("is-pulsing");
+      if (hook) hook.style.display = "none";
       return;
     }
-    el.style.display = "inline-flex";
     if (state === "connecting") {
+      // Show the compact "waking…" pill; the rich hook bubble replaces it on ready.
+      el.style.display = "inline-flex";
       el.classList.add("is-pulsing");
       if (dotEl) dotEl.style.background = "#f2c14e";
       if (textEl) textEl.textContent = t("🎙 Waking your AI companion…", "🎙 AI 陪伴接入中…");
     } else {
+      // Ready — hand off to the hook bubble (shown via showCompanionHook).
+      el.style.display = "none";
       el.classList.remove("is-pulsing");
-      if (dotEl) dotEl.style.background = "#54d18c";
-      if (textEl) {
-        textEl.textContent = t(
-          "🎙 AI companion ready — flies with you on GO",
-          "🎙 AI 陪伴已就绪 ·「出发」即语音同行",
-        );
-      }
     }
+  }
+
+  /** Show the companion's home-screen hook bubble: an enticing one-liner plus a
+   *  tap-to-talk affordance. Replaces the "waking…" pill once connected. */
+  showCompanionHook(text: string, opts: { canTalk: boolean }): void {
+    const hook = this.el.querySelector(".lobby-companion-hook") as HTMLElement | null;
+    if (!hook) return;
+    const status = this.el.querySelector(".lobby-companion-status") as HTMLElement | null;
+    if (status) status.style.display = "none";
+    const textEl = hook.querySelector(".lobby-companion-hook__text") as HTMLElement | null;
+    const ctaEl = hook.querySelector(".lobby-companion-hook__cta") as HTMLElement | null;
+    if (textEl) {
+      // Re-trigger the fade each time the line changes.
+      textEl.style.animation = "none";
+      // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+      textEl.offsetHeight;
+      textEl.style.animation = "";
+      textEl.textContent = text;
+    }
+    if (ctaEl) {
+      ctaEl.textContent = opts.canTalk
+        ? t("🎙 Tap to say hi by voice · or hit GO to fly", "🎙 点我用语音打个招呼 · 或点「出发」起飞")
+        : t("Tap GO to fly together", "点「出发」一起飞");
+    }
+    hook.style.display = "flex";
+    (hook as HTMLButtonElement).disabled = !opts.canTalk;
+    (hook as HTMLElement).style.cursor = opts.canTalk ? "pointer" : "default";
+  }
+
+  /** Reflect a live voice call opened from the home screen (glow + label). */
+  setCompanionTalking(on: boolean): void {
+    const hook = this.el.querySelector(".lobby-companion-hook") as HTMLElement | null;
+    if (!hook) return;
+    hook.classList.toggle("is-talking", on);
+    const ctaEl = hook.querySelector(".lobby-companion-hook__cta") as HTMLElement | null;
+    if (ctaEl && on) {
+      ctaEl.textContent = t("🎙 Listening… hit GO to keep flying together", "🎙 在听你说… 点「出发」继续一起飞");
+    }
+  }
+
+  /** Set the hook avatar to the companion's portrait (or the brand mark). */
+  setCompanionHookAvatar(url: string | null): void {
+    const ava = this.el.querySelector(".lobby-companion-hook__ava") as HTMLElement | null;
+    if (ava && url) ava.style.backgroundImage = `url("${url}")`;
   }
 
   private buildVehicleButtonsHTML(): string {
@@ -252,11 +297,27 @@ export class Lobby {
             <a class="lobby-guide-link" href="/guide.html?lang=${IS_ZH ? "zh" : "en"}" target="_blank" rel="noopener noreferrer">
               <span aria-hidden="true">📖</span> ${t("How to play", "玩法指南")}
             </a>
-            <style>@keyframes lobbyCompPulse{0%,100%{opacity:.35}50%{opacity:1}}.lobby-companion-status.is-pulsing .lobby-companion-status__dot{animation:lobbyCompPulse 1.1s ease-in-out infinite}</style>
+            <style>
+              @keyframes lobbyCompPulse{0%,100%{opacity:.35}50%{opacity:1}}
+              .lobby-companion-status.is-pulsing .lobby-companion-status__dot{animation:lobbyCompPulse 1.1s ease-in-out infinite}
+              @keyframes lobbyHookIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+              .lobby-companion-hook__text{animation:lobbyHookIn .38s ease}
+              .lobby-companion-hook{transition:transform .12s ease, background .2s ease}
+              .lobby-companion-hook:active{transform:scale(.98)}
+              .lobby-companion-hook.is-talking{background:rgba(84,209,140,0.26)!important}
+              .lobby-companion-hook.is-talking .lobby-companion-hook__ava{box-shadow:0 0 0 2px rgba(84,209,140,0.9),0 0 12px rgba(84,209,140,0.7)!important;animation:lobbyCompPulse 1.1s ease-in-out infinite}
+            </style>
             <div class="lobby-companion-status" aria-live="polite" style="display:none;align-items:center;gap:7px;margin:11px auto 0;padding:6px 13px;border-radius:999px;background:rgba(255,255,255,0.16);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);font-size:13px;line-height:1;color:#fff;font-weight:600;box-shadow:0 1px 6px rgba(0,0,0,0.12);">
               <span class="lobby-companion-status__dot" style="width:8px;height:8px;border-radius:50%;background:#f2c14e;box-shadow:0 0 8px currentColor;flex:0 0 auto;"></span>
               <span class="lobby-companion-status__text"></span>
             </div>
+            <button type="button" class="lobby-companion-hook" aria-live="polite" style="display:none;align-items:center;gap:10px;margin:11px auto 0;max-width:340px;width:100%;padding:10px 14px;border:none;border-radius:16px;background:rgba(255,255,255,0.17);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#fff;text-align:left;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,0.16);font:inherit;">
+              <span class="lobby-companion-hook__ava" aria-hidden="true" style="width:32px;height:32px;border-radius:50%;flex:0 0 auto;background:rgba(255,255,255,0.25) center/cover no-repeat;box-shadow:0 0 0 2px rgba(255,255,255,0.4);"></span>
+              <span style="display:flex;flex-direction:column;gap:2px;min-width:0;flex:1 1 auto;">
+                <span class="lobby-companion-hook__text" style="font-size:13px;line-height:1.35;font-weight:600;"></span>
+                <span class="lobby-companion-hook__cta" style="font-size:11px;line-height:1.2;opacity:.82;"></span>
+              </span>
+            </button>
           </div>
           <div class="lobby-username">
             <div class="lobby-greeting-row">
@@ -524,6 +585,9 @@ export class Lobby {
       const freeplay = !!(ws.freeplayModeUnlocked && freeplayCb.checked);
       this.options.onPlay(this.selectedVehicle, { freeplay });
     });
+
+    const hookBtn = this.el.querySelector(".lobby-companion-hook") as HTMLButtonElement | null;
+    hookBtn?.addEventListener("click", () => this.options.onCompanionTalk?.());
 
     this.flushUnlockModals = () => showNextUnlockModal();
 
