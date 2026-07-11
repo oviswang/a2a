@@ -418,6 +418,11 @@ export class CompanionManager {
     if (this.disabled || !this.isReady || !this.client) return null;
     if (this.lineCapture) return null; // one at a time
     if (Date.now() - this.lastUserChatAt < 6000) return null; // don't hijack a live chat
+    // Never inject a background text turn while a voice call is live — it lands as a
+    // competing user turn on the shared session and cuts the agent off mid-sentence
+    // (the "it only says a word or two out loud" bug). The voice agent handles these
+    // moments out loud itself; callers fall back to a template line for on-screen text.
+    if (this.inCall) return null;
     return new Promise<string | null>((resolve) => {
       const finish = (s: string | null) => {
         if (this.lineCapture && this.lineCapture.resolve === finish) this.lineCapture = null;
