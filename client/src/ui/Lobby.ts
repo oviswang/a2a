@@ -181,6 +181,36 @@ export class Lobby {
     if (a) a.href = this.vibejamPortalHref();
   }
 
+  /** Companion loading indicator shown on the home screen so the player sees the AI
+   *  co-pilot connect BEFORE they fly (and knows tapping GO brings it along by voice).
+   *  "unavailable" hides it (companion not configured / offline). */
+  setCompanionStatus(state: "connecting" | "ready" | "unavailable"): void {
+    const el = this.el.querySelector(".lobby-companion-status") as HTMLElement | null;
+    if (!el) return;
+    const textEl = el.querySelector(".lobby-companion-status__text") as HTMLElement | null;
+    const dotEl = el.querySelector(".lobby-companion-status__dot") as HTMLElement | null;
+    if (state === "unavailable") {
+      el.style.display = "none";
+      el.classList.remove("is-pulsing");
+      return;
+    }
+    el.style.display = "inline-flex";
+    if (state === "connecting") {
+      el.classList.add("is-pulsing");
+      if (dotEl) dotEl.style.background = "#f2c14e";
+      if (textEl) textEl.textContent = t("🎙 Waking your AI companion…", "🎙 AI 陪伴接入中…");
+    } else {
+      el.classList.remove("is-pulsing");
+      if (dotEl) dotEl.style.background = "#54d18c";
+      if (textEl) {
+        textEl.textContent = t(
+          "🎙 AI companion ready — flies with you on GO",
+          "🎙 AI 陪伴已就绪 ·「出发」即语音同行",
+        );
+      }
+    }
+  }
+
   private buildVehicleButtonsHTML(): string {
     return VEHICLE_ORDER.map((v) => {
       const unlocked = ProgressionManager.isVehicleUnlocked(v);
@@ -222,6 +252,11 @@ export class Lobby {
             <a class="lobby-guide-link" href="/guide.html?lang=${IS_ZH ? "zh" : "en"}" target="_blank" rel="noopener noreferrer">
               <span aria-hidden="true">📖</span> ${t("How to play", "玩法指南")}
             </a>
+            <style>@keyframes lobbyCompPulse{0%,100%{opacity:.35}50%{opacity:1}}.lobby-companion-status.is-pulsing .lobby-companion-status__dot{animation:lobbyCompPulse 1.1s ease-in-out infinite}</style>
+            <div class="lobby-companion-status" aria-live="polite" style="display:none;align-items:center;gap:7px;margin:11px auto 0;padding:6px 13px;border-radius:999px;background:rgba(255,255,255,0.16);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);font-size:13px;line-height:1;color:#fff;font-weight:600;box-shadow:0 1px 6px rgba(0,0,0,0.12);">
+              <span class="lobby-companion-status__dot" style="width:8px;height:8px;border-radius:50%;background:#f2c14e;box-shadow:0 0 8px currentColor;flex:0 0 auto;"></span>
+              <span class="lobby-companion-status__text"></span>
+            </div>
           </div>
           <div class="lobby-username">
             <div class="lobby-greeting-row">

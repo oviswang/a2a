@@ -549,6 +549,11 @@ export class Game {
   /** Pouchy AI companion (opt-in). Null when no token / not yet connected. */
   private companion: CompanionManager | null = null;
   private companionUI: CompanionUI | null = null;
+  /** The vehicle baked into the current companion's brief; null = a lobby pre-warm
+   *  with a vehicle-neutral brief (adoptable by any craft on the first world entry). */
+  private companionCtxVehicle: Vehicle | null = null;
+  /** True while the lobby pre-warm connect is in flight (dedupe). */
+  private companionPrewarming = false;
   /** Timed control override set by the companion's `control_vehicle` tool; merged
    *  into the per-frame control state in {@link tick} until `remaining` elapses. */
   private voiceControl: {
@@ -1332,20 +1337,48 @@ export class Game {
   /** Create the Pouchy AI companion. Zero-config: the token is a short-lived
    *  session minted by our backend (no PAT to paste). Bails quietly when the
    *  companion isn't configured server-side (mint returns null). */
+  /** Bring up the companion for a world entry. Prefer ADOPTING the session already
+   *  pre-warmed on the home screen (its stream is connected and voice may already be
+   *  dialing from the GO gesture) so we neither reconnect nor lose the mic gesture;
+   *  otherwise build a fresh one (e.g. a mid-game craft switch rebakes the vehicle). */
   private async initCompanion(vehicle: Vehicle) {
+    if (
+      this.companion &&
+      this.companion.isReady &&
+      (this.companionCtxVehicle === null || this.companionCtxVehicle === vehicle)
+    ) {
+      this.companionCtxVehicle = vehicle;
+      this.ensureCompanionUI();
+      await this.onCompanionReady(vehicle);
+      return;
+    }
     const token = await getPouchySessionToken(this.getServerUrl());
     if (!token) return;
     this.companion?.dispose();
     this.companionUI?.dispose();
+    this.companionUI = null;
+    const manager = this.buildCompanionManager(vehicle, token);
+    this.companion = manager;
+    this.companionCtxVehicle = vehicle;
+    this.ensureCompanionUI();
+    const ok = await manager.connect();
+    if (ok) await this.onCompanionReady(vehicle);
+  }
 
+  /** Construct (but do NOT connect) a CompanionManager. `vehicle` null = a lobby
+   *  pre-warm with a vehicle-neutral brief (the live craft is pushed as world-state
+   *  the moment the game starts, so the opening greeting is still craft-correct). */
+  private buildCompanionManager(vehicle: Vehicle | null, token: string): CompanionManager {
     // The player's CURRENT craft, baked into the appContext so it's present the
     // instant the agent composes its opening greeting — retained game.situation /
     // game.player.vehicle can arrive a beat later, which used to make the first
-    // line assume the biplane. initCompanion re-runs on every ⇄ switch, so this
-    // always reflects the live vehicle.
-    const craftName = vehicle === "carpet" ? "MAGIC CARPET" : vehicle === "boat" ? "BOAT" : "BIPLANE";
-    const currentCraftContext =
-      `CURRENT VEHICLE — the player is RIGHT NOW piloting the ${craftName}. Treat this as fixed fact for this session: your opening greeting/small-talk and every piece of guidance MUST match the ${craftName}, and you must NEVER assume or default to the biplane. (If they change craft you'll get a fresh brief.) `;
+    // line assume the biplane. Rebuilt on every ⇄ switch so it reflects the live
+    // vehicle; empty for a lobby pre-warm (vehicle not chosen yet).
+    const craftName =
+      vehicle === "carpet" ? "MAGIC CARPET" : vehicle === "boat" ? "BOAT" : vehicle === "plane" ? "BIPLANE" : null;
+    const currentCraftContext = craftName
+      ? `CURRENT VEHICLE — the player is RIGHT NOW piloting the ${craftName}. Treat this as fixed fact for this session: your opening greeting/small-talk and every piece of guidance MUST match the ${craftName}, and you must NEVER assume or default to the biplane. (If they change craft you'll get a fresh brief.) `
+      : "";
 
     const manager = new CompanionManager({
       token,
@@ -1493,16 +1526,23 @@ export class Game {
       },
       onVoiceEnded: () => {
         // The live call dropped and couldn't be transparently recovered — flip the
-        // button off so the player can re-tap, and tell them gently.
+        // button off so the player can re-tap, and tell them gently. (The HUD may
+        // not exist yet if a lobby-started call drops before the world loads.)
         this.companionUI?.setVoiceActive(false);
         this.companionCallContextTimer = 0;
-        this.hud.showAmbientToast(
-          t("Voice paused — tap 🎙 to resume.", "语音已暂停，点 🎙 重新开始。"),
-        );
+        if (this.hud) {
+          this.hud.showAmbientToast(
+            t("Voice paused — tap 🎙 to resume.", "语音已暂停，点 🎙 重新开始。"),
+          );
+        }
       },
       onStatus: (s) => {
         if (s.state === "disabled") this.diag.lastError = s.reason;
         this.companionUI?.setStatus(s);
+        // Mirror onto the home-screen pill while the lobby is still up.
+        this.lobby?.setCompanionStatus(
+          s.state === "ready" ? "ready" : s.state === "connecting" ? "connecting" : "unavailable",
+        );
         if (s.state === "ready" && this.worldSlug) {
           this.companionUI?.setWorldInvite(
             this.worldSlug,
@@ -1512,7 +1552,14 @@ export class Game {
         }
       },
     });
-    this.companion = manager;
+    return manager;
+  }
+
+  /** Create the in-game chat/voice panel for the current companion (idempotent —
+   *  a lobby pre-warm has no UI yet, so the first world entry mounts it). */
+  private ensureCompanionUI(): void {
+    if (this.companionUI || !this.companion) return;
+    const manager = this.companion;
     this.companionUI = new CompanionUI(this.hud.root, {
       mobile: this.mobile,
       brandIconUrl: manager.brandIconUrl(),
@@ -1531,36 +1578,90 @@ export class Game {
       onPairNearby: () => this.initiateCompanionPairing(),
       onShowFriends: () => void this.showFriendsRoster(),
     });
+    // Reflect a voice call already opened from the lobby GO gesture.
+    this.companionUI.setVoiceActive(!!manager.inCall);
+  }
 
-    void manager.connect().then(async (ok) => {
-      if (!ok) return;
-      // Swap the voice button to the companion's own portrait when one exists.
-      void manager.getAvatarImageUrl().then((url) => {
-        this.companionUI?.setCompanionAvatar(url);
-        // Now that the companion's name is known, refresh our visit record so our
-        // own "ghost" carries the companion name for future visitors.
-        if (manager.companionDisplayName && this.worldSlug) {
-          void this.recordVisit(this.worldSlug, ProgressionManager.loadOrCreateVisitorId());
-        }
-      });
-      if (this.worldConfig) manager.setRetained("game.world", { name: this.worldConfig.name, slug: this.worldSlug });
-      manager.setRetained("game.player.vehicle", { vehicle });
-      // Push the full live snapshot right away (vehicle, level, objective, coop)
-      // instead of waiting for the ~3s tick — so the companion's first guidance is
-      // already grounded in the real state, not just the appContext.
-      this.emitCompanionSituation();
-      this.emitCompanionProfile();
-      this.emitCoopState();
-      this.emitFriendsState();
-      // Auto-greet: the companion opens with one warm line so it feels present the
-      // moment you arrive, instead of a silent icon.
-      void this.emitCompanionGreeting(vehicle);
-      // Auto-connect voice (default on). A live call needs a user gesture for mic
-      // access, so try now and, if that's blocked, arm it on the first tap.
-      if (ProgressionManager.loadCompanionAutoVoice()) {
-        this.armAutoVoiceOnFirstGesture();
+  /** Post-connect wiring for a world entry: swap in the companion's portrait, push
+   *  the full live snapshot, open with a greeting, and (if enabled) make sure voice
+   *  is connecting. Shared by a fresh connect and adopting a pre-warmed session. */
+  private async onCompanionReady(vehicle: Vehicle): Promise<void> {
+    const manager = this.companion;
+    if (!manager) return;
+    // Reflect "ready" onto the freshly-mounted in-game UI. On the ADOPT path the
+    // connect (and its onStatus event) happened at the lobby before this UI existed,
+    // so without this the status dot and the voice button (shown only when ready)
+    // would stay hidden.
+    this.companionUI?.setStatus({ state: "ready", scopes: [] });
+    if (this.worldSlug) {
+      this.companionUI?.setWorldInvite(
+        this.worldSlug,
+        this.worldConfig?.name ?? "",
+        manager.hasScope("social.message"),
+      );
+    }
+    // Swap the voice button to the companion's own portrait when one exists.
+    void manager.getAvatarImageUrl().then((url) => {
+      this.companionUI?.setCompanionAvatar(url);
+      // Now that the companion's name is known, refresh our visit record so our
+      // own "ghost" carries the companion name for future visitors.
+      if (manager.companionDisplayName && this.worldSlug) {
+        void this.recordVisit(this.worldSlug, ProgressionManager.loadOrCreateVisitorId());
       }
     });
+    if (this.worldConfig) manager.setRetained("game.world", { name: this.worldConfig.name, slug: this.worldSlug });
+    manager.setRetained("game.player.vehicle", { vehicle });
+    // Push the full live snapshot right away (vehicle, level, objective, coop)
+    // instead of waiting for the ~3s tick — so the companion's first guidance is
+    // already grounded in the real state, not just the appContext.
+    this.emitCompanionSituation();
+    this.emitCompanionProfile();
+    this.emitCoopState();
+    this.emitFriendsState();
+    // Auto-greet: the companion opens with one warm line so it feels present the
+    // moment you arrive, instead of a silent icon.
+    void this.emitCompanionGreeting(vehicle);
+    // Voice is auto-on by default. It should already be dialing from the GO gesture
+    // (mic + audio only unlock inside a user gesture); if not — e.g. the pre-warm
+    // wasn't ready when they tapped GO — arm it on the first in-game gesture.
+    if (ProgressionManager.loadCompanionAutoVoice() && !manager.inCall) {
+      this.armAutoVoiceOnFirstGesture();
+    }
+  }
+
+  /** Warm up the AI companion while the player is still on the home screen: mint the
+   *  session and connect the stream, showing a status pill — so it's READY before
+   *  they fly and the GO tap can immediately open the live voice call. */
+  private async prewarmCompanionAtLobby(): Promise<void> {
+    if (this.companion && this.companion.isReady) {
+      this.lobby?.setCompanionStatus("ready");
+      return;
+    }
+    if (this.companionPrewarming) return;
+    // Drop a stale/disabled companion lingering from a previous run so we rebuild.
+    if (this.companion && !this.companion.isReady) {
+      this.companion.dispose();
+      this.companion = null;
+      this.companionUI?.dispose();
+      this.companionUI = null;
+    }
+    this.companionPrewarming = true;
+    this.lobby?.setCompanionStatus("connecting");
+    try {
+      const token = await getPouchySessionToken(this.getServerUrl());
+      if (!token) {
+        this.lobby?.setCompanionStatus("unavailable");
+        return;
+      }
+      if (this.companion) return; // built by another path while we awaited the mint
+      const manager = this.buildCompanionManager(null, token);
+      this.companion = manager;
+      this.companionCtxVehicle = null;
+      const ok = await manager.connect();
+      this.lobby?.setCompanionStatus(ok ? "ready" : "unavailable");
+    } finally {
+      this.companionPrewarming = false;
+    }
   }
 
   /** Opening greeting: ask the companion to compose ONE warm welcome line grounded
@@ -1641,7 +1742,13 @@ export class Game {
     this.companionUI?.setVoiceActive(ok);
     if (ok) {
       // Prime the agent with the current situation so its first words fit the moment.
-      this.companion.injectCallContext(this.composeSituationSummary(this.buildSituationSnapshot()));
+      // Guarded: this can fire from the lobby GO tap, before the world scene exists.
+      try {
+        this.companion.injectCallContext(this.composeSituationSummary(this.buildSituationSnapshot()));
+      } catch {
+        /* no live snapshot yet (started from the lobby) — the periodic in-game
+           injection will bring the voice agent up to speed shortly. */
+      }
     }
     return ok;
   }
@@ -3914,6 +4021,18 @@ export class Game {
         this.pendingCampsiteAfterIntro =
           CAMPSITE_HOME_ENABLED && (options?.startAtCampsite ?? false);
         this.playerVehicle = vehicle;
+        // GO is a real user gesture — open the live voice call NOW, while we hold
+        // audio/mic activation (a browser only grants them inside a gesture). The
+        // companion session was pre-warmed on this screen, so the call goes live as
+        // the world loads instead of failing the async in-game gesture. If the
+        // pre-warm isn't ready yet, onCompanionReady arms it on the first in-game tap.
+        if (
+          this.companion?.isReady &&
+          !this.companion.inCall &&
+          ProgressionManager.loadCompanionAutoVoice()
+        ) {
+          void this.startCompanionVoice();
+        }
         this.audioManager.startMusic();
         void this.audioManager.loadSFX("crickets_loop", "/audio/sfx/crickets_loop.mp3").then(() => {
           this.audioManager.startLoop("crickets_loop", 0);
@@ -3947,6 +4066,9 @@ export class Game {
       },
     });
     this.lobby.show();
+    // Start bringing the AI companion online while the player is still choosing a
+    // craft, so it's ready to fly (by voice) the instant they tap GO.
+    void this.prewarmCompanionAtLobby();
   }
 
   /**
@@ -5338,6 +5460,7 @@ export class Game {
     void this.companion?.endSession();
     this.companion?.dispose();
     this.companion = null;
+    this.companionCtxVehicle = null;
     this.companionUI?.dispose();
     this.companionUI = null;
     this.voiceControl = null;
