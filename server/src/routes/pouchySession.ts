@@ -45,8 +45,10 @@ export function createPouchySessionRouter() {
 
   router.post("/", async (req, res) => {
     try {
-      const secret = process.env.POUCHY_SECRET_KEY;
-      const agentId = process.env.POUCHY_AGENT_ID;
+      // Trim so a stray trailing newline / space from pasting into the host's
+      // env panel doesn't corrupt the Bearer header (a common 401 cause).
+      const secret = process.env.POUCHY_SECRET_KEY?.trim();
+      const agentId = process.env.POUCHY_AGENT_ID?.trim();
       // Not configured → companion simply unavailable (graceful; the client shows
       // no companion, exactly like the old "no token" state).
       if (!secret || !agentId) {
@@ -88,7 +90,12 @@ export function createPouchySessionRouter() {
 
       if (!upstream.ok) {
         const detail = await upstream.text().catch(() => "");
-        console.error(`pouchy-session mint failed: ${upstream.status} ${detail.slice(0, 200)}`);
+        // Log the key TYPE prefix + length (not the secret) so a wrong/truncated
+        // key is diagnosable: expect prefix "pchy_sk_" and a full-length value.
+        console.error(
+          `pouchy-session mint failed: ${upstream.status} ${detail.slice(0, 200)} ` +
+            `(keyPrefix=${secret.slice(0, 8)} keyLen=${secret.length} agent=${agentId})`,
+        );
         res.status(502).json({ error: "mint_failed" });
         return;
       }
