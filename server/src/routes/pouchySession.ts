@@ -90,11 +90,16 @@ export function createPouchySessionRouter() {
 
       if (!upstream.ok) {
         const detail = await upstream.text().catch(() => "");
-        // Log the key TYPE prefix + length (not the secret) so a wrong/truncated
-        // key is diagnosable: expect prefix "pchy_sk_" and a full-length value.
+        // Log a NON-SECRET fingerprint so a wrong/old/truncated key is instantly
+        // diagnosable (per Pouchy's guidance): first 12 + last 4 chars (= the
+        // dashboard's displayed key id) + exact length (a live key is 51 chars) +
+        // the raw (pre-trim) length to catch stray whitespace. 16 of 51 chars
+        // can't reconstruct the key; only printed on failure.
+        const rawLen = (process.env.POUCHY_SECRET_KEY ?? "").length;
         console.error(
-          `pouchy-session mint failed: ${upstream.status} ${detail.slice(0, 200)} ` +
-            `(keyPrefix=${secret.slice(0, 8)} keyLen=${secret.length} agent=${agentId})`,
+          `pouchy-session mint failed: ${upstream.status} ${detail.slice(0, 160)} ` +
+            `(keyId=${secret.slice(0, 12)}…${secret.slice(-4)} keyLen=${secret.length} ` +
+            `rawLen=${rawLen} agent=${agentId})`,
         );
         res.status(502).json({ error: "mint_failed" });
         return;
