@@ -1552,10 +1552,69 @@ export class Game {
       this.emitCompanionProfile();
       this.emitCoopState();
       this.emitFriendsState();
+      // Auto-greet: the companion opens with one warm line so it feels present the
+      // moment you arrive, instead of a silent icon.
+      void this.emitCompanionGreeting(vehicle);
+      // Auto-connect voice (default on). A live call needs a user gesture for mic
+      // access, so try now and, if that's blocked, arm it on the first tap.
       if (ProgressionManager.loadCompanionAutoVoice()) {
-        void this.startCompanionVoice();
+        this.armAutoVoiceOnFirstGesture();
       }
     });
+  }
+
+  /** Opening greeting: ask the companion to compose ONE warm welcome line grounded
+   *  in the live situation, and render it in the chat panel + bubble (falling back
+   *  to a template if the agent is busy/unavailable). Runs once per world entry. */
+  private async emitCompanionGreeting(vehicle: Vehicle): Promise<void> {
+    if (!this.companion) return;
+    const lang = IS_ZH ? "Chinese" : "English";
+    const craft = vehicle === "carpet" ? "magic carpet" : vehicle === "boat" ? "boat" : "biplane";
+    const prompt =
+      `The player just arrived in the world on their ${craft}. In ONE short, warm sentence in ${lang}, ` +
+      `welcome them to the skies and gently point them at ONE fun thing to do right now that fits their ` +
+      `current situation and vehicle (use the game state you already have). ` +
+      `Reply with ONLY the one-line greeting: no quotes, no preamble.`;
+    let line: string | null = null;
+    try {
+      line = await this.companion.composeLine(prompt);
+    } catch {
+      /* fall back to template */
+    }
+    if (!line) {
+      line = t(
+        "Welcome back to the skies! I'm right here — tap me any time you want a hand.",
+        "欢迎回到天空！我一直都在，随时点我一下就行～",
+      );
+    }
+    this.companionUI?.appendAssistantMessage(line);
+    this.packageQuestHUD?.showBubble("Pouchy", emotifyCompanionText(line));
+  }
+
+  /** Auto-connect the voice co-pilot on the FIRST user gesture. Browsers only grant
+   *  mic access inside a user gesture, and world-entry finishes async (after the
+   *  token mint) so the entry tap is already gone — starting the call now would just
+   *  fail and leave the session half-wanting voice. Instead we wait for the next
+   *  tap/touch/key (which comes fast in a game) and start voice inside that gesture.
+   *  One-shot and self-removing so it never re-fires or fights an explicit mic tap. */
+  private armAutoVoiceOnFirstGesture(): void {
+    if (!this.companion || this.companion.inCall) return;
+    let armed = true;
+    const remove = () => {
+      window.removeEventListener("pointerdown", onGesture, true);
+      window.removeEventListener("touchstart", onGesture, true);
+      window.removeEventListener("keydown", onGesture, true);
+    };
+    const onGesture = () => {
+      if (!armed) return;
+      armed = false;
+      remove();
+      // Only auto-start if the player hasn't already started voice themselves.
+      if (this.companion && !this.companion.inCall) void this.startCompanionVoice();
+    };
+    window.addEventListener("pointerdown", onGesture, true);
+    window.addEventListener("touchstart", onGesture, true);
+    window.addEventListener("keydown", onGesture, true);
   }
 
   private async toggleCompanionVoice() {

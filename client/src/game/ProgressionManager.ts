@@ -357,11 +357,11 @@ export class ProgressionManager {
   static loadCompanionAutoVoice(): boolean {
     try {
       const v = localStorage.getItem("globefly_companion_autovoice");
-      if (v === "1") return true;
-      // Default OFF — never auto-open a live voice call at game start; the player
-      // taps the mic button when they want voice.
-      return false;
-    } catch { return false; }
+      // Default ON — the companion auto-connects voice on entry (on the first user
+      // gesture, per browser mic rules). The player can turn it off (persisted "0")
+      // and it stays off; only an explicit "0" disables it.
+      return v !== "0";
+    } catch { return true; }
   }
 
   static saveCompanionAutoVoice(on: boolean) {
