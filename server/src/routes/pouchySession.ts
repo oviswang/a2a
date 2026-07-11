@@ -96,10 +96,23 @@ export function createPouchySessionRouter() {
         // the raw (pre-trim) length to catch stray whitespace. 16 of 51 chars
         // can't reconstruct the key; only printed on failure.
         const rawLen = (process.env.POUCHY_SECRET_KEY ?? "").length;
+        // Also log WHERE the request actually landed. If pouchy.ai 30x-redirects
+        // POST to www.pouchy.ai (cross-origin), undici STRIPS the Authorization
+        // header on the redirect → verify sees no key → "invalid" for ANY key.
+        // `redirected`/`finalUrl` prove/refute that; the Vercel/deployment headers
+        // reveal whether /v1/sessions is even the same deploy as /api/version
+        // (a stale deploy would still emit the pre-fix error wording).
+        const via =
+          upstream.headers.get("x-vercel-id") ??
+          upstream.headers.get("x-matched-path") ??
+          upstream.headers.get("server") ??
+          "";
         console.error(
           `pouchy-session mint failed: ${upstream.status} ${detail.slice(0, 160)} ` +
             `(keyId=${secret.slice(0, 12)}…${secret.slice(-4)} keyLen=${secret.length} ` +
-            `rawLen=${rawLen} agent=${agentId})`,
+            `rawLen=${rawLen} agent=${agentId} base=${POUCHY_BASE} ` +
+            `reqUrl=${POUCHY_BASE}/v1/sessions finalUrl=${upstream.url} ` +
+            `redirected=${upstream.redirected} via=${via})`,
         );
         res.status(502).json({ error: "mint_failed" });
         return;
