@@ -19,7 +19,12 @@ import type { Request } from "express";
  *   → 201 { session_token, expires_in, instance }
  */
 
-const POUCHY_BASE = (process.env.POUCHY_BASE_URL || "https://pouchy.ai").replace(/\/+$/, "");
+// Use the canonical `www.` host directly. The apex `pouchy.ai` 30x-redirects
+// POST /v1/sessions to `www.pouchy.ai`, and Node's fetch (undici) STRIPS the
+// Authorization header on that cross-origin redirect → verify sees no key →
+// 401 "invalid or revoked" for ANY key. Hitting www directly = no redirect =
+// the Bearer survives. (Confirmed via redirected=true finalUrl=www… logging.)
+const POUCHY_BASE = (process.env.POUCHY_BASE_URL || "https://www.pouchy.ai").replace(/\/+$/, "");
 const MAX_VISITOR_ID = 48;
 /** Min interval between mints per (ip, visitor) — basic anti-abuse. */
 const MINT_MIN_INTERVAL_MS = 4000;
