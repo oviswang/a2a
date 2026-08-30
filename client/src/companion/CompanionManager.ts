@@ -25,6 +25,24 @@ import {
   type ConfirmRequestPayload,
 } from "@pouchy_ai/companion-sdk";
 
+/**
+ * MINIMUM SDK: 0.53.0. Do NOT pin this back below 0.11.0 — two voice-call fixes
+ * live above the old 0.10.0 pin and both are load-bearing for a call that stays
+ * up on a phone:
+ *  - 0.10.1 — a WebRTC `connectionState` of `disconnected` is TRANSIENT per spec
+ *    (ICE settling right after connect, a Wi-Fi/cell handoff). 0.10.0 tore the
+ *    call down the instant it appeared, so a call died seconds after it
+ *    connected; the SDK now holds a 6s grace window and only gives up if it is
+ *    still disconnected when that elapses. This was the "接通了就马上断开" bug —
+ *    the drop fired onCallDropped, the single auto-reconnect died the same way,
+ *    and the UI fell back to "语音已暂停，点 🎙 重新开始。".
+ *  - 0.11.0 — barge-in became OPT-IN (`connectCall({ bargeIn: true })`). Before
+ *    that the mic stayed open while the companion spoke, and on phone SPEAKERS
+ *    browser echo cancellation leaks enough of its own voice back that it barges
+ *    in on itself. We deliberately do NOT pass `bargeIn`, so we get the safe
+ *    half-duplex default (mic muted during agent speech).
+ */
+
 export const POUCHY_BASE_URL = "https://www.pouchy.ai";
 /** Surface keys a resumable session; keep stable for memory continuity. */
 const SURFACE = "a2a-fun";
