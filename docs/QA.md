@@ -2,27 +2,31 @@
 
 The client exposes a diagnostics + test surface on `window.__a2a` for QA — especially
 the multiplayer **A2A** flows, which are hard to test by hand. This doc covers what's
-exposed, how it's gated, and **the one thing you must remember: turn the test hooks
-off before real users arrive.**
+exposed and how it's gated. **The hooks are off in the public production build —
+keep them off whenever real users can reach the site.**
 
 ---
 
-## ⚠️ IMPORTANT — disable before real users
+## ⚠️ Current state — hooks are OFF in production
 
 The QA **test hooks** (`window.__a2a.test`, incl. `autoAcceptPairs` / `acceptDuo`,
 which **bypass the pairing/duo consent dialogs**) and the `?qa=1` per-tab identity
-isolation are currently **ENABLED on the public production build** (a2a.fun) — on
-purpose, while the site has no real users, so QA can script tests directly against
-prod.
+isolation are **DISABLED on the public production build** (a2a.fun):
+`client/.env.production` sets `VITE_QA_HOOKS=0`, so the entire `.test` block is
+dead-code-eliminated from the bundle and `?qa=1` is a no-op. The read-only
+diagnostics (`window.__a2a` getters — no secrets) stay available.
 
-**Before any real users use the site, turn them off:**
+Verify after any build:
 
-1. Edit **`client/.env.production`** → set `VITE_QA_HOOKS=0` (or delete the line).
-2. Commit + merge to `main` (auto-deploys). Done.
+```bash
+npm run build -w client
+grep -c 'autoAcceptPairs\|acceptDuo\|syncPresence' client/dist/assets/*.js   # → 0 everywhere
+```
 
-When off, the entire `.test` block is **dead-code-eliminated** from the production
-bundle (verified by grepping `dist` for `syncPresence` / `acceptDuo`), and `?qa=1`
-becomes a no-op. The read-only diagnostics (`window.__a2a` getters — no secrets) stay.
+**To open a temporary QA window** (only with no real users on the site): set
+`VITE_QA_HOOKS=1` in `client/.env.production`, deploy, run the tests, then set it
+back to `0` and deploy again. Prefer scoping `VITE_QA_HOOKS=1` to a **Preview**
+deployment instead, so production is never opened up at all.
 
 ---
 
