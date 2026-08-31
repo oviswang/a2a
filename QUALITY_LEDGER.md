@@ -31,6 +31,8 @@ only deploys.
 
 ### 2. Findings (ranked)
 
+Ranked by severity. #11 was found after the fact — see section 7.
+
 | # | Finding | Sev | Evidence | Cost | Risk | Conf. |
 |---|---|---|---|---|---|---|
 | 1 | **A reconnect never re-joins the room.** Room membership is server-side, keyed by socket id; a reconnect yields a *new* socket id, but `joinWorld` is called exactly once (`Game.ts:6435`) and `SocketClient` had no `connect` re-join. After any transport drop the player is evicted from the room permanently — invisible to others, no `player:update` / `objective:sync` / flag / leviathan traffic — while `socket.connected` (and `window.__a2a.socketConnected`) still read `true`. | **P0** | Reproduced: `scripts/reconnect-check.mts` → server `playerCount` drops 2→1, observer sees no re-join | S | Low | High |
@@ -43,6 +45,7 @@ only deploys.
 | 8 | **Dashboard has no error state.** In `/dashboard`, a failed `refresh()` sets `updated.textContent = "Update failed"` but leaves the table at "Loading active worlds…" and both panels at "Loading…" forever — indistinguishable from a slow load. | P3 | `server/src/index.ts` `refresh()` catch block | S | Low | High |
 | 9 | **Unbounded in-memory maps on the server.** `intentDeliverCooldown` (`server/src/index.ts`) is never pruned; `WorldVisitor` rows and worlds created via the unauthenticated `POST /api/worlds` grow without bound and escape overflow cleanup. | P3 | Code reading | M | Med | Med |
 | 10 | **No timeout on any `fetch`.** Neither the client (`auto-join`, `pouchy-session`, …) nor the server's Pouchy mint uses `AbortSignal.timeout`; a hung upstream stalls the caller indefinitely. Also, the mint's failure path logs a 16-of-51-character fingerprint of `POUCHY_SECRET_KEY` — debug instrumentation for an already-closed bug (`3b52cac`). | P3 | `grep -rn "fetch(" client/src server/src` → no `AbortController` anywhere | M | Med | High |
+| 11 | **The Vercel deploy workflow had never once succeeded.** `.github/workflows/vercel-deploy.yml` failed on **29 consecutive runs** (#122–#150) with `Input required and not supplied: vercel-token` — the `VERCEL_*` secrets were never set. It deployed nothing; Vercel's own Git integration is the real path (`DEPLOY.md`). A permanently red check trains everyone to ignore red checks, which is what a CI gate is for. | P2 | `actions_list` run history + job log | S | Low | High |
 
 ### 3. Changes made this round
 
@@ -146,7 +149,22 @@ removed** against +42 lines added in `SocketClient.ts`.
   fix; the CI gate added here (typecheck + build + bundle assertion + audit) is the
   cheapest gate that pays for itself immediately.
 
-### 7. Stopping criteria
+### 7. Audit gap found after the fact
+
+Finding #11 was **missed by the first-phase audit**: I read the contents of
+`.github/workflows/` but never looked at the workflows' *run history*, so a job
+that had failed 29 times running looked like a working deploy pipeline. Reading
+CI config is not the same as reading CI results — check both next round.
+
+### 8. Follow-up change (same round)
+
+Deleted `.github/workflows/vercel-deploy.yml` and corrected the `DEPLOY.md`
+"Redeploys" section, which claimed the workflow was an available deploy path.
+Verified first that it was safe to remove: 29/29 runs failed, so it has deployed
+nothing, and `DEPLOY.md` already documents Vercel's Git integration plus the
+manual `npm run deploy:client`. No deploy capability is lost.
+
+### 9. Stopping criteria
 
 Stopped after three increments. The remaining open items are P3, or need a second
 core mechanism changed in the same round, or are style/theoretical — none clears
