@@ -52,5 +52,14 @@ On boot the container runs `prisma migrate deploy` (creates tables) and seeds
 
 ## Redeploys
 
-Push to `main` → both Railway and Vercel rebuild automatically (Vercel also via
-`.github/workflows/vercel-deploy.yml` if you add the `VERCEL_*` secrets).
+Push to `main` → both Railway and Vercel rebuild automatically, each through its
+own GitHub integration. Nothing in `.github/workflows/` deploys; CI there only
+typechecks, builds and audits.
+
+Manual deploys (from a local checkout with the Railway/Vercel CLIs authenticated):
+
+```bash
+npm run deploy          # server (Railway) then client (Vercel)
+npm run deploy:server   # Railway only
+npm run deploy:client   # Vercel only
+```
