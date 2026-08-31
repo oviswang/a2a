@@ -26,8 +26,27 @@ import type {
   Vehicle,
 } from "@globefly/shared";
 
+/** Arguments of the last `world:join`, replayed on every (re)connect. */
+interface PendingJoin {
+  slug: string;
+  playerName: string;
+  vehicle: Vehicle;
+  reservationId?: string;
+  hasCompanion: boolean;
+  visitorId?: string;
+}
+
 export class SocketClient {
   private socket: Socket<ServerToClientEvents, ClientToServerEvents>;
+
+  /** Room membership lives on the SERVER keyed by socket id, and a reconnect gets a
+   *  brand-new socket id — so a dropped connection silently evicts the player from
+   *  the room. Socket.io restores the transport but nothing re-joins, leaving the
+   *  player invisible to everyone else and receiving no world/objective updates
+   *  (while `socket.connected` reads `true`, so the failure is invisible). Remember
+   *  the join and replay it on every connect; the server answers a join with a full
+   *  resync (`world:state` / `flag:sync` / `objective:sync` / `leviathan:sync`). */
+  private pendingJoin: PendingJoin | null = null;
 
   constructor(serverUrl: string) {
     this.socket = io(serverUrl, {
@@ -40,6 +59,9 @@ export class SocketClient {
 
     this.socket.on("connect", () => {
       console.log("Connected to server:", this.socket.id);
+      // Exactly one join per connection: `joinWorld` emits inline only when already
+      // connected, so this covers both the initial connect and every reconnect.
+      if (this.pendingJoin) this.emitJoin(this.pendingJoin);
     });
 
     this.socket.on("disconnect", (reason) => {
@@ -63,7 +85,24 @@ export class SocketClient {
     hasCompanion = false,
     visitorId?: string,
   ) {
-    this.socket.emit("world:join", slug, playerName, vehicle, reservationId, hasCompanion, visitorId);
+    const join: PendingJoin = { slug, playerName, vehicle, reservationId, hasCompanion, visitorId };
+    this.pendingJoin = join;
+    // Emit inline only when the socket is already up; otherwise the "connect"
+    // handler sends it (emitting here too would double-join on the first connect,
+    // since Socket.io buffers offline emits and flushes them on connect).
+    if (this.socket.connected) this.emitJoin(join);
+  }
+
+  private emitJoin(join: PendingJoin) {
+    this.socket.emit(
+      "world:join",
+      join.slug,
+      join.playerName,
+      join.vehicle,
+      join.reservationId,
+      join.hasCompanion,
+      join.visitorId,
+    );
   }
 
   sendMove(state: Omit<PlayerState, "id">) {
@@ -287,6 +326,8 @@ export class SocketClient {
   }
 
   disconnect() {
+    // Deliberate teardown (session end / void transition): stop replaying the join.
+    this.pendingJoin = null;
     this.socket.disconnect();
   }
 }
